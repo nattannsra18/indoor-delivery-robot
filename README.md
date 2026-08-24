@@ -1,90 +1,64 @@
-# Indoor Delivery Robot — Phase 1.1 Interactive Mock Workflow
+# Indoor Autonomous Delivery Robot — Phase 3
 
-Frontend prototype for the **Indoor Autonomous Delivery Robot System**.
+Phase 3 connects the existing Next.js + FastAPI application to PostgreSQL so robot, station, and delivery-task data survive backend restarts.
 
 ## Stack
-- Next.js
-- React
-- TypeScript
-- Tailwind CSS
-- React Context + browser localStorage
-- Mock data only
 
-## Pages
-- `/` Dashboard
-- `/delivery` Create Delivery
-- `/tasks` Task Queue
-- `/stations` Station Management
-- `/robots` Robot Status
+- Frontend: Next.js / React / TypeScript / Tailwind CSS
+- Backend: FastAPI / Pydantic / Uvicorn
+- ORM: SQLAlchemy 2
+- Database: PostgreSQL
+- PostgreSQL driver: Psycopg 3
+- Frontend updates: REST + 2-second polling
 
-## Phase 1.1 workflow
-
-The UI now shares state across every page and simulates the complete delivery state machine:
+## Current architecture
 
 ```text
-Create Delivery
-      ↓
-GOING_TO_PICKUP
-      ↓
-WAITING_FOR_LOADING
-      ↓
-Physical CONFIRM (simulated)
-      ↓
-DELIVERING
-      ↓
-WAITING_FOR_UNLOADING
-      ↓
-Physical CONFIRM (simulated)
-      ↓
-COMPLETED
+Next.js
+   │ REST
+   ▼
+FastAPI
+   │
+   ├── Service / Task State Machine
+   │       │
+   │       ▼
+   │   Repository
+   │       │
+   │       ▼
+   └── SQLAlchemy ──► PostgreSQL
 ```
 
-If the robot is already busy, newly created tasks remain `QUEUED`.
+## Quick start on Windows
 
-## What is new from Phase 1
-- shared global mock state with React Context
-- localStorage persistence across refreshes
-- Create Delivery updates Dashboard and Task Queue
-- automatic mock assignment when the robot is IDLE
-- queued-task dispatch simulation
-- full task-state simulation
-- physical CONFIRM button simulation
-- Station Management is shared with Create Delivery
-- Robot Status updates with the workflow
-- queued tasks can be cancelled
-- reset demo button
+### Terminal 1 — PostgreSQL
 
-## Run
+From project root:
 
-```bash
+```cmd
+docker compose up -d postgres
+```
+
+### Terminal 2 — FastAPI
+
+```cmd
+cd backend
+copy .env.example .env
+.venv\Scripts\activate
+python -m pip install -r requirements.txt
+python -m uvicorn app.main:app --reload --port 8000
+```
+
+### Terminal 3 — Next.js
+
+```cmd
 npm install
 npm run dev
 ```
 
 Open:
 
-```text
-http://localhost:3000
-```
+- Frontend: `http://localhost:3000`
+- Swagger: `http://localhost:8000/docs`
+- Health: `http://localhost:8000/health`
 
-## Suggested demo
-1. Open **Create Delivery**.
-2. Select pickup and destination.
-3. Create a task.
-4. Open **Dashboard**.
-5. Click **Simulate arrival at Pickup**.
-6. Click **Simulate physical CONFIRM — Package Loaded**.
-7. Click **Simulate arrival at Destination**.
-8. Click **Simulate physical CONFIRM — Package Received**.
-9. Check **Task Queue** and confirm the task is `COMPLETED`.
-
-## What is NOT connected yet
-- FastAPI
-- PostgreSQL
-- MQTT / Mosquitto
-- Robot Agent
-- ROS2 / Nav2
-- physical ESP32 button
-- authentication
-
-Those will replace the mock state in later phases.
+See `PHASE_3_GUIDE.md` for setup, persistence testing, and PostgreSQL inspection commands.

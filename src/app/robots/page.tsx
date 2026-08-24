@@ -2,14 +2,14 @@
 
 import PageHeader from "@/components/PageHeader";
 import WorkflowControls from "@/components/WorkflowControls";
-import { useMockDelivery } from "@/context/MockDeliveryContext";
+import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 
 export default function RobotStatusPage() {
-  const { robot, activeTask } = useMockDelivery();
+  const { robot, activeTask, backendOnline } = useDeliveryApi();
 
   return (
     <>
-      <PageHeader title="Robot Status" description="Shared mock telemetry and workflow state for the SCUTTLE robot." />
+      <PageHeader title="Robot Status" description="Robot state and position loaded from the FastAPI backend." />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
@@ -18,7 +18,9 @@ export default function RobotStatusPage() {
               <p className="text-sm text-slate-500">Robot ID</p>
               <h2 className="text-xl font-bold text-slate-900">{robot.name}</h2>
             </div>
-            <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700">● ONLINE</span>
+            <span className={`rounded-full px-3 py-1.5 text-sm font-semibold ${backendOnline && robot.online ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+              ● {backendOnline && robot.online ? "ONLINE" : "OFFLINE"}
+            </span>
           </div>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -32,14 +34,14 @@ export default function RobotStatusPage() {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-          <h2 className="font-semibold text-slate-900">Subsystem Health</h2>
+          <h2 className="font-semibold text-slate-900">Integration Status</h2>
           <div className="mt-5 space-y-3">
-            <Health name="ROS2" state="Mock Connected" />
-            <Health name="LiDAR" state="Healthy" />
-            <Health name="IMU" state="Healthy" />
-            <Health name="Wheel Encoders" state="Healthy" />
-            <Health name="ESP32" state="Mock Connected" />
-            <Health name="Wi-Fi / MQTT" state="Not connected yet" warning />
+            <Health name="Next.js → FastAPI" state={backendOnline ? "Connected" : "Offline"} warning={!backendOnline} />
+            <Health name="FastAPI Business Logic" state="Active" />
+            <Health name="PostgreSQL" state="Phase 3" warning />
+            <Health name="MQTT Broker" state="Phase 5" warning />
+            <Health name="Robot Agent / ROS2" state="Phase 6" warning />
+            <Health name="ESP32 CONFIRM" state="Simulated by API button" warning />
           </div>
         </section>
       </div>
@@ -51,7 +53,7 @@ export default function RobotStatusPage() {
       <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
         <h2 className="font-semibold text-amber-900">Physical CONFIRM button simulation</h2>
         <p className="mt-1 text-sm leading-6 text-amber-800">
-          When the state is WAITING_FOR_LOADING or WAITING_FOR_UNLOADING, the workflow button above represents a person pressing the physical CONFIRM button connected to ESP32. In Phase 6, that event will come from the real robot instead of this web button.
+          In Phase 2.1, the workflow button sends the CONFIRM event directly to FastAPI. Later the physical ESP32 button will send the equivalent event through Robot Agent / MQTT instead of the browser.
         </p>
       </section>
     </>

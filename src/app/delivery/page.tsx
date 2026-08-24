@@ -1,18 +1,26 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import PageHeader from "@/components/PageHeader";
-import { useMockDelivery } from "@/context/MockDeliveryContext";
+import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 
 export default function CreateDeliveryPage() {
   const router = useRouter();
-  const { stations, createTask, robot } = useMockDelivery();
-  const [pickup, setPickup] = useState(stations[0]?.id ?? "");
-  const [destination, setDestination] = useState(stations[2]?.id ?? stations[1]?.id ?? "");
+  const { stations, createTask, robot, backendOnline } = useDeliveryApi();
+  const [pickup, setPickup] = useState("");
+  const [destination, setDestination] = useState("");
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const valid = Boolean(pickup && destination && pickup !== destination);
+  useEffect(() => {
+    if (!stations.length) return;
+    setPickup((current) => current || stations[0]?.id || "");
+    setDestination((current) => current || stations[2]?.id || stations[1]?.id || "");
+  }, [stations]);
+
+  const valid = Boolean(pickup && destination && pickup !== destination && backendOnline);
   const pickupStation = useMemo(
     () => stations.find((station) => station.id === pickup),
     [pickup, stations]
@@ -22,28 +30,40 @@ export default function CreateDeliveryPage() {
     [destination, stations]
   );
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
     if (!valid) {
-      setMessage("Pickup and destination stations must be different.");
+      setIsError(true);
+      setMessage(backendOnline ? "Pickup and destination stations must be different." : "FastAPI backend is not connected.");
       return;
     }
 
-    const created = createTask(pickup, destination);
-    const autoAssigned = created.status === "GOING_TO_PICKUP";
-    setMessage(
-      `${created.id} created: ${pickupStation?.name} → ${destinationStation?.name}. ${
-        autoAssigned ? "Robot was IDLE, so the mock scheduler assigned it immediately." : "Task was added to the queue."
-      }`
-    );
+    setSubmitting(true);
+    setMessage("");
+    setIsError(false);
+
+    try {
+      const created = await createTask(pickup, destination);
+      const autoAssigned = created.status === "GOING_TO_PICKUP";
+      setMessage(
+        `${created.id} created by FastAPI: ${pickupStation?.name} → ${destinationStation?.name}. ${
+          autoAssigned ? "Robot was IDLE, so FastAPI assigned it immediately." : "Robot is busy, so FastAPI added the task to the queue."
+        }`
+      );
+    } catch (err) {
+      setIsError(true);
+      setMessage(err instanceof Error ? err.message : "Unable to create delivery task.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
     <>
       <PageHeader
         title="Create Delivery"
-        description="Create a delivery and immediately see it on Dashboard and Task Queue."
+        description="Create a real REST request to FastAPI and see the result on Dashboard and Task Queue."
       />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
@@ -53,14 +73,19 @@ export default function CreateDeliveryPage() {
               <h2 className="text-lg font-semibold text-slate-900">Delivery Request</h2>
               <p className="mt-1 text-sm text-slate-500">Select where SCUTTLE should collect and deliver the package.</p>
             </div>
-            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${robot.state === "IDLE" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${backendOnline && robot.state === "IDLE" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
               Robot: {robot.state.replaceAll("_", " ")}
             </span>
           </div>
 
           <div className="mt-7 grid gap-5">
             <Field label="Pickup Station">
-              <select value={pickup} onChange={(event) => setPickup(event.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none ring-blue-500 transition focus:ring-2">
+              <select
+                value={pickup}
+                onChange={(event) => setPickup(event.target.value)}
+                disabled={!backendOnline || stations.length === 0}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none ring-blue-500 transition focus:ring-2 disabled:bg-slate-100"
+              >
                 {stations.map((station) => (
                   <option key={station.id} value={station.id}>{station.name} — {station.description}</option>
                 ))}
@@ -68,27 +93,40 @@ export default function CreateDeliveryPage() {
             </Field>
 
             <Field label="Destination Station">
-              <select value={destination} onChange={(event) => setDestination(event.target.value)} className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none ring-blue-500 transition focus:ring-2">
+              <select
+                value={destination}
+                onChange={(event) => setDestination(event.target.value)}
+                disabled={!backendOnline || stations.length === 0}
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none ring-blue-500 transition focus:ring-2 disabled:bg-slate-100"
+              >
                 {stations.map((station) => (
                   <option key={station.id} value={station.id}>{station.name} — {station.description}</option>
                 ))}
               </select>
             </Field>
 
-            {!valid && <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">Pickup and destination cannot be the same station.</div>}
+            {pickup && destination && pickup === destination && (
+              <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">Pickup and destination cannot be the same station.</div>
+            )}
 
-            <button type="submit" disabled={!valid} className="min-h-11 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">
-              Create Delivery Task
+            <button
+              type="submit"
+              disabled={!valid || submitting}
+              className="min-h-11 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {submitting ? "Sending to FastAPI..." : "Create Delivery Task"}
             </button>
 
             <div aria-live="polite">
               {message && (
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-800">
+                <div className={`rounded-xl border px-4 py-3 text-sm leading-6 ${isError ? "border-red-100 bg-red-50 text-red-800" : "border-emerald-100 bg-emerald-50 text-emerald-800"}`}>
                   {message}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" onClick={() => router.push("/")} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">Open Dashboard</button>
-                    <button type="button" onClick={() => router.push("/tasks")} className="rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold">Open Task Queue</button>
-                  </div>
+                  {!isError && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => router.push("/")} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">Open Dashboard</button>
+                      <button type="button" onClick={() => router.push("/tasks")} className="rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold">Open Task Queue</button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -104,7 +142,7 @@ export default function CreateDeliveryPage() {
           </div>
 
           <div className="mt-6 rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-            <strong>Phase 1.1 behavior:</strong> if the robot is IDLE, the mock scheduler immediately changes the new task to GOING_TO_PICKUP. If the robot is busy, the task stays QUEUED.
+            <strong>Phase 2.1 behavior:</strong> this form calls <code>POST /api/tasks</code>. FastAPI validates the station IDs, creates the task and assigns SCUTTLE immediately when the robot is IDLE.
           </div>
         </aside>
       </div>
@@ -112,7 +150,7 @@ export default function CreateDeliveryPage() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="grid gap-2"><span className="text-sm font-semibold text-slate-700">{label}</span>{children}</label>;
 }
 

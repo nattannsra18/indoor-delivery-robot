@@ -4,16 +4,16 @@ import PageHeader from "@/components/PageHeader";
 import RobotMapMock from "@/components/RobotMapMock";
 import StatusBadge from "@/components/StatusBadge";
 import WorkflowControls from "@/components/WorkflowControls";
-import { useMockDelivery } from "@/context/MockDeliveryContext";
+import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 
 export default function DashboardPage() {
-  const { robot, activeTask, queuedTasks, tasks, stationName } = useMockDelivery();
+  const { robot, activeTask, queuedTasks, tasks, stationName, backendOnline } = useDeliveryApi();
 
   return (
     <>
       <PageHeader
         title="Dashboard"
-        description="Interactive Phase 1.1 mock workflow for the indoor delivery robot."
+        description="Phase 2.1 dashboard connected to the FastAPI backend."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -26,13 +26,13 @@ export default function DashboardPage() {
         <MetricCard
           label="Battery"
           value={`${robot.battery}%`}
-          note="Mock telemetry"
+          note="FastAPI data"
           accent="blue"
         />
         <MetricCard
           label="Robot State"
           value={robot.state.replaceAll("_", " ")}
-          note="Shared across all pages"
+          note="Loaded from backend"
           accent="amber"
         />
         <MetricCard
@@ -52,10 +52,10 @@ export default function DashboardPage() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="font-semibold text-slate-900">Live Robot Map</h2>
-              <p className="text-sm text-slate-500">Mock localization and planned path</p>
+              <p className="text-sm text-slate-500">Frontend visualization using backend robot/task data</p>
             </div>
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-              ● Connected (Mock)
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${backendOnline ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
+              ● {backendOnline ? "FastAPI Connected" : "Backend Offline"}
             </span>
           </div>
           <RobotMapMock />
@@ -90,7 +90,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="mt-5 rounded-xl bg-slate-50 p-5 text-sm leading-6 text-slate-600">
-              Robot is IDLE. Create a delivery request to start the Phase 1.1 workflow.
+              Robot is IDLE. Create a delivery request; FastAPI will assign it automatically.
             </div>
           )}
         </section>
@@ -99,7 +99,7 @@ export default function DashboardPage() {
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div>
           <h2 className="font-semibold text-slate-900">Recent Tasks</h2>
-          <p className="text-sm text-slate-500">Changes made on other pages appear here immediately.</p>
+          <p className="text-sm text-slate-500">Task data is refreshed from FastAPI every 2 seconds and after each action.</p>
         </div>
 
         <div className="mt-4 overflow-x-auto">

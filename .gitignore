@@ -5,3 +5,11 @@ out
 .env.local
 .DS_Store
 *.log
+
+# Python / FastAPI
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+*.pyc
+backend/tests/*.db

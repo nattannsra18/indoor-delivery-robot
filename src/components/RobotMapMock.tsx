@@ -1,9 +1,9 @@
 "use client";
 
-import { useMockDelivery } from "@/context/MockDeliveryContext";
+import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 
 export default function RobotMapMock() {
-  const { robot, activeTask, stationName } = useMockDelivery();
+  const { robot, activeTask, stationName } = useDeliveryApi();
 
   return (
     <div className="relative min-h-[310px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">

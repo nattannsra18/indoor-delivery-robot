@@ -1,0 +1,177 @@
+import { DeliveryTask, Robot, Station, TaskStatus } from "@/types";
+
+export const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+type ApiRobot = {
+  id: string;
+  name: string;
+  online: boolean;
+  battery: number;
+  state: Robot["state"];
+  x: number;
+  y: number;
+  yaw: number;
+  current_task_id: string | null;
+  last_seen: string;
+};
+
+type ApiDeliveryTask = {
+  id: string;
+  robot_id: string | null;
+  pickup_station_id: string;
+  destination_station_id: string;
+  status: TaskStatus;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  progress: number;
+};
+
+type ApiOverview = {
+  robot: ApiRobot;
+  active_task: ApiDeliveryTask | null;
+  queued_count: number;
+  completed_count: number;
+};
+
+export type TaskEvent =
+  | "ARRIVED_PICKUP"
+  | "CONFIRM_LOADED"
+  | "ARRIVED_DESTINATION"
+  | "CONFIRM_RECEIVED";
+
+function toRobot(robot: ApiRobot): Robot {
+  return {
+    id: robot.id,
+    name: robot.name,
+    online: robot.online,
+    battery: robot.battery,
+    state: robot.state,
+    x: robot.x,
+    y: robot.y,
+    yaw: robot.yaw,
+    currentTaskId: robot.current_task_id ?? undefined,
+    lastSeen: robot.last_seen
+  };
+}
+
+function formatCreatedAt(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function toTask(task: ApiDeliveryTask): DeliveryTask {
+  return {
+    id: task.id,
+    robotId: task.robot_id ?? undefined,
+    pickupStationId: task.pickup_station_id,
+    destinationStationId: task.destination_station_id,
+    status: task.status,
+    createdAt: formatCreatedAt(task.created_at),
+    progress: task.progress
+  };
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers,
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    let detail = `${response.status} ${response.statusText}`;
+    try {
+      const body = (await response.json()) as { detail?: string | Array<{ msg?: string }> };
+      if (typeof body.detail === "string") {
+        detail = body.detail;
+      } else if (Array.isArray(body.detail)) {
+        detail = body.detail.map((item) => item.msg).filter(Boolean).join(", ") || detail;
+      }
+    } catch {
+      // Keep HTTP status if the response is not JSON.
+    }
+    throw new Error(detail);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export async function getOverview() {
+  const data = await request<ApiOverview>("/api/overview");
+  return {
+    robot: toRobot(data.robot),
+    activeTask: data.active_task ? toTask(data.active_task) : undefined,
+    queuedCount: data.queued_count,
+    completedCount: data.completed_count
+  };
+}
+
+export async function getStations(): Promise<Station[]> {
+  return request<Station[]>("/api/stations");
+}
+
+export async function getTasks(): Promise<DeliveryTask[]> {
+  const tasks = await request<ApiDeliveryTask[]>("/api/tasks");
+  return tasks.map(toTask);
+}
+
+export async function createTask(
+  pickupStationId: string,
+  destinationStationId: string
+): Promise<DeliveryTask> {
+  const task = await request<ApiDeliveryTask>("/api/tasks", {
+    method: "POST",
+    body: JSON.stringify({
+      pickup_station_id: pickupStationId,
+      destination_station_id: destinationStationId
+    })
+  });
+  return toTask(task);
+}
+
+export async function applyTaskEvent(
+  taskId: string,
+  event: TaskEvent
+): Promise<DeliveryTask> {
+  const task = await request<ApiDeliveryTask>(`/api/tasks/${taskId}/events`, {
+    method: "POST",
+    body: JSON.stringify({ event })
+  });
+  return toTask(task);
+}
+
+export async function cancelTask(taskId: string): Promise<DeliveryTask> {
+  const task = await request<ApiDeliveryTask>(`/api/tasks/${taskId}/cancel`, {
+    method: "POST"
+  });
+  return toTask(task);
+}
+
+export async function addStation(
+  station: Omit<Station, "id">
+): Promise<Station> {
+  return request<Station>("/api/stations", {
+    method: "POST",
+    body: JSON.stringify(station)
+  });
+}
+
+export async function deleteStation(stationId: string): Promise<void> {
+  await request<void>(`/api/stations/${stationId}`, { method: "DELETE" });
+}
+
+export async function resetDemo(): Promise<void> {
+  await request<ApiOverview>("/api/demo/reset", { method: "POST" });
+}

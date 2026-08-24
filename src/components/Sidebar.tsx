@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: "▦" },
@@ -13,6 +14,8 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { backendOnline, loading } = useDeliveryApi();
+
   return (
     <aside className="border-b border-slate-200 bg-slate-950 text-white lg:min-h-screen lg:w-64 lg:border-b-0 lg:border-r lg:border-slate-800">
       <div className="flex items-center gap-3 px-5 py-5">
@@ -42,10 +45,14 @@ export default function Sidebar() {
       <div className="hidden px-5 py-6 lg:block">
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
           <div className="mb-2 flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-            <span className="text-sm font-medium">Mock Mode</span>
+            <span className={`h-2.5 w-2.5 rounded-full ${loading ? "bg-amber-400" : backendOnline ? "bg-emerald-400" : "bg-red-400"}`} />
+            <span className="text-sm font-medium">
+              {loading ? "Connecting..." : backendOnline ? "FastAPI Connected" : "Backend Offline"}
+            </span>
           </div>
-          <p className="text-xs leading-5 text-slate-400">Phase 1.1 uses shared mock state and localStorage. No backend or MQTT is connected yet.</p>
+          <p className="text-xs leading-5 text-slate-400">
+            Phase 2.1 reads and writes delivery data through the real FastAPI REST API. MQTT is not connected yet.
+          </p>
         </div>
       </div>
     </aside>
