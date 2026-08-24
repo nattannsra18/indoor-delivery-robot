@@ -1,6 +1,6 @@
 {
-  "name": "indoor-delivery-web-phase1",
-  "version": "0.1.0",
+  "name": "indoor-delivery-web-phase1-1",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "dev": "next dev",

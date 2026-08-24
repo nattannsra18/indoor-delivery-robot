@@ -45,7 +45,7 @@ export default function Sidebar() {
             <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
             <span className="text-sm font-medium">Mock Mode</span>
           </div>
-          <p className="text-xs leading-5 text-slate-400">Phase 1 uses local mock data. No backend or MQTT is connected yet.</p>
+          <p className="text-xs leading-5 text-slate-400">Phase 1.1 uses shared mock state and localStorage. No backend or MQTT is connected yet.</p>
         </div>
       </div>
     </aside>
