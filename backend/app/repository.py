@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .db_models import DeliveryTaskORM, RobotORM, StationORM
+from .db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM
 from .models import TaskStatus
 
 
@@ -41,6 +41,10 @@ class DeliveryRepository:
     def get_robot(self, robot_id: str = "robot01") -> RobotORM | None:
         return self.db.get(RobotORM, robot_id)
 
+    def get_robot_for_update(self, robot_id: str = "robot01") -> RobotORM | None:
+        stmt = select(RobotORM).where(RobotORM.id == robot_id).with_for_update()
+        return self.db.scalar(stmt)
+
     # Tasks
     def list_tasks(self, task_status: TaskStatus | None = None) -> list[DeliveryTaskORM]:
         stmt = select(DeliveryTaskORM)
@@ -51,6 +55,10 @@ class DeliveryRepository:
 
     def get_task(self, task_id: str) -> DeliveryTaskORM | None:
         return self.db.get(DeliveryTaskORM, task_id)
+
+    def get_task_for_update(self, task_id: str) -> DeliveryTaskORM | None:
+        stmt = select(DeliveryTaskORM).where(DeliveryTaskORM.id == task_id).with_for_update()
+        return self.db.scalar(stmt)
 
     def add_task(self, task: DeliveryTaskORM) -> DeliveryTaskORM:
         self.db.add(task)
@@ -66,6 +74,20 @@ class DeliveryRepository:
         )
         return self.db.scalar(stmt)
 
+    def active_task_for_robot(
+        self, robot_id: str, active_statuses: set[TaskStatus]
+    ) -> DeliveryTaskORM | None:
+        stmt = (
+            select(DeliveryTaskORM)
+            .where(
+                DeliveryTaskORM.robot_id == robot_id,
+                DeliveryTaskORM.status.in_(active_statuses),
+            )
+            .order_by(DeliveryTaskORM.created_at.asc())
+            .limit(1)
+        )
+        return self.db.scalar(stmt)
+
     def queued_tasks(self) -> list[DeliveryTaskORM]:
         stmt = (
             select(DeliveryTaskORM)
@@ -73,6 +95,16 @@ class DeliveryRepository:
             .order_by(DeliveryTaskORM.created_at.asc())
         )
         return list(self.db.scalars(stmt).all())
+
+    def next_queued_task_for_update(self) -> DeliveryTaskORM | None:
+        stmt = (
+            select(DeliveryTaskORM)
+            .where(DeliveryTaskORM.status == TaskStatus.QUEUED)
+            .order_by(DeliveryTaskORM.created_at.asc())
+            .limit(1)
+            .with_for_update()
+        )
+        return self.db.scalar(stmt)
 
     def count_tasks(self, task_status: TaskStatus) -> int:
         stmt = select(func.count()).select_from(DeliveryTaskORM).where(
@@ -95,3 +127,17 @@ class DeliveryRepository:
             if station_id.startswith("S") and station_id[1:].isdigit():
                 max_number = max(max_number, int(station_id[1:]))
         return f"S{max_number + 1}"
+
+    # Task event history
+    def add_task_event(self, event: TaskEventORM) -> TaskEventORM:
+        self.db.add(event)
+        self.db.flush()
+        return event
+
+    def list_task_events(self, task_id: str) -> list[TaskEventORM]:
+        stmt = (
+            select(TaskEventORM)
+            .where(TaskEventORM.task_id == task_id)
+            .order_by(TaskEventORM.created_at.asc(), TaskEventORM.id.asc())
+        )
+        return list(self.db.scalars(stmt).all())

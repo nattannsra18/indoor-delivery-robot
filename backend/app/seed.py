@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from .db_models import DeliveryTaskORM, RobotORM, StationORM
+from .db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM
 from .models import RobotState, TaskStatus, utc_now
 
 INITIAL_STATIONS = [
@@ -38,17 +38,28 @@ def seed_database(db: Session) -> None:
 
     if db.scalar(select(DeliveryTaskORM.id).limit(1)) is None:
         now = utc_now()
+        demo_task = DeliveryTaskORM(
+            id="TASK-001",
+            robot_id="robot01",
+            pickup_station_id="D",
+            destination_station_id="A",
+            status=TaskStatus.COMPLETED,
+            created_at=now,
+            started_at=now,
+            completed_at=now,
+            progress=100,
+        )
+        db.add(demo_task)
+        db.flush()
         db.add(
-            DeliveryTaskORM(
-                id="TASK-001",
-                robot_id="robot01",
-                pickup_station_id="D",
-                destination_station_id="A",
-                status=TaskStatus.COMPLETED,
+            TaskEventORM(
+                task_id=demo_task.id,
+                event_type="DEMO_SEED",
+                from_status=None,
+                to_status=TaskStatus.COMPLETED,
+                source="SYSTEM",
+                detail="Initial completed demo task",
                 created_at=now,
-                started_at=now,
-                completed_at=now,
-                progress=100,
             )
         )
 
@@ -56,6 +67,7 @@ def seed_database(db: Session) -> None:
 
 
 def reset_demo_data(db: Session) -> None:
+    db.execute(delete(TaskEventORM))
     db.execute(delete(DeliveryTaskORM))
     db.execute(delete(RobotORM))
     db.execute(delete(StationORM))

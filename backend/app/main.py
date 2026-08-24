@@ -11,6 +11,7 @@ from .seed import seed_database
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Phase 4 adds task_events as a new table. Existing Phase 3 tables remain compatible.
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed_database(db)
@@ -19,10 +20,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Indoor Delivery Robot API",
-    version="0.3.0",
+    version="0.4.0",
     description=(
-        "Phase 3 FastAPI backend for the Indoor Autonomous Delivery Robot System. "
-        "Stations, robot state and delivery tasks are persisted in PostgreSQL through SQLAlchemy."
+        "Phase 4 FastAPI backend for the Indoor Autonomous Delivery Robot System. "
+        "Adds a validated delivery task state machine, automatic queue dispatch, failure/retry logic, "
+        "robot offline/recovery handling and persistent task event history."
     ),
     lifespan=lifespan,
 )
@@ -46,8 +48,9 @@ app.include_router(tasks.router)
 def root():
     return {
         "name": "Indoor Delivery Robot API",
-        "phase": "3",
+        "phase": "4",
         "storage": "PostgreSQL",
+        "workflow": "validated state machine",
         "docs": "/docs",
         "health": "/health",
     }

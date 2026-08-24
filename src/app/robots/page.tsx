@@ -38,10 +38,10 @@ export default function RobotStatusPage() {
           <div className="mt-5 space-y-3">
             <Health name="Next.js → FastAPI" state={backendOnline ? "Connected" : "Offline"} warning={!backendOnline} />
             <Health name="FastAPI Business Logic" state="Active" />
-            <Health name="PostgreSQL" state="Phase 3" warning />
+            <Health name="PostgreSQL" state="Connected" />
             <Health name="MQTT Broker" state="Phase 5" warning />
             <Health name="Robot Agent / ROS2" state="Phase 6" warning />
-            <Health name="ESP32 CONFIRM" state="Simulated by API button" warning />
+            <Health name="ESP32 CONFIRM" state="Phase 4 API simulator" warning />
           </div>
         </section>
       </div>
@@ -53,7 +53,7 @@ export default function RobotStatusPage() {
       <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
         <h2 className="font-semibold text-amber-900">Physical CONFIRM button simulation</h2>
         <p className="mt-1 text-sm leading-6 text-amber-800">
-          In Phase 2.1, the workflow button sends the CONFIRM event directly to FastAPI. Later the physical ESP32 button will send the equivalent event through Robot Agent / MQTT instead of the browser.
+          In Phase 4, workflow events are validated by the backend state machine and saved to PostgreSQL. In Phase 5, MQTT / Robot Agent will produce these events instead of the browser simulator.
         </p>
       </section>
     </>

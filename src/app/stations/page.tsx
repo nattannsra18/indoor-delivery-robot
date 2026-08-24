@@ -99,7 +99,7 @@ export default function StationsPage() {
 
         <form onSubmit={handleAddStation} className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="font-semibold text-slate-900">Add Station</h2>
-          <p className="mt-1 text-sm text-slate-500">Phase 2.1 stores this in FastAPI memory. PostgreSQL comes in Phase 3.</p>
+          <p className="mt-1 text-sm text-slate-500">Stations are persisted in PostgreSQL through the FastAPI backend.</p>
 
           <div className="mt-5 grid gap-4">
             <Input label="Station name" value={name} onChange={setName} />

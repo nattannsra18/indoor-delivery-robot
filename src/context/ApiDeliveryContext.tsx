@@ -37,6 +37,7 @@ type ApiDeliveryContextValue = {
   robot: Robot;
   activeTask?: DeliveryTask;
   queuedTasks: DeliveryTask[];
+  failedTasks: DeliveryTask[];
   loading: boolean;
   backendOnline: boolean;
   error: string | null;
@@ -44,7 +45,11 @@ type ApiDeliveryContextValue = {
   addStation: (station: Omit<Station, "id">) => Promise<Station>;
   removeStation: (stationId: string) => Promise<{ ok: boolean; message: string }>;
   advanceRobotWorkflow: () => Promise<void>;
+  failActiveTask: () => Promise<void>;
   cancelTask: (taskId: string) => Promise<void>;
+  retryTask: (taskId: string) => Promise<void>;
+  setRobotOnlineState: (online: boolean) => Promise<void>;
+  recoverRobot: () => Promise<void>;
   resetDemo: () => Promise<void>;
   refreshAll: () => Promise<void>;
   stationName: (stationId: string) => string;
@@ -83,9 +88,7 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refreshAll();
-    const interval = window.setInterval(() => {
-      void refreshAll();
-    }, 2000);
+    const interval = window.setInterval(() => void refreshAll(), 2000);
     return () => window.clearInterval(interval);
   }, [refreshAll]);
 
@@ -99,10 +102,29 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
     [tasks]
   );
 
+  const failedTasks = useMemo(
+    () => tasks.filter((task) => task.status === "FAILED"),
+    [tasks]
+  );
+
   const stationName = useCallback(
     (stationId: string) =>
       stations.find((station) => station.id === stationId)?.name ?? stationId,
     [stations]
+  );
+
+  const runAndRefresh = useCallback(
+    async (operation: () => Promise<unknown>, fallbackMessage: string) => {
+      try {
+        await operation();
+        await refreshAll();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : fallbackMessage;
+        setError(message);
+        throw err;
+      }
+    },
+    [refreshAll]
   );
 
   const createTask = useCallback(
@@ -152,51 +174,59 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
 
   const advanceRobotWorkflow = useCallback(async () => {
     if (!activeTask) return;
-
     const eventByStatus: Partial<Record<TaskStatus, api.TaskEvent>> = {
       GOING_TO_PICKUP: "ARRIVED_PICKUP",
       WAITING_FOR_LOADING: "CONFIRM_LOADED",
       DELIVERING: "ARRIVED_DESTINATION",
       WAITING_FOR_UNLOADING: "CONFIRM_RECEIVED"
     };
-
     const event = eventByStatus[activeTask.status];
     if (!event) return;
+    await runAndRefresh(
+      () => api.applyTaskEvent(activeTask.id, event),
+      "Unable to advance workflow"
+    );
+  }, [activeTask, runAndRefresh]);
 
-    try {
-      await api.applyTaskEvent(activeTask.id, event);
-      await refreshAll();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to advance workflow";
-      setError(message);
-      throw err;
-    }
-  }, [activeTask, refreshAll]);
+  const failActiveTask = useCallback(async () => {
+    if (!activeTask) return;
+    await runAndRefresh(
+      () => api.applyTaskEvent(activeTask.id, "NAVIGATION_FAILED", "Simulated Nav2 failure"),
+      "Unable to mark navigation failure"
+    );
+  }, [activeTask, runAndRefresh]);
 
   const cancelTask = useCallback(
     async (taskId: string) => {
-      try {
-        await api.cancelTask(taskId);
-        await refreshAll();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unable to cancel task";
-        setError(message);
-        throw err;
-      }
+      await runAndRefresh(() => api.cancelTask(taskId), "Unable to cancel task");
     },
-    [refreshAll]
+    [runAndRefresh]
   );
 
+  const retryTask = useCallback(
+    async (taskId: string) => {
+      await runAndRefresh(() => api.retryTask(taskId), "Unable to retry task");
+    },
+    [runAndRefresh]
+  );
+
+  const setRobotOnlineState = useCallback(
+    async (online: boolean) => {
+      await runAndRefresh(
+        () => (online ? api.setRobotOnline(robot.id) : api.setRobotOffline(robot.id)),
+        "Unable to change robot connectivity state"
+      );
+    },
+    [robot.id, runAndRefresh]
+  );
+
+  const recoverRobot = useCallback(async () => {
+    await runAndRefresh(() => api.recoverRobot(robot.id), "Unable to recover robot");
+  }, [robot.id, runAndRefresh]);
+
   const resetDemo = useCallback(async () => {
-    try {
-      await api.resetDemo();
-      await refreshAll();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to reset backend demo";
-      setError(message);
-      throw err;
-    }
-  }, [refreshAll]);
+    await runAndRefresh(() => api.resetDemo(), "Unable to reset backend demo");
+  }, [runAndRefresh]);
 
   const value = useMemo<ApiDeliveryContextValue>(
     () => ({
@@ -205,6 +235,7 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
       robot,
       activeTask,
       queuedTasks,
+      failedTasks,
       loading,
       backendOnline,
       error,
@@ -212,7 +243,11 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
       addStation,
       removeStation,
       advanceRobotWorkflow,
+      failActiveTask,
       cancelTask,
+      retryTask,
+      setRobotOnlineState,
+      recoverRobot,
       resetDemo,
       refreshAll,
       stationName
@@ -223,6 +258,7 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
       robot,
       activeTask,
       queuedTasks,
+      failedTasks,
       loading,
       backendOnline,
       error,
@@ -230,7 +266,11 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
       addStation,
       removeStation,
       advanceRobotWorkflow,
+      failActiveTask,
       cancelTask,
+      retryTask,
+      setRobotOnlineState,
+      recoverRobot,
       resetDemo,
       refreshAll,
       stationName

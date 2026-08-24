@@ -33,6 +33,13 @@ class TaskEvent(str, Enum):
     CONFIRM_LOADED = "CONFIRM_LOADED"
     ARRIVED_DESTINATION = "ARRIVED_DESTINATION"
     CONFIRM_RECEIVED = "CONFIRM_RECEIVED"
+    NAVIGATION_FAILED = "NAVIGATION_FAILED"
+
+
+class EventSource(str, Enum):
+    WEB_SIMULATOR = "WEB_SIMULATOR"
+    ROBOT_AGENT = "ROBOT_AGENT"
+    SYSTEM = "SYSTEM"
 
 
 class Station(BaseModel):
@@ -96,6 +103,21 @@ class DeliveryTaskCreate(BaseModel):
 
 class TaskEventRequest(BaseModel):
     event: TaskEvent
+    source: EventSource = EventSource.WEB_SIMULATOR
+    detail: Optional[str] = Field(default=None, max_length=500)
+
+
+class TaskHistoryEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    task_id: str
+    event_type: str
+    from_status: Optional[TaskStatus] = None
+    to_status: TaskStatus
+    source: str
+    detail: Optional[str] = None
+    created_at: datetime
 
 
 class DashboardOverview(BaseModel):
@@ -103,6 +125,7 @@ class DashboardOverview(BaseModel):
     active_task: Optional[DeliveryTask]
     queued_count: int
     completed_count: int
+    failed_count: int
 
 
 def utc_now() -> datetime:

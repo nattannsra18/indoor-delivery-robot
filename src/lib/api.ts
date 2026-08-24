@@ -1,4 +1,4 @@
-import { DeliveryTask, Robot, Station, TaskStatus } from "@/types";
+import { DeliveryTask, Robot, Station, TaskHistoryEntry, TaskStatus } from "@/types";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -28,18 +28,31 @@ type ApiDeliveryTask = {
   progress: number;
 };
 
+type ApiTaskHistoryEntry = {
+  id: number;
+  task_id: string;
+  event_type: string;
+  from_status: TaskStatus | null;
+  to_status: TaskStatus;
+  source: string;
+  detail: string | null;
+  created_at: string;
+};
+
 type ApiOverview = {
   robot: ApiRobot;
   active_task: ApiDeliveryTask | null;
   queued_count: number;
   completed_count: number;
+  failed_count: number;
 };
 
 export type TaskEvent =
   | "ARRIVED_PICKUP"
   | "CONFIRM_LOADED"
   | "ARRIVED_DESTINATION"
-  | "CONFIRM_RECEIVED";
+  | "CONFIRM_RECEIVED"
+  | "NAVIGATION_FAILED";
 
 function toRobot(robot: ApiRobot): Robot {
   return {
@@ -70,7 +83,22 @@ function toTask(task: ApiDeliveryTask): DeliveryTask {
     destinationStationId: task.destination_station_id,
     status: task.status,
     createdAt: formatCreatedAt(task.created_at),
+    startedAt: task.started_at ?? undefined,
+    completedAt: task.completed_at ?? undefined,
     progress: task.progress
+  };
+}
+
+function toHistory(entry: ApiTaskHistoryEntry): TaskHistoryEntry {
+  return {
+    id: entry.id,
+    taskId: entry.task_id,
+    eventType: entry.event_type,
+    fromStatus: entry.from_status ?? undefined,
+    toStatus: entry.to_status,
+    source: entry.source,
+    detail: entry.detail ?? undefined,
+    createdAt: entry.created_at
   };
 }
 
@@ -114,7 +142,8 @@ export async function getOverview() {
     robot: toRobot(data.robot),
     activeTask: data.active_task ? toTask(data.active_task) : undefined,
     queuedCount: data.queued_count,
-    completedCount: data.completed_count
+    completedCount: data.completed_count,
+    failedCount: data.failed_count
   };
 }
 
@@ -125,6 +154,11 @@ export async function getStations(): Promise<Station[]> {
 export async function getTasks(): Promise<DeliveryTask[]> {
   const tasks = await request<ApiDeliveryTask[]>("/api/tasks");
   return tasks.map(toTask);
+}
+
+export async function getTaskHistory(taskId: string): Promise<TaskHistoryEntry[]> {
+  const history = await request<ApiTaskHistoryEntry[]>(`/api/tasks/${taskId}/history`);
+  return history.map(toHistory);
 }
 
 export async function createTask(
@@ -143,11 +177,12 @@ export async function createTask(
 
 export async function applyTaskEvent(
   taskId: string,
-  event: TaskEvent
+  event: TaskEvent,
+  detail?: string
 ): Promise<DeliveryTask> {
   const task = await request<ApiDeliveryTask>(`/api/tasks/${taskId}/events`, {
     method: "POST",
-    body: JSON.stringify({ event })
+    body: JSON.stringify({ event, source: "WEB_SIMULATOR", detail: detail ?? null })
   });
   return toTask(task);
 }
@@ -159,9 +194,26 @@ export async function cancelTask(taskId: string): Promise<DeliveryTask> {
   return toTask(task);
 }
 
-export async function addStation(
-  station: Omit<Station, "id">
-): Promise<Station> {
+export async function retryTask(taskId: string): Promise<DeliveryTask> {
+  const task = await request<ApiDeliveryTask>(`/api/tasks/${taskId}/retry`, {
+    method: "POST"
+  });
+  return toTask(task);
+}
+
+export async function setRobotOffline(robotId: string): Promise<Robot> {
+  return toRobot(await request<ApiRobot>(`/api/robots/${robotId}/offline`, { method: "POST" }));
+}
+
+export async function setRobotOnline(robotId: string): Promise<Robot> {
+  return toRobot(await request<ApiRobot>(`/api/robots/${robotId}/online`, { method: "POST" }));
+}
+
+export async function recoverRobot(robotId: string): Promise<Robot> {
+  return toRobot(await request<ApiRobot>(`/api/robots/${robotId}/recover`, { method: "POST" }));
+}
+
+export async function addStation(station: Omit<Station, "id">): Promise<Station> {
   return request<Station>("/api/stations", {
     method: "POST",
     body: JSON.stringify(station)

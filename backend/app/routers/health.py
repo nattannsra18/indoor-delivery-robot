@@ -21,6 +21,7 @@ def health(db: Session = Depends(get_db)) -> dict[str, str]:
     return {
         "status": "ok",
         "service": "indoor-delivery-backend",
-        "phase": "3",
+        "phase": "4",
         "database": "connected",
+        "workflow": "state-machine",
     }

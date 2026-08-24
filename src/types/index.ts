@@ -46,5 +46,18 @@ export interface DeliveryTask {
   destinationStationId: string;
   status: TaskStatus;
   createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
   progress: number;
+}
+
+export interface TaskHistoryEntry {
+  id: number;
+  taskId: string;
+  eventType: string;
+  fromStatus?: TaskStatus;
+  toStatus: TaskStatus;
+  source: string;
+  detail?: string;
+  createdAt: string;
 }

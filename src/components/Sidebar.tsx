@@ -51,7 +51,7 @@ export default function Sidebar() {
             </span>
           </div>
           <p className="text-xs leading-5 text-slate-400">
-            Phase 2.1 reads and writes delivery data through the real FastAPI REST API. MQTT is not connected yet.
+            Phase 4 uses FastAPI + PostgreSQL with a validated task state machine. MQTT is the next phase.
           </p>
         </div>
       </div>

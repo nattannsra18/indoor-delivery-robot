@@ -4,7 +4,7 @@ import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
   title: "Indoor Delivery Robot",
-  description: "Phase 2.1 Next.js frontend connected to the FastAPI backend"
+  description: "Phase 4 Next.js frontend connected to the FastAPI task state machine"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

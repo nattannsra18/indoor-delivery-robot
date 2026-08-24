@@ -1,54 +1,70 @@
-# Indoor Autonomous Delivery Robot — Phase 3
+# Indoor Autonomous Delivery Robot — Phase 4
 
-Phase 3 connects the existing Next.js + FastAPI application to PostgreSQL so robot, station, and delivery-task data survive backend restarts.
+Web system prototype for an indoor autonomous delivery robot based on the SCUTTLE platform.
 
-## Stack
-
-- Frontend: Next.js / React / TypeScript / Tailwind CSS
-- Backend: FastAPI / Pydantic / Uvicorn
-- ORM: SQLAlchemy 2
-- Database: PostgreSQL
-- PostgreSQL driver: Psycopg 3
-- Frontend updates: REST + 2-second polling
-
-## Current architecture
+## Current stack
 
 ```text
-Next.js
-   │ REST
-   ▼
-FastAPI
-   │
-   ├── Service / Task State Machine
-   │       │
-   │       ▼
-   │   Repository
-   │       │
-   │       ▼
-   └── SQLAlchemy ──► PostgreSQL
+Next.js / React / TypeScript / Tailwind CSS
+                 |
+                 | REST API
+                 v
+             FastAPI
+                 |
+       +---------+----------+
+       |                    |
+Task State Machine      SQLAlchemy
+       |                    |
+       +---------+----------+
+                 |
+             PostgreSQL
 ```
 
-## Quick start on Windows
+MQTT and the real Robot Agent are intentionally not connected yet. They are planned for Phase 5 and Phase 6.
 
-### Terminal 1 — PostgreSQL
+## Phase 4 features
+
+- Dashboard
+- Create Delivery
+- Task Queue
+- Station Management
+- Robot Status
+- PostgreSQL persistence
+- Validated delivery task state machine
+- FIFO task queue / automatic dispatch
+- Physical CONFIRM event simulation
+- Navigation failure simulation
+- FAILED task retry
+- Robot offline/online/recovery simulation
+- Persistent task event history
+
+## Run PostgreSQL
 
 From project root:
 
 ```cmd
 docker compose up -d postgres
+docker compose ps
 ```
 
-### Terminal 2 — FastAPI
+## Run FastAPI
 
 ```cmd
 cd backend
-copy .env.example .env
 .venv\Scripts\activate
 python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --port 8000
 ```
 
-### Terminal 3 — Next.js
+Swagger:
+
+```text
+http://localhost:8000/docs
+```
+
+## Run Next.js
+
+Open another terminal at project root:
 
 ```cmd
 npm install
@@ -57,8 +73,8 @@ npm run dev
 
 Open:
 
-- Frontend: `http://localhost:3000`
-- Swagger: `http://localhost:8000/docs`
-- Health: `http://localhost:8000/health`
+```text
+http://localhost:3000
+```
 
-See `PHASE_3_GUIDE.md` for setup, persistence testing, and PostgreSQL inspection commands.
+See `PHASE_4_GUIDE.md` for the full workflow test.

@@ -13,7 +13,7 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
-        description="Phase 2.1 dashboard connected to the FastAPI backend."
+        description="Phase 4 dashboard with PostgreSQL-backed task state machine and queue logic."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

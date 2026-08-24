@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -80,3 +80,26 @@ class DeliveryTaskORM(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class TaskEventORM(Base):
+    __tablename__ = "task_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[str] = mapped_column(
+        ForeignKey("delivery_tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    from_status: Mapped[TaskStatus | None] = mapped_column(
+        enum_column(TaskStatus, "task_event_from_status"), nullable=True
+    )
+    to_status: Mapped[TaskStatus] = mapped_column(
+        enum_column(TaskStatus, "task_event_to_status"), nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(40), nullable=False, default="SYSTEM")
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, index=True
+    )

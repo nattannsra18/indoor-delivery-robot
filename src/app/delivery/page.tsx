@@ -142,7 +142,7 @@ export default function CreateDeliveryPage() {
           </div>
 
           <div className="mt-6 rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-            <strong>Phase 2.1 behavior:</strong> this form calls <code>POST /api/tasks</code>. FastAPI validates the station IDs, creates the task and assigns SCUTTLE immediately when the robot is IDLE.
+            <strong>Phase 4 behavior:</strong> this form calls <code>POST /api/tasks</code>. FastAPI validates the station IDs, creates the task and assigns SCUTTLE immediately when the robot is IDLE.
           </div>
         </aside>
       </div>
