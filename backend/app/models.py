@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
-
+from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -91,6 +90,29 @@ class RobotTelemetry(BaseModel):
         max_length=100,
     )
     timestamp: Optional[str] = None
+
+class NavigationResultMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["navigation_result"]
+    command_id: str = Field(
+        min_length=1,
+        max_length=200,
+    )
+    task_id: str = Field(
+        min_length=1,
+        max_length=100,
+    )
+    stage: Literal["pickup", "destination"]
+    status: Literal[
+        "succeeded",
+        "aborted",
+        "canceled",
+    ]
+    detail: Optional[str] = Field(
+        default=None,
+        max_length=500,
+    )
 
 class DeliveryTask(BaseModel):
     model_config = ConfigDict(from_attributes=True)

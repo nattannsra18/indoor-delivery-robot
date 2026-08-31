@@ -413,3 +413,68 @@ def test_robot_receives_destination_command():
         assert destination_command["command_id"].startswith(
             f"{task['id']}:destination:"
         )
+
+def test_navigation_result_advances_pickup():
+    with client.websocket_connect(
+        "/ws/robots/robot01"
+    ) as websocket:
+        websocket.receive_json()
+
+        task = create_task("A", "C")
+        command = websocket.receive_json()
+
+        websocket.send_json(
+            {
+                "type": "navigation_result",
+                "command_id": command["command_id"],
+                "task_id": task["id"],
+                "stage": "pickup",
+                "status": "succeeded",
+                "detail": "Nav2 reached pickup",
+            }
+        )
+
+        receipt = websocket.receive_json()
+
+        assert (
+            receipt["type"]
+            == "navigation_result_received"
+        )
+        assert receipt["accepted"] is True
+        assert receipt["task_id"] == task["id"]
+        assert receipt["stage"] == "pickup"
+        assert (
+            receipt["task_status"]
+            == "WAITING_FOR_LOADING"
+        )
+
+
+def test_navigation_failure_marks_task_failed():
+    with client.websocket_connect(
+        "/ws/robots/robot01"
+    ) as websocket:
+        websocket.receive_json()
+
+        task = create_task("A", "C")
+        command = websocket.receive_json()
+
+        websocket.send_json(
+            {
+                "type": "navigation_result",
+                "command_id": command["command_id"],
+                "task_id": task["id"],
+                "stage": "pickup",
+                "status": "aborted",
+                "detail": "Nav2 goal aborted",
+            }
+        )
+
+        receipt = websocket.receive_json()
+
+        assert (
+            receipt["type"]
+            == "navigation_result_received"
+        )
+        assert receipt["accepted"] is True
+        assert receipt["navigation_status"] == "aborted"
+        assert receipt["task_status"] == "FAILED"

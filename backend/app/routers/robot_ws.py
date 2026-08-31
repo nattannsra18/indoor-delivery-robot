@@ -14,7 +14,12 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import RobotTelemetry
+from ..models import (
+    EventSource,
+    NavigationResultMessage,
+    RobotTelemetry,
+    TaskEvent,
+)
 from ..service import DeliveryService
 from ..websocket_manager import robot_connection_manager
 
@@ -206,7 +211,109 @@ async def robot_websocket(
                         ),
                     }
                 )
+            elif message_type == "navigation_result":
+                try:
+                    navigation = (
+                        NavigationResultMessage.model_validate(
+                            message
+                        )
+                    )
+                except ValidationError as error:
+                    details = "; ".join(
+                        (
+                            f"{'.'.join(map(str, item['loc']))}: "
+                            f"{item['msg']}"
+                        )
+                        for item in error.errors(
+                            include_url=False
+                        )
+                    )
 
+                    await send_error(
+                        websocket,
+                        "INVALID_NAVIGATION_RESULT",
+                        details,
+                    )
+                    continue
+
+                expected_prefix = (
+                    f"{navigation.task_id}:"
+                    f"{navigation.stage}:"
+                )
+
+                if not navigation.command_id.startswith(
+                    expected_prefix
+                ):
+                    await send_error(
+                        websocket,
+                        "COMMAND_TASK_MISMATCH",
+                        (
+                            "command_id does not match "
+                            "task_id and stage"
+                        ),
+                    )
+                    continue
+
+                if navigation.status == "succeeded":
+                    if navigation.stage == "pickup":
+                        task_event = (
+                            TaskEvent.ARRIVED_PICKUP
+                        )
+                    else:
+                        task_event = (
+                            TaskEvent.ARRIVED_DESTINATION
+                        )
+                else:
+                    task_event = (
+                        TaskEvent.NAVIGATION_FAILED
+                    )
+
+                try:
+                    db.expire_all()
+
+                    updated_task = (
+                        service.apply_task_event(
+                            navigation.task_id,
+                            task_event,
+                            EventSource.ROBOT_AGENT,
+                            navigation.detail
+                            or (
+                                "Nav2 navigation "
+                                f"{navigation.status}"
+                            ),
+                        )
+                    )
+                except HTTPException as error:
+                    await send_error(
+                        websocket,
+                        "TASK_TRANSITION_REJECTED",
+                        str(error.detail),
+                    )
+                    continue
+
+                await websocket.send_json(
+                    {
+                        "type": (
+                            "navigation_result_received"
+                        ),
+                        "robot_id": robot_id,
+                        "command_id": (
+                            navigation.command_id
+                        ),
+                        "task_id": navigation.task_id,
+                        "stage": navigation.stage,
+                        "navigation_status": (
+                            navigation.status
+                        ),
+                        "task_status": (
+                            updated_task.status.value
+                        ),
+                        "accepted": True,
+                        "server_time": (
+                            current_utc_time()
+                        ),
+                    }
+                )
             elif message_type == "command_ack":
                 command_id = message.get(
                     "command_id"
@@ -252,7 +359,8 @@ async def robot_websocket(
                     "UNSUPPORTED_MESSAGE_TYPE",
                     (
                         "Supported message types are "
-                        "'heartbeat', 'telemetry' and "
+                        "'heartbeat', 'telemetry', "
+                        "'navigation_result' and "
                         "'command_ack'"
                     ),
                 )
