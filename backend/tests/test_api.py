@@ -13,6 +13,7 @@ from app.database import Base, get_db
 from app.db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM
 from app.main import app
 from app.seed import seed_database
+from app.map_store import map_store
 
 if TEST_DB.exists():
     TEST_DB.unlink()
@@ -478,3 +479,48 @@ def test_navigation_failure_marks_task_failed():
         assert receipt["accepted"] is True
         assert receipt["navigation_status"] == "aborted"
         assert receipt["task_status"] == "FAILED"
+
+def test_robot_map_updates_api_snapshot():
+    map_store.clear()
+
+    missing = client.get("/api/map")
+    assert missing.status_code == 404
+
+    with client.websocket_connect(
+        "/ws/robots/robot01"
+    ) as websocket:
+        websocket.receive_json()
+
+        websocket.send_json(
+            {
+                "type": "map",
+                "data": {
+                    "frame_id": "map",
+                    "resolution": 0.05,
+                    "width": 2,
+                    "height": 2,
+                    "origin_x": -1.0,
+                    "origin_y": -2.0,
+                    "origin_yaw": 0.0,
+                    "data": [-1, 0, 50, 100],
+                    "timestamp": None,
+                },
+            }
+        )
+
+        receipt = websocket.receive_json()
+
+        assert receipt["type"] == "map_ack"
+        assert receipt["revision"] == 1
+        assert receipt["width"] == 2
+        assert receipt["height"] == 2
+
+    response = client.get("/api/map")
+
+    assert response.status_code == 200
+    snapshot = response.json()
+    assert snapshot["frame_id"] == "map"
+    assert snapshot["data"] == [-1, 0, 50, 100]
+    assert snapshot["revision"] == 1
+
+    map_store.clear()

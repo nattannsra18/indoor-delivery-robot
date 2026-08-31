@@ -114,6 +114,55 @@ class NavigationResultMessage(BaseModel):
         max_length=500,
     )
 
+class OccupancyGridPayload(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        allow_inf_nan=False,
+    )
+
+    frame_id: str = Field(
+        default="map",
+        min_length=1,
+        max_length=100,
+    )
+    resolution: float = Field(gt=0.0, le=10.0)
+    width: int = Field(gt=0, le=10000)
+    height: int = Field(gt=0, le=10000)
+    origin_x: float
+    origin_y: float
+    origin_yaw: float
+    data: list[int]
+    timestamp: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_occupancy_data(self):
+        expected_size = self.width * self.height
+
+        if len(self.data) != expected_size:
+            raise ValueError(
+                "occupancy data length must equal "
+                "width multiplied by height"
+            )
+
+        if any(value < -1 or value > 100 for value in self.data):
+            raise ValueError(
+                "occupancy values must be between -1 and 100"
+            )
+
+        return self
+
+
+class MapMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["map"]
+    data: OccupancyGridPayload
+
+
+class MapSnapshot(OccupancyGridPayload):
+    revision: int = Field(ge=1)
+    received_at: datetime
+    
 class DeliveryTask(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

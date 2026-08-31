@@ -8,6 +8,7 @@ from .database import Base, SessionLocal, engine
 from .routers import (
     dashboard,
     health,
+    maps,
     robot_ws,
     robots,
     stations,
@@ -49,6 +50,7 @@ app.include_router(dashboard.router)
 app.include_router(stations.router)
 app.include_router(robots.router)
 app.include_router(tasks.router)
+app.include_router(maps.router)
 app.include_router(robot_ws.router)
 
 @app.get("/")

@@ -16,12 +16,14 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import (
     EventSource,
+    MapMessage,
     NavigationResultMessage,
     RobotTelemetry,
     TaskEvent,
 )
 from ..service import DeliveryService
 from ..websocket_manager import robot_connection_manager
+from ..map_store import map_store
 
 router = APIRouter(tags=["robot-websocket"])
 
@@ -211,6 +213,48 @@ async def robot_websocket(
                         ),
                     }
                 )
+
+            elif message_type == "map":
+                try:
+                    map_message = (
+                        MapMessage.model_validate(
+                            message
+                        )
+                    )
+                except ValidationError as error:
+                    details = "; ".join(
+                        (
+                            f"{'.'.join(map(str, item['loc']))}: "
+                            f"{item['msg']}"
+                        )
+                        for item in error.errors(
+                            include_url=False
+                        )
+                    )
+
+                    await send_error(
+                        websocket,
+                        "INVALID_MAP",
+                        details,
+                    )
+                    continue
+
+                snapshot = map_store.update(
+                    map_message.data
+                )
+
+                await websocket.send_json(
+                    {
+                        "type": "map_ack",
+                        "revision": snapshot.revision,
+                        "width": snapshot.width,
+                        "height": snapshot.height,
+                        "server_time": (
+                            current_utc_time()
+                        ),
+                    }
+                )
+
             elif message_type == "navigation_result":
                 try:
                     navigation = (
@@ -359,7 +403,7 @@ async def robot_websocket(
                     "UNSUPPORTED_MESSAGE_TYPE",
                     (
                         "Supported message types are "
-                        "'heartbeat', 'telemetry', "
+                        "'heartbeat', 'telemetry', 'map', "
                         "'navigation_result' and "
                         "'command_ack'"
                     ),
