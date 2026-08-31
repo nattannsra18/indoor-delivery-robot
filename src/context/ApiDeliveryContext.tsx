@@ -10,7 +10,13 @@ import {
   useState
 } from "react";
 import * as api from "@/lib/api";
-import { DeliveryTask, Robot, Station, TaskStatus } from "@/types";
+import {
+  DeliveryTask,
+  OccupancyGridMap,
+  Robot,
+  Station,
+  TaskStatus
+} from "@/types";
 
 const ACTIVE_STATUSES: TaskStatus[] = [
   "GOING_TO_PICKUP",
@@ -32,6 +38,7 @@ const EMPTY_ROBOT: Robot = {
 };
 
 type ApiDeliveryContextValue = {
+  occupancyMap?: OccupancyGridMap;
   stations: Station[];
   tasks: DeliveryTask[];
   robot: Robot;
@@ -41,9 +48,16 @@ type ApiDeliveryContextValue = {
   loading: boolean;
   backendOnline: boolean;
   error: string | null;
-  createTask: (pickupStationId: string, destinationStationId: string) => Promise<DeliveryTask>;
-  addStation: (station: Omit<Station, "id">) => Promise<Station>;
-  removeStation: (stationId: string) => Promise<{ ok: boolean; message: string }>;
+  createTask: (
+    pickupStationId: string,
+    destinationStationId: string
+  ) => Promise<DeliveryTask>;
+  addStation: (
+    station: Omit<Station, "id">
+  ) => Promise<Station>;
+  removeStation: (
+    stationId: string
+  ) => Promise<{ ok: boolean; message: string }>;
   advanceRobotWorkflow: () => Promise<void>;
   failActiveTask: () => Promise<void>;
   cancelTask: (taskId: string) => Promise<void>;
@@ -55,9 +69,16 @@ type ApiDeliveryContextValue = {
   stationName: (stationId: string) => string;
 };
 
-const ApiDeliveryContext = createContext<ApiDeliveryContextValue | null>(null);
+const ApiDeliveryContext =
+  createContext<ApiDeliveryContextValue | null>(null);
 
-export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
+export function ApiDeliveryProvider({
+  children
+}: {
+  children: ReactNode;
+}) {
+  const [occupancyMap, setOccupancyMap] =
+    useState<OccupancyGridMap | undefined>();
   const [stations, setStations] = useState<Station[]>([]);
   const [tasks, setTasks] = useState<DeliveryTask[]>([]);
   const [robot, setRobot] = useState<Robot>(EMPTY_ROBOT);
@@ -78,7 +99,10 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
       setBackendOnline(true);
       setError(null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to connect to FastAPI";
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Unable to connect to FastAPI";
       setBackendOnline(false);
       setError(message);
     } finally {
@@ -86,14 +110,37 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshMap = useCallback(async () => {
+    try {
+      setOccupancyMap(await api.getMap());
+    } catch {
+      setOccupancyMap(undefined);
+    }
+  }, []);
+
   useEffect(() => {
     void refreshAll();
-    const interval = window.setInterval(() => void refreshAll(), 2000);
+    const interval = window.setInterval(
+      () => void refreshAll(),
+      2000
+    );
     return () => window.clearInterval(interval);
   }, [refreshAll]);
 
+  useEffect(() => {
+    void refreshMap();
+    const interval = window.setInterval(
+      () => void refreshMap(),
+      5000
+    );
+    return () => window.clearInterval(interval);
+  }, [refreshMap]);
+
   const activeTask = useMemo(
-    () => tasks.find((task) => ACTIVE_STATUSES.includes(task.status)),
+    () =>
+      tasks.find((task) =>
+        ACTIVE_STATUSES.includes(task.status)
+      ),
     [tasks]
   );
 
@@ -109,17 +156,22 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
 
   const stationName = useCallback(
     (stationId: string) =>
-      stations.find((station) => station.id === stationId)?.name ?? stationId,
+      stations.find((station) => station.id === stationId)?.name ??
+      stationId,
     [stations]
   );
 
   const runAndRefresh = useCallback(
-    async (operation: () => Promise<unknown>, fallbackMessage: string) => {
+    async (
+      operation: () => Promise<unknown>,
+      fallbackMessage: string
+    ) => {
       try {
         await operation();
         await refreshAll();
       } catch (err) {
-        const message = err instanceof Error ? err.message : fallbackMessage;
+        const message =
+          err instanceof Error ? err.message : fallbackMessage;
         setError(message);
         throw err;
       }
@@ -128,13 +180,22 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
   );
 
   const createTask = useCallback(
-    async (pickupStationId: string, destinationStationId: string) => {
+    async (
+      pickupStationId: string,
+      destinationStationId: string
+    ) => {
       try {
-        const created = await api.createTask(pickupStationId, destinationStationId);
+        const created = await api.createTask(
+          pickupStationId,
+          destinationStationId
+        );
         await refreshAll();
         return created;
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unable to create task";
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Unable to create task";
         setError(message);
         throw err;
       }
@@ -149,7 +210,10 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
         await refreshAll();
         return created;
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unable to add station";
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Unable to add station";
         setError(message);
         throw err;
       }
@@ -162,9 +226,15 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
       try {
         await api.deleteStation(stationId);
         await refreshAll();
-        return { ok: true, message: `${stationName(stationId)} removed from FastAPI.` };
+        return {
+          ok: true,
+          message: `${stationName(stationId)} removed from FastAPI.`
+        };
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unable to remove station";
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Unable to remove station";
         setError(message);
         return { ok: false, message };
       }
@@ -174,7 +244,10 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
 
   const advanceRobotWorkflow = useCallback(async () => {
     if (!activeTask) return;
-    const eventByStatus: Partial<Record<TaskStatus, api.TaskEvent>> = {
+
+    const eventByStatus: Partial<
+      Record<TaskStatus, api.TaskEvent>
+    > = {
       GOING_TO_PICKUP: "ARRIVED_PICKUP",
       WAITING_FOR_LOADING: "CONFIRM_LOADED",
       DELIVERING: "ARRIVED_DESTINATION",
@@ -182,6 +255,7 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
     };
     const event = eventByStatus[activeTask.status];
     if (!event) return;
+
     await runAndRefresh(
       () => api.applyTaskEvent(activeTask.id, event),
       "Unable to advance workflow"
@@ -190,22 +264,34 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
 
   const failActiveTask = useCallback(async () => {
     if (!activeTask) return;
+
     await runAndRefresh(
-      () => api.applyTaskEvent(activeTask.id, "NAVIGATION_FAILED", "Simulated Nav2 failure"),
+      () =>
+        api.applyTaskEvent(
+          activeTask.id,
+          "NAVIGATION_FAILED",
+          "Simulated Nav2 failure"
+        ),
       "Unable to mark navigation failure"
     );
   }, [activeTask, runAndRefresh]);
 
   const cancelTask = useCallback(
     async (taskId: string) => {
-      await runAndRefresh(() => api.cancelTask(taskId), "Unable to cancel task");
+      await runAndRefresh(
+        () => api.cancelTask(taskId),
+        "Unable to cancel task"
+      );
     },
     [runAndRefresh]
   );
 
   const retryTask = useCallback(
     async (taskId: string) => {
-      await runAndRefresh(() => api.retryTask(taskId), "Unable to retry task");
+      await runAndRefresh(
+        () => api.retryTask(taskId),
+        "Unable to retry task"
+      );
     },
     [runAndRefresh]
   );
@@ -213,7 +299,10 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
   const setRobotOnlineState = useCallback(
     async (online: boolean) => {
       await runAndRefresh(
-        () => (online ? api.setRobotOnline(robot.id) : api.setRobotOffline(robot.id)),
+        () =>
+          online
+            ? api.setRobotOnline(robot.id)
+            : api.setRobotOffline(robot.id),
         "Unable to change robot connectivity state"
       );
     },
@@ -221,15 +310,22 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
   );
 
   const recoverRobot = useCallback(async () => {
-    await runAndRefresh(() => api.recoverRobot(robot.id), "Unable to recover robot");
+    await runAndRefresh(
+      () => api.recoverRobot(robot.id),
+      "Unable to recover robot"
+    );
   }, [robot.id, runAndRefresh]);
 
   const resetDemo = useCallback(async () => {
-    await runAndRefresh(() => api.resetDemo(), "Unable to reset backend demo");
+    await runAndRefresh(
+      () => api.resetDemo(),
+      "Unable to reset backend demo"
+    );
   }, [runAndRefresh]);
 
   const value = useMemo<ApiDeliveryContextValue>(
     () => ({
+      occupancyMap,
       stations,
       tasks,
       robot,
@@ -253,6 +349,7 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
       stationName
     }),
     [
+      occupancyMap,
       stations,
       tasks,
       robot,
@@ -277,13 +374,19 @@ export function ApiDeliveryProvider({ children }: { children: ReactNode }) {
     ]
   );
 
-  return <ApiDeliveryContext.Provider value={value}>{children}</ApiDeliveryContext.Provider>;
+  return (
+    <ApiDeliveryContext.Provider value={value}>
+      {children}
+    </ApiDeliveryContext.Provider>
+  );
 }
 
 export function useDeliveryApi() {
   const context = useContext(ApiDeliveryContext);
   if (!context) {
-    throw new Error("useDeliveryApi must be used inside ApiDeliveryProvider");
+    throw new Error(
+      "useDeliveryApi must be used inside ApiDeliveryProvider"
+    );
   }
   return context;
 }

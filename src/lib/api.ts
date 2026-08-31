@@ -1,4 +1,11 @@
-import { DeliveryTask, Robot, Station, TaskHistoryEntry, TaskStatus } from "@/types";
+import {
+  DeliveryTask,
+  OccupancyGridMap,
+  Robot,
+  Station,
+  TaskHistoryEntry,
+  TaskStatus
+} from "@/types";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -45,6 +52,20 @@ type ApiOverview = {
   queued_count: number;
   completed_count: number;
   failed_count: number;
+};
+
+type ApiOccupancyGridMap = {
+  frame_id: string;
+  resolution: number;
+  width: number;
+  height: number;
+  origin_x: number;
+  origin_y: number;
+  origin_yaw: number;
+  data: number[];
+  timestamp: string | null;
+  revision: number;
+  received_at: string;
 };
 
 export type TaskEvent =
@@ -151,6 +172,23 @@ export async function getStations(): Promise<Station[]> {
   return request<Station[]>("/api/stations");
 }
 
+export async function getMap(): Promise<OccupancyGridMap> {
+  const map = await request<ApiOccupancyGridMap>("/api/map");
+
+  return {
+    frameId: map.frame_id,
+    resolution: map.resolution,
+    width: map.width,
+    height: map.height,
+    originX: map.origin_x,
+    originY: map.origin_y,
+    originYaw: map.origin_yaw,
+    data: map.data,
+    timestamp: map.timestamp ?? undefined,
+    revision: map.revision,
+    receivedAt: map.received_at
+  };
+}
 export async function getTasks(): Promise<DeliveryTask[]> {
   const tasks = await request<ApiDeliveryTask[]>("/api/tasks");
   return tasks.map(toTask);

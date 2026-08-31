@@ -61,3 +61,17 @@ export interface TaskHistoryEntry {
   detail?: string;
   createdAt: string;
 }
+
+export interface OccupancyGridMap {
+  frameId: string;
+  resolution: number;
+  width: number;
+  height: number;
+  originX: number;
+  originY: number;
+  originYaw: number;
+  data: number[];
+  timestamp?: string;
+  revision: number;
+  receivedAt: string;
+}
