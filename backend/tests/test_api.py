@@ -218,3 +218,58 @@ def test_task_persists_across_database_sessions():
     assert fetched.status_code == 200
     assert fetched.json()["id"] == created["id"]
     assert fetched.json()["pickup_station_id"] == "A"
+
+def test_robot_websocket_heartbeat_round_trip():
+    with client.websocket_connect(
+        "/ws/robots/robot01"
+    ) as websocket:
+        connection = websocket.receive_json()
+
+        assert connection["type"] == "connection_ack"
+        assert connection["robot_id"] == "robot01"
+        assert connection["connected"] is True
+
+        websocket.send_json(
+            {
+                "type": "heartbeat",
+                "timestamp": "2026-08-31T13:30:00+07:00",
+            }
+        )
+
+        response = websocket.receive_json()
+
+        assert response["type"] == "heartbeat_ack"
+        assert response["robot_id"] == "robot01"
+        assert (
+            response["received_timestamp"]
+            == "2026-08-31T13:30:00+07:00"
+        )
+
+    connections = client.get(
+        "/api/robot-connections"
+    )
+
+    assert connections.status_code == 200
+    assert connections.json()["count"] == 0
+    assert connections.json()["connected_robot_ids"] == []
+
+
+def test_robot_websocket_rejects_unknown_message():
+    with client.websocket_connect(
+        "/ws/robots/robot01"
+    ) as websocket:
+        websocket.receive_json()
+
+        websocket.send_json(
+            {
+                "type": "unknown_command",
+            }
+        )
+
+        response = websocket.receive_json()
+
+        assert response["type"] == "error"
+        assert (
+            response["code"]
+            == "UNSUPPORTED_MESSAGE_TYPE"
+        )
