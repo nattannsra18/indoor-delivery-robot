@@ -75,6 +75,22 @@ class Robot(BaseModel):
     current_task_id: Optional[str] = None
     last_seen: str
 
+class RobotTelemetry(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        allow_inf_nan=False,
+    )
+
+    x: float
+    y: float
+    yaw: float
+    battery: int = Field(ge=0, le=100)
+    frame_id: str = Field(
+        default="map",
+        min_length=1,
+        max_length=100,
+    )
+    timestamp: Optional[str] = None
 
 class DeliveryTask(BaseModel):
     model_config = ConfigDict(from_attributes=True)

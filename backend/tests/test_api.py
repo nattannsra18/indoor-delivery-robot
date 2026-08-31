@@ -273,3 +273,66 @@ def test_robot_websocket_rejects_unknown_message():
             response["code"]
             == "UNSUPPORTED_MESSAGE_TYPE"
         )
+
+def test_robot_websocket_persists_telemetry():
+    with client.websocket_connect(
+        "/ws/robots/robot01"
+    ) as websocket:
+        websocket.receive_json()
+
+        websocket.send_json(
+            {
+                "type": "telemetry",
+                "data": {
+                    "x": 2.8,
+                    "y": 1.8,
+                    "yaw": 0.75,
+                    "battery": 76,
+                    "frame_id": "map",
+                    "timestamp": (
+                        "2026-08-31T13:45:00+07:00"
+                    ),
+                },
+            }
+        )
+
+        response = websocket.receive_json()
+
+        assert response["type"] == "telemetry_ack"
+        assert response["accepted"] is True
+        assert response["data"]["x"] == 2.8
+        assert response["data"]["battery"] == 76
+
+    robot = client.get(
+        "/api/robots/robot01"
+    )
+
+    assert robot.status_code == 200
+    assert robot.json()["x"] == 2.8
+    assert robot.json()["y"] == 1.8
+    assert robot.json()["yaw"] == 0.75
+    assert robot.json()["battery"] == 76
+
+
+def test_robot_websocket_rejects_invalid_telemetry():
+    with client.websocket_connect(
+        "/ws/robots/robot01"
+    ) as websocket:
+        websocket.receive_json()
+
+        websocket.send_json(
+            {
+                "type": "telemetry",
+                "data": {
+                    "x": 1.0,
+                    "y": 2.0,
+                    "yaw": 0.0,
+                    "battery": 150,
+                },
+            }
+        )
+
+        response = websocket.receive_json()
+
+        assert response["type"] == "error"
+        assert response["code"] == "INVALID_TELEMETRY"

@@ -1,8 +1,8 @@
 from __future__ import annotations
-
+from pydantic import ValidationError
 from datetime import datetime, timezone
 from typing import Any
-
+from ..models import RobotTelemetry
 from fastapi import (
     APIRouter,
     Depends,
@@ -107,9 +107,9 @@ async def robot_websocket(
                 )
 
             elif message_type == "telemetry":
-                telemetry = message.get("data")
+                telemetry_data = message.get("data")
 
-                if not isinstance(telemetry, dict):
+                if not isinstance(telemetry_data, dict):
                     await send_error(
                         websocket,
                         "INVALID_TELEMETRY",
@@ -117,13 +117,48 @@ async def robot_websocket(
                     )
                     continue
 
-                # Transport verification only.
-                # Database persistence will be added in the next step.
+                try:
+                    telemetry = RobotTelemetry.model_validate(
+                        telemetry_data
+                    )
+                except ValidationError as error:
+                    details = "; ".join(
+                        (
+                            f"{'.'.join(map(str, item['loc']))}: "
+                            f"{item['msg']}"
+                        )
+                        for item in error.errors(
+                            include_url=False
+                        )
+                    )
+
+                    await send_error(
+                        websocket,
+                        "INVALID_TELEMETRY",
+                        details,
+                    )
+                    continue
+
+                updated_robot = (
+                    service.update_robot_telemetry(
+                        robot_id,
+                        telemetry,
+                    )
+                )
+
                 await websocket.send_json(
                     {
                         "type": "telemetry_ack",
                         "robot_id": robot_id,
                         "accepted": True,
+                        "data": {
+                            "x": updated_robot.x,
+                            "y": updated_robot.y,
+                            "yaw": updated_robot.yaw,
+                            "battery": updated_robot.battery,
+                            "frame_id": telemetry.frame_id,
+                            "timestamp": telemetry.timestamp,
+                        },
                         "server_time": current_utc_time(),
                     }
                 )

@@ -16,6 +16,19 @@ from .models import (
     TaskStatus,
     utc_now,
 )
+from .models import (
+    DashboardOverview,
+    DeliveryTask,
+    DeliveryTaskCreate,
+    EventSource,
+    Robot,
+    RobotState,
+    RobotTelemetry,
+    StationCreate,
+    TaskEvent,
+    TaskStatus,
+    utc_now,
+)
 from .repository import DeliveryRepository
 from .seed import reset_demo_data
 from .state_machine import DeliveryTaskStateMachine, InvalidTransitionError
@@ -89,6 +102,27 @@ class DeliveryService:
 
     def get_robot(self, robot_id: str) -> RobotORM:
         return self._robot_or_404(robot_id)
+
+    def update_robot_telemetry(
+        self,
+        robot_id: str,
+        telemetry: RobotTelemetry,
+    ) -> RobotORM:
+        robot = self._robot_or_404(
+            robot_id,
+            lock=True,
+        )
+
+        robot.x = telemetry.x
+        robot.y = telemetry.y
+        robot.yaw = telemetry.yaw
+        robot.battery = telemetry.battery
+        robot.last_seen = "Just now"
+
+        self.db.commit()
+        self.db.refresh(robot)
+
+        return robot
 
     def set_robot_offline(self, robot_id: str) -> RobotORM:
         robot = self._robot_or_404(robot_id, lock=True)
