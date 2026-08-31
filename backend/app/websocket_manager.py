@@ -58,8 +58,15 @@ class RobotConnectionManager:
         if websocket is None:
             return False
 
-        await websocket.send_json(message)
-        return True
+        try:
+            await websocket.send_json(message)
+            return True
+
+        except Exception:
+            if self._connections.get(robot_id) is websocket:
+                self._connections.pop(robot_id, None)
+
+            return False
 
 
 robot_connection_manager = RobotConnectionManager()

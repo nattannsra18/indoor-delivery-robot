@@ -336,3 +336,80 @@ def test_robot_websocket_rejects_invalid_telemetry():
 
         assert response["type"] == "error"
         assert response["code"] == "INVALID_TELEMETRY"
+
+def test_robot_receives_pickup_navigation_command():
+    with client.websocket_connect(
+        "/ws/robots/robot01"
+    ) as websocket:
+        websocket.receive_json()
+
+        task = create_task("A", "C")
+        command = websocket.receive_json()
+
+        assert command["type"] == "command"
+        assert command["command"] == "navigate_to_pose"
+        assert command["task_id"] == task["id"]
+        assert command["stage"] == "pickup"
+        assert command["target"]["station_id"] == "A"
+        assert command["target"]["frame_id"] == "map"
+        assert command["command_id"].startswith(
+            f"{task['id']}:pickup:"
+        )
+
+        websocket.send_json(
+            {
+                "type": "command_ack",
+                "command_id": command["command_id"],
+                "accepted": True,
+                "detail": "Goal accepted by simulated agent",
+            }
+        )
+
+        receipt = websocket.receive_json()
+
+        assert (
+            receipt["type"]
+            == "command_ack_received"
+        )
+        assert (
+            receipt["command_id"]
+            == command["command_id"]
+        )
+        assert receipt["accepted"] is True
+
+def test_robot_receives_destination_command():
+    with client.websocket_connect(
+        "/ws/robots/robot01"
+    ) as websocket:
+        websocket.receive_json()
+
+        task = create_task("A", "C")
+
+        pickup_command = websocket.receive_json()
+        assert pickup_command["stage"] == "pickup"
+
+        arrived = advance(
+            task["id"],
+            "ARRIVED_PICKUP",
+        )
+        assert arrived.status_code == 200
+
+        loaded = advance(
+            task["id"],
+            "CONFIRM_LOADED",
+        )
+        assert loaded.status_code == 200
+        assert loaded.json()["status"] == "DELIVERING"
+
+        destination_command = websocket.receive_json()
+
+        assert destination_command["type"] == "command"
+        assert destination_command["task_id"] == task["id"]
+        assert destination_command["stage"] == "destination"
+        assert (
+            destination_command["target"]["station_id"]
+            == "C"
+        )
+        assert destination_command["command_id"].startswith(
+            f"{task['id']}:destination:"
+        )

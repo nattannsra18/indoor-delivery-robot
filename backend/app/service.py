@@ -1,20 +1,15 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from .db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM
-from .models import (
-    DashboardOverview,
-    DeliveryTask,
-    DeliveryTaskCreate,
-    EventSource,
-    Robot,
-    RobotState,
-    StationCreate,
-    TaskEvent,
-    TaskStatus,
-    utc_now,
+from .db_models import (
+    DeliveryTaskORM,
+    RobotORM,
+    StationORM,
+    TaskEventORM,
 )
 from .models import (
     DashboardOverview,
@@ -31,7 +26,10 @@ from .models import (
 )
 from .repository import DeliveryRepository
 from .seed import reset_demo_data
-from .state_machine import DeliveryTaskStateMachine, InvalidTransitionError
+from .state_machine import (
+    DeliveryTaskStateMachine,
+    InvalidTransitionError,
+)
 
 ACTIVE_STATUSES = {
     TaskStatus.GOING_TO_PICKUP,
@@ -230,6 +228,46 @@ class DeliveryService:
 
     def active_task(self) -> DeliveryTaskORM | None:
         return self.repo.active_task(ACTIVE_STATUSES)
+
+    def build_navigation_command(
+        self,
+        task: DeliveryTaskORM,
+    ) -> dict | None:
+        if task.robot_id is None:
+            return None
+
+        if task.status == TaskStatus.GOING_TO_PICKUP:
+            stage = "pickup"
+            station = self.get_station(
+                task.pickup_station_id
+            )
+
+        elif task.status == TaskStatus.DELIVERING:
+            stage = "destination"
+            station = self.get_station(
+                task.destination_station_id
+            )
+
+        else:
+            return None
+
+        return {
+            "type": "command",
+            "command_id": (
+                f"{task.id}:{stage}:{uuid4().hex}"
+            ),
+            "command": "navigate_to_pose",
+            "robot_id": task.robot_id,
+            "task_id": task.id,
+            "stage": stage,
+            "target": {
+                "station_id": station.id,
+                "frame_id": "map",
+                "x": station.x,
+                "y": station.y,
+                "yaw": station.yaw,
+            },
+        }
 
     def create_task(self, payload: DeliveryTaskCreate) -> DeliveryTaskORM:
         self.get_station(payload.pickup_station_id)

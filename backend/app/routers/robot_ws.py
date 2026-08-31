@@ -1,8 +1,8 @@
 from __future__ import annotations
-from pydantic import ValidationError
+
 from datetime import datetime, timezone
 from typing import Any
-from ..models import RobotTelemetry
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -10,9 +10,11 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..models import RobotTelemetry
 from ..service import DeliveryService
 from ..websocket_manager import robot_connection_manager
 
@@ -40,7 +42,9 @@ async def send_error(
 
 @router.get("/api/robot-connections")
 def list_robot_connections() -> dict[str, Any]:
-    robot_ids = robot_connection_manager.connected_robot_ids()
+    robot_ids = (
+        robot_connection_manager.connected_robot_ids()
+    )
 
     return {
         "count": len(robot_ids),
@@ -80,6 +84,25 @@ async def robot_websocket(
         }
     )
 
+    # Resend the current navigation command when
+    # the Robot Agent reconnects.
+    active_task = service.active_task()
+
+    if (
+        active_task is not None
+        and active_task.robot_id == robot_id
+    ):
+        pending_command = (
+            service.build_navigation_command(
+                active_task
+            )
+        )
+
+        if pending_command is not None:
+            await websocket.send_json(
+                pending_command
+            )
+
     try:
         while True:
             message = await websocket.receive_json()
@@ -88,7 +111,10 @@ async def robot_websocket(
                 await send_error(
                     websocket,
                     "INVALID_MESSAGE",
-                    "The WebSocket message must be a JSON object",
+                    (
+                        "The WebSocket message must "
+                        "be a JSON object"
+                    ),
                 )
                 continue
 
@@ -99,27 +125,37 @@ async def robot_websocket(
                     {
                         "type": "heartbeat_ack",
                         "robot_id": robot_id,
-                        "received_timestamp": message.get(
-                            "timestamp"
+                        "received_timestamp": (
+                            message.get("timestamp")
                         ),
-                        "server_time": current_utc_time(),
+                        "server_time": (
+                            current_utc_time()
+                        ),
                     }
                 )
 
             elif message_type == "telemetry":
                 telemetry_data = message.get("data")
 
-                if not isinstance(telemetry_data, dict):
+                if not isinstance(
+                    telemetry_data,
+                    dict,
+                ):
                     await send_error(
                         websocket,
                         "INVALID_TELEMETRY",
-                        "Telemetry data must be a JSON object",
+                        (
+                            "Telemetry data must be "
+                            "a JSON object"
+                        ),
                     )
                     continue
 
                 try:
-                    telemetry = RobotTelemetry.model_validate(
-                        telemetry_data
+                    telemetry = (
+                        RobotTelemetry.model_validate(
+                            telemetry_data
+                        )
                     )
                 except ValidationError as error:
                     details = "; ".join(
@@ -155,11 +191,58 @@ async def robot_websocket(
                             "x": updated_robot.x,
                             "y": updated_robot.y,
                             "yaw": updated_robot.yaw,
-                            "battery": updated_robot.battery,
-                            "frame_id": telemetry.frame_id,
-                            "timestamp": telemetry.timestamp,
+                            "battery": (
+                                updated_robot.battery
+                            ),
+                            "frame_id": (
+                                telemetry.frame_id
+                            ),
+                            "timestamp": (
+                                telemetry.timestamp
+                            ),
                         },
-                        "server_time": current_utc_time(),
+                        "server_time": (
+                            current_utc_time()
+                        ),
+                    }
+                )
+
+            elif message_type == "command_ack":
+                command_id = message.get(
+                    "command_id"
+                )
+                accepted = message.get("accepted")
+
+                if (
+                    not isinstance(command_id, str)
+                    or not command_id
+                    or not isinstance(accepted, bool)
+                ):
+                    await send_error(
+                        websocket,
+                        "INVALID_COMMAND_ACK",
+                        (
+                            "command_id must be a "
+                            "non-empty string and "
+                            "accepted must be boolean"
+                        ),
+                    )
+                    continue
+
+                await websocket.send_json(
+                    {
+                        "type": (
+                            "command_ack_received"
+                        ),
+                        "robot_id": robot_id,
+                        "command_id": command_id,
+                        "accepted": accepted,
+                        "detail": message.get(
+                            "detail"
+                        ),
+                        "server_time": (
+                            current_utc_time()
+                        ),
                     }
                 )
 
@@ -169,7 +252,8 @@ async def robot_websocket(
                     "UNSUPPORTED_MESSAGE_TYPE",
                     (
                         "Supported message types are "
-                        "'heartbeat' and 'telemetry'"
+                        "'heartbeat', 'telemetry' and "
+                        "'command_ack'"
                     ),
                 )
 
