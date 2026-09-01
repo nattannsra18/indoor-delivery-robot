@@ -12,7 +12,9 @@ from fastapi import (
 )
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
-
+from ..browser_websocket_manager import (
+    browser_connection_manager,
+)
 from ..database import get_db
 from ..models import (
     EventSource,
@@ -353,6 +355,24 @@ async def robot_websocket(
                             updated_task.status.value
                         ),
                         "accepted": True,
+                        "server_time": (
+                            current_utc_time()
+                        ),
+                    }
+                )
+                await browser_connection_manager.broadcast_json(
+                    {
+                        "type": "workflow_updated",
+                        "reason": "navigation_result",
+                        "robot_id": robot_id,
+                        "task_id": navigation.task_id,
+                        "task_status": (
+                            updated_task.status.value
+                        ),
+                        "navigation_status": (
+                            navigation.status
+                        ),
+                        "stage": navigation.stage,
                         "server_time": (
                             current_utc_time()
                         ),

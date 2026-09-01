@@ -7,6 +7,7 @@ from . import db_models  # noqa: F401 - registers SQLAlchemy tables
 from .database import Base, SessionLocal, engine
 from .routers import (
     dashboard,
+    dashboard_ws,
     health,
     maps,
     robot_ws,
@@ -14,6 +15,7 @@ from .routers import (
     stations,
     tasks,
 )
+
 from .seed import seed_database
 
 
@@ -52,6 +54,9 @@ app.include_router(robots.router)
 app.include_router(tasks.router)
 app.include_router(maps.router)
 app.include_router(robot_ws.router)
+app.include_router(dashboard.router)
+app.include_router(dashboard_ws.router)
+app.include_router(stations.router)
 
 @app.get("/")
 def root():

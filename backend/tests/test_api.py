@@ -449,7 +449,68 @@ def test_navigation_result_advances_pickup():
             == "WAITING_FOR_LOADING"
         )
 
+def test_navigation_result_broadcasts_dashboard_update():
+    with client.websocket_connect(
+        "/ws/dashboard"
+    ) as dashboard_websocket:
+        dashboard_ack = (
+            dashboard_websocket.receive_json()
+        )
 
+        assert (
+            dashboard_ack["type"]
+            == "dashboard_connection_ack"
+        )
+
+        with client.websocket_connect(
+            "/ws/robots/robot01"
+        ) as robot_websocket:
+            robot_websocket.receive_json()
+
+            task = create_task("A", "C")
+            command = robot_websocket.receive_json()
+
+            robot_websocket.send_json(
+                {
+                    "type": "navigation_result",
+                    "command_id": command["command_id"],
+                    "task_id": task["id"],
+                    "stage": "pickup",
+                    "status": "succeeded",
+                    "detail": "Nav2 reached pickup",
+                }
+            )
+
+            receipt = robot_websocket.receive_json()
+
+            assert (
+                receipt["type"]
+                == "navigation_result_received"
+            )
+
+        dashboard_event = (
+            dashboard_websocket.receive_json()
+        )
+
+        assert (
+            dashboard_event["type"]
+            == "workflow_updated"
+        )
+        assert (
+            dashboard_event["reason"]
+            == "navigation_result"
+        )
+        assert dashboard_event["task_id"] == task["id"]
+        assert dashboard_event["robot_id"] == "robot01"
+        assert dashboard_event["stage"] == "pickup"
+        assert (
+            dashboard_event["navigation_status"]
+            == "succeeded"
+        )
+        assert (
+            dashboard_event["task_status"]
+            == "WAITING_FOR_LOADING"
+        )
 def test_navigation_failure_marks_task_failed():
     with client.websocket_connect(
         "/ws/robots/robot01"
