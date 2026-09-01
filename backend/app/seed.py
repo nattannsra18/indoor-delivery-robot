@@ -7,7 +7,7 @@ from .db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM
 from .models import RobotState, TaskStatus, utc_now
 
 INITIAL_STATIONS = [
-    dict(id="A", name="Station A", x=1.2, y=3.4, yaw=0.0, description="Main Office"),
+    dict(id="A", name="Station A", x=1.2, y=3.7, yaw=0.0, description="Main Office"),
     dict(id="B", name="Station B", x=4.7, y=1.8, yaw=1.57, description="Storage Area"),
     dict(
         id="C",
@@ -41,7 +41,7 @@ def seed_database(db: Session) -> None:
                 battery=82,
                 state=RobotState.IDLE,
                 x=1.2,
-                y=3.4,
+                y=3.7,
                 yaw=0.0,
                 current_task_id=None,
                 last_seen="Just now",
