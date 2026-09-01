@@ -75,7 +75,7 @@ export default function TasksPage() {
     <>
       <PageHeader
         title="Task Queue"
-        description="Phase 4 queue, state validation, retry/recovery and persistent task event history."
+        description="Validated delivery queue, retry and recovery controls, and persistent task history."
       />
 
       <WorkflowControls />

@@ -21,7 +21,7 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
-        description="Live ROS 2 navigation, occupancy map and delivery workflow monitoring."
+        description="Validated delivery queue, retry and recovery controls, and persistent task history."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -274,7 +274,7 @@ function MissionMessage({ status }: { status: string }) {
     GOING_TO_PICKUP: {
       title: "Going to pickup station",
       description:
-        "Nav2 is navigating the simulated robot to the pickup goal.",
+        "Nav2 is navigating the robot to the pickup goal.",
       style: "border-cyan-100 bg-cyan-50 text-cyan-800"
     },
     WAITING_FOR_LOADING: {
@@ -286,7 +286,7 @@ function MissionMessage({ status }: { status: string }) {
     DELIVERING: {
       title: "Delivering package",
       description:
-        "Nav2 is navigating the simulated robot to the destination station.",
+        "Nav2 is navigating the robot to the destination station.",
       style: "border-blue-100 bg-blue-50 text-blue-800"
     },
     WAITING_FOR_UNLOADING: {

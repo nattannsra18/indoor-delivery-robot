@@ -51,7 +51,9 @@ export default function Sidebar() {
             </span>
           </div>
           <p className="text-xs leading-5 text-slate-400">
-            Phase 4 uses FastAPI + PostgreSQL with a validated task state machine. MQTT is the next phase.
+            FastAPI and PostgreSQL manage delivery tasks while
+            the ROS 2 Web Bridge streams telemetry, navigation
+            results and map data.
           </p>
         </div>
       </div>
