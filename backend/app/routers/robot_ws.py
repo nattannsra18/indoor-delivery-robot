@@ -93,24 +93,45 @@ async def robot_websocket(
         }
     )
 
-    # Resend the current navigation command when
-    # the Robot Agent reconnects.
-    active_task = service.active_task()
+    # A cancellation request has priority over
+    # resending an active navigation command.
+    pending_cancel = (
+        service.pending_navigation_cancel(
+            robot_id
+        )
+    )
 
-    if (
-        active_task is not None
-        and active_task.robot_id == robot_id
-    ):
-        pending_command = (
-            service.build_navigation_command(
-                active_task
+    if pending_cancel is not None:
+        cancel_command = (
+            service.build_navigation_cancel_command(
+                pending_cancel
             )
         )
 
-        if pending_command is not None:
+        if cancel_command is not None:
             await websocket.send_json(
-                pending_command
+                cancel_command
             )
+
+    else:
+        # Resend the current navigation command
+        # when the Robot Agent reconnects.
+        active_task = service.active_task()
+
+        if (
+            active_task is not None
+            and active_task.robot_id == robot_id
+        ):
+            pending_command = (
+                service.build_navigation_command(
+                    active_task
+                )
+            )
+
+            if pending_command is not None:
+                await websocket.send_json(
+                    pending_command
+                )
 
     try:
         while True:
@@ -378,6 +399,144 @@ async def robot_websocket(
                         ),
                     }
                 )
+            elif message_type == "navigation_cancelled":
+                cancel_id = message.get(
+                    "cancel_id"
+                )
+                task_id = message.get(
+                    "task_id"
+                )
+                cancelled = message.get(
+                    "cancelled"
+                )
+                detail = message.get(
+                    "detail"
+                )
+
+                if (
+                    not isinstance(cancel_id, str)
+                    or not cancel_id
+                    or not isinstance(task_id, str)
+                    or not task_id
+                    or not isinstance(cancelled, bool)
+                ):
+                    await send_error(
+                        websocket,
+                        "INVALID_NAVIGATION_CANCEL",
+                        (
+                            "cancel_id and task_id must "
+                            "be non-empty strings and "
+                            "cancelled must be boolean"
+                        ),
+                    )
+                    continue
+
+                expected_prefix = (
+                    f"{task_id}:cancel:"
+                )
+
+                if not cancel_id.startswith(
+                    expected_prefix
+                ):
+                    await send_error(
+                        websocket,
+                        "CANCEL_TASK_MISMATCH",
+                        (
+                            "cancel_id does not match "
+                            "task_id"
+                        ),
+                    )
+                    continue
+
+                if not cancelled:
+                    await send_error(
+                        websocket,
+                        "NAVIGATION_CANCEL_FAILED",
+                        (
+                            str(detail)
+                            if detail
+                            else (
+                                "Robot Agent could not "
+                                "cancel the Nav2 goal"
+                            )
+                        ),
+                    )
+                    continue
+
+                try:
+                    db.expire_all()
+
+                    cancelled_task = (
+                        service.finalize_navigation_cancel(
+                            task_id,
+                            robot_id,
+                            (
+                                str(detail)
+                                if detail
+                                else None
+                            ),
+                        )
+                    )
+                except HTTPException as error:
+                    await send_error(
+                        websocket,
+                        "CANCEL_TRANSITION_REJECTED",
+                        str(error.detail),
+                    )
+                    continue
+
+                await websocket.send_json(
+                    {
+                        "type": (
+                            "navigation_cancelled_received"
+                        ),
+                        "robot_id": robot_id,
+                        "cancel_id": cancel_id,
+                        "task_id": task_id,
+                        "task_status": (
+                            cancelled_task.status.value
+                        ),
+                        "accepted": True,
+                        "server_time": (
+                            current_utc_time()
+                        ),
+                    }
+                )
+
+                await browser_connection_manager.broadcast_json(
+                    {
+                        "type": "workflow_updated",
+                        "reason": (
+                            "navigation_cancelled"
+                        ),
+                        "robot_id": robot_id,
+                        "task_id": task_id,
+                        "task_status": (
+                            cancelled_task.status.value
+                        ),
+                        "server_time": (
+                            current_utc_time()
+                        ),
+                    }
+                )
+
+                next_task = service.active_task()
+
+                if (
+                    next_task is not None
+                    and next_task.robot_id == robot_id
+                ):
+                    next_command = (
+                        service.build_navigation_command(
+                            next_task
+                        )
+                    )
+
+                    if next_command is not None:
+                        await websocket.send_json(
+                            next_command
+                        )
+
             elif message_type == "command_ack":
                 command_id = message.get(
                     "command_id"
@@ -424,7 +583,8 @@ async def robot_websocket(
                     (
                         "Supported message types are "
                         "'heartbeat', 'telemetry', 'map', "
-                        "'navigation_result' and "
+                        "'navigation_result', "
+                        "'navigation_cancelled' and "
                         "'command_ack'"
                     ),
                 )

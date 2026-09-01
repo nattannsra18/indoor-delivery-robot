@@ -10,6 +10,7 @@ from fastapi import (
 from ..command_dispatch import (
     schedule_active_navigation_command,
     schedule_navigation_command,
+    schedule_navigation_cancel_command,
 )
 from ..dependencies import get_service
 from ..models import (
@@ -138,15 +139,17 @@ def apply_operator_event(
 def cancel_task(
     task_id: str,
     background_tasks: BackgroundTasks,
-    service: DeliveryService = Depends(get_service),
+    service: DeliveryService = Depends(
+        get_service
+    ),
 ):
     task = service.cancel_task(task_id)
 
-    if task.robot_id is not None:
-        schedule_active_navigation_command(
-            background_tasks,
-            service,
-        )
+    schedule_navigation_cancel_command(
+        background_tasks,
+        service,
+        task,
+    )
 
     return task
 

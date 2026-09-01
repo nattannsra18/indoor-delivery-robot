@@ -262,17 +262,127 @@ def test_second_task_is_queued_and_auto_dispatches():
     assert second_after["status"] == "GOING_TO_PICKUP"
     assert second_after["robot_id"] == "robot01"
 
+def test_cancel_active_task_waits_for_robot_confirmation():
+    with client.websocket_connect(
+        "/ws/robots/robot01"
+    ) as websocket:
+        connection = websocket.receive_json()
+        assert connection["type"] == "connection_ack"
 
-def test_cancel_active_task_dispatches_next_queued_task():
-    first = create_task("A", "C")
-    second = create_task("B", "D")
+        first = create_task("A", "C")
+        first_command = websocket.receive_json()
 
-    cancel = client.post(f"/api/tasks/{first['id']}/cancel")
-    assert cancel.status_code == 200
-    assert cancel.json()["status"] == "CANCELLED"
+        assert first_command["type"] == "command"
+        assert first_command["task_id"] == first["id"]
+        assert first_command["stage"] == "pickup"
 
-    second_after = client.get(f"/api/tasks/{second['id']}").json()
-    assert second_after["status"] == "GOING_TO_PICKUP"
+        second = create_task("B", "D")
+        assert second["status"] == "QUEUED"
+
+        cancel = client.post(
+            f"/api/tasks/{first['id']}/cancel"
+        )
+
+        assert cancel.status_code == 200
+        assert cancel.json()["status"] == "CANCELLED"
+
+        cancel_command = websocket.receive_json()
+
+        assert (
+            cancel_command["type"]
+            == "cancel_navigation"
+        )
+        assert (
+            cancel_command["task_id"]
+            == first["id"]
+        )
+        assert cancel_command["cancel_id"].startswith(
+            f"{first['id']}:cancel:"
+        )
+
+        robot_before = client.get(
+            "/api/robots/robot01"
+        ).json()
+        second_before = client.get(
+            f"/api/tasks/{second['id']}"
+        ).json()
+
+        # FastAPI must retain the robot lock until
+        # Robot Agent confirms that Nav2 stopped.
+        assert (
+            robot_before["current_task_id"]
+            == first["id"]
+        )
+        assert second_before["status"] == "QUEUED"
+
+        websocket.send_json(
+            {
+                "type": "navigation_cancelled",
+                "cancel_id": (
+                    cancel_command["cancel_id"]
+                ),
+                "task_id": first["id"],
+                "cancelled": True,
+                "detail": (
+                    "Nav2 cancellation confirmed"
+                ),
+            }
+        )
+
+        receipt = websocket.receive_json()
+
+        assert (
+            receipt["type"]
+            == "navigation_cancelled_received"
+        )
+        assert receipt["accepted"] is True
+        assert receipt["task_id"] == first["id"]
+        assert receipt["task_status"] == "CANCELLED"
+
+        next_command = websocket.receive_json()
+
+        assert next_command["type"] == "command"
+        assert next_command["task_id"] == second["id"]
+        assert next_command["stage"] == "pickup"
+
+        second_after = client.get(
+            f"/api/tasks/{second['id']}"
+        ).json()
+        robot_after = client.get(
+            "/api/robots/robot01"
+        ).json()
+
+        assert (
+            second_after["status"]
+            == "GOING_TO_PICKUP"
+        )
+        assert (
+            robot_after["current_task_id"]
+            == second["id"]
+        )
+
+        history = client.get(
+            f"/api/tasks/{first['id']}/history"
+        )
+        assert history.status_code == 200
+
+        history_by_type = {
+            item["event_type"]: item
+            for item in history.json()
+        }
+
+        assert (
+            history_by_type["TASK_CANCELLED"][
+                "source"
+            ]
+            == "WEB_OPERATOR"
+        )
+        assert (
+            history_by_type["NAVIGATION_CANCELLED"][
+                "source"
+            ]
+            == "ROBOT_AGENT"
+        )
 
 
 def test_navigation_failure_and_retry():

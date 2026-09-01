@@ -269,6 +269,117 @@ class DeliveryService:
             },
         }
 
+    def build_navigation_cancel_command(
+        self,
+        task: DeliveryTaskORM,
+    ) -> dict | None:
+        if (
+            task.robot_id is None
+            or task.status != TaskStatus.CANCELLED
+        ):
+            return None
+
+        robot = self._robot_or_404(
+            task.robot_id
+        )
+
+        if robot.current_task_id != task.id:
+            return None
+
+        return {
+            "type": "cancel_navigation",
+            "cancel_id": (
+                f"{task.id}:cancel:{uuid4().hex}"
+            ),
+            "robot_id": task.robot_id,
+            "task_id": task.id,
+            "reason": "operator_cancelled_task",
+        }
+
+    def pending_navigation_cancel(
+        self,
+        robot_id: str,
+    ) -> DeliveryTaskORM | None:
+        robot = self._robot_or_404(robot_id)
+
+        if robot.current_task_id is None:
+            return None
+
+        task = self.get_task(
+            robot.current_task_id
+        )
+
+        if task.status != TaskStatus.CANCELLED:
+            return None
+
+        return task
+
+    def finalize_navigation_cancel(
+        self,
+        task_id: str,
+        robot_id: str,
+        detail: str | None = None,
+    ) -> DeliveryTaskORM:
+        task = self._task_or_404(
+            task_id,
+            lock=True,
+        )
+        robot = self._robot_or_404(
+            robot_id,
+            lock=True,
+        )
+
+        if task.status != TaskStatus.CANCELLED:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Task {task.id} is not cancelled; "
+                    f"current status is {task.status.value}"
+                ),
+            )
+
+        if (
+            task.robot_id != robot.id
+            or robot.current_task_id != task.id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Task is not the robot's current "
+                    "assigned task"
+                ),
+            )
+
+        robot.current_task_id = None
+        robot.state = (
+            RobotState.IDLE
+            if robot.online
+            else RobotState.OFFLINE
+        )
+
+        if robot.online:
+            robot.last_seen = "Just now"
+
+        self._log_event(
+            task,
+            "NAVIGATION_CANCELLED",
+            TaskStatus.CANCELLED,
+            TaskStatus.CANCELLED,
+            EventSource.ROBOT_AGENT.value,
+            detail or "Nav2 cancellation confirmed",
+        )
+
+        self.db.flush()
+
+        if robot.online:
+            self.dispatch_next_queued_task(
+                robot=robot
+            )
+
+        self.db.commit()
+        self.db.refresh(task)
+        return task
+
     def create_task(self, payload: DeliveryTaskCreate) -> DeliveryTaskORM:
         self.get_station(payload.pickup_station_id)
         self.get_station(payload.destination_station_id)
@@ -451,15 +562,17 @@ class DeliveryService:
             old_status,
             TaskStatus.CANCELLED,
             EventSource.WEB_OPERATOR.value,
+            "Cancellation requested by operator",
         )
 
-        if task.robot_id == robot.id and robot.current_task_id == task.id:
-            robot.state = RobotState.IDLE if robot.online else RobotState.OFFLINE
-            robot.current_task_id = None
-            robot.last_seen = "Just now" if robot.online else robot.last_seen
-            self.db.flush()
-            if robot.online:
-                self.dispatch_next_queued_task(robot=robot)
+        if (
+            task.robot_id == robot.id
+            and robot.current_task_id == task.id
+            and robot.online
+        ):
+            # Retain the current assignment until
+            # Robot Agent confirms Nav2 cancellation.
+            robot.last_seen = "Just now"
 
         self.db.commit()
         self.db.refresh(task)
