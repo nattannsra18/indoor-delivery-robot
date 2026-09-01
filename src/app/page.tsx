@@ -144,8 +144,8 @@ export default function DashboardPage() {
             Recent Tasks
           </h2>
           <p className="text-sm text-slate-500">
-            Task and AMCL data refresh every 2 seconds; the ROS map
-            refreshes every 5 seconds.
+            Workflow changes arrive through WebSocket; AMCL data
+            refreshes every 2 seconds and the ROS map every 5 seconds.
           </p>
         </div>
 
