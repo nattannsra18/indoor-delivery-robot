@@ -62,10 +62,83 @@ def create_task(pickup="A", destination="C"):
     return response.json()
 
 
+def report_navigation_result(
+    task_id: str,
+    stage: str,
+    navigation_status: str = "succeeded",
+):
+    with client.websocket_connect(
+        "/ws/robots/robot01"
+    ) as websocket:
+        connection = websocket.receive_json()
+
+        assert connection["type"] == "connection_ack"
+
+        command = websocket.receive_json()
+
+        assert command["type"] == "command"
+        assert command["task_id"] == task_id
+        assert command["stage"] == stage
+
+        websocket.send_json(
+            {
+                "type": "navigation_result",
+                "command_id": command["command_id"],
+                "task_id": task_id,
+                "stage": stage,
+                "status": navigation_status,
+                "detail": (
+                    "Navigation completed by test Robot Agent"
+                    if navigation_status == "succeeded"
+                    else "Navigation failed by test Robot Agent"
+                ),
+            }
+        )
+
+        receipt = websocket.receive_json()
+
+        assert (
+            receipt["type"]
+            == "navigation_result_received"
+        )
+        assert receipt["accepted"] is True
+
+    return client.get(f"/api/tasks/{task_id}")
+
+
 def advance(task_id: str, event: str):
+    if event == "ARRIVED_PICKUP":
+        return report_navigation_result(
+            task_id,
+            "pickup",
+        )
+
+    if event == "ARRIVED_DESTINATION":
+        return report_navigation_result(
+            task_id,
+            "destination",
+        )
+
+    if event == "NAVIGATION_FAILED":
+        current = client.get(
+            f"/api/tasks/{task_id}"
+        ).json()
+
+        stage = (
+            "pickup"
+            if current["status"] == "GOING_TO_PICKUP"
+            else "destination"
+        )
+
+        return report_navigation_result(
+            task_id,
+            stage,
+            "aborted",
+        )
+
     return client.post(
         f"/api/tasks/{task_id}/events",
-        json={"event": event, "source": "WEB_SIMULATOR"},
+        json={"event": event},
     )
 
 
@@ -98,6 +171,10 @@ def test_create_complete_and_history_is_persisted():
     history = client.get(f"/api/tasks/{task_id}/history")
     assert history.status_code == 200
     event_types = [item["event_type"] for item in history.json()]
+    event_sources = {
+        item["event_type"]: item["source"]
+        for item in history.json()
+    }
     assert event_types == [
         "TASK_CREATED",
         "TASK_ASSIGNED",
@@ -110,7 +187,22 @@ def test_create_complete_and_history_is_persisted():
     overview = client.get("/api/overview").json()
     assert overview["robot"]["state"] == "IDLE"
     assert overview["active_task"] is None
-
+    assert (
+        event_sources["ARRIVED_PICKUP"]
+        == "ROBOT_AGENT"
+    )
+    assert (
+        event_sources["ARRIVED_DESTINATION"]
+        == "ROBOT_AGENT"
+    )
+    assert (
+        event_sources["CONFIRM_LOADED"]
+        == "WEB_OPERATOR"
+    )
+    assert (
+        event_sources["CONFIRM_RECEIVED"]
+        == "WEB_OPERATOR"
+    )
 
 def test_invalid_transition_is_rejected():
     task = create_task()
@@ -121,6 +213,39 @@ def test_invalid_transition_is_rejected():
     current = client.get(f"/api/tasks/{task['id']}").json()
     assert current["status"] == "GOING_TO_PICKUP"
 
+def test_web_operator_cannot_report_navigation_events():
+    task = create_task()
+
+    protected_events = [
+        "ARRIVED_PICKUP",
+        "ARRIVED_DESTINATION",
+        "NAVIGATION_FAILED",
+    ]
+
+    for event in protected_events:
+        response = client.post(
+            f"/api/tasks/{task['id']}/events",
+            json={
+                "event": event,
+                "source": "ROBOT_AGENT",
+            },
+        )
+
+        assert response.status_code == 403
+        assert (
+            "ROS 2 Robot Agent"
+            in response.json()["detail"]
+        )
+
+    current = client.get(
+        f"/api/tasks/{task['id']}"
+    )
+
+    assert current.status_code == 200
+    assert (
+        current.json()["status"]
+        == "GOING_TO_PICKUP"
+    )
 
 def test_second_task_is_queued_and_auto_dispatches():
     first = create_task("A", "C")
@@ -389,11 +514,29 @@ def test_robot_receives_destination_command():
         pickup_command = websocket.receive_json()
         assert pickup_command["stage"] == "pickup"
 
-        arrived = advance(
-            task["id"],
-            "ARRIVED_PICKUP",
+        websocket.send_json(
+            {
+                "type": "navigation_result",
+                "command_id": (
+                    pickup_command["command_id"]
+                ),
+                "task_id": task["id"],
+                "stage": "pickup",
+                "status": "succeeded",
+                "detail": "Nav2 reached pickup",
+            }
         )
-        assert arrived.status_code == 200
+
+        pickup_receipt = websocket.receive_json()
+
+        assert (
+            pickup_receipt["type"]
+            == "navigation_result_received"
+        )
+        assert (
+            pickup_receipt["task_status"]
+            == "WAITING_FOR_LOADING"
+        )
 
         loaded = advance(
             task["id"],

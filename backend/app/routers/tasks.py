@@ -2,6 +2,7 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
+    HTTPException,
     Query,
     status,
 )
@@ -14,6 +15,8 @@ from ..dependencies import get_service
 from ..models import (
     DeliveryTask,
     DeliveryTaskCreate,
+    EventSource,
+    TaskEvent,
     TaskEventRequest,
     TaskHistoryEntry,
     TaskStatus,
@@ -23,6 +26,13 @@ from ..service import DeliveryService
 router = APIRouter(
     prefix="/api/tasks",
     tags=["tasks"],
+)
+
+OPERATOR_EVENTS = frozenset(
+    {
+        TaskEvent.CONFIRM_LOADED,
+        TaskEvent.CONFIRM_RECEIVED,
+    }
 )
 
 
@@ -84,16 +94,25 @@ def create_task(
     "/{task_id}/events",
     response_model=DeliveryTask,
 )
-def apply_event(
+def apply_operator_event(
     task_id: str,
     payload: TaskEventRequest,
     background_tasks: BackgroundTasks,
     service: DeliveryService = Depends(get_service),
 ):
+    if payload.event not in OPERATOR_EVENTS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"{payload.event.value} must be reported "
+                "by the ROS 2 Robot Agent"
+            ),
+        )
+
     task = service.apply_task_event(
         task_id,
         payload.event,
-        payload.source,
+        EventSource.WEB_OPERATOR,
         payload.detail,
     )
 

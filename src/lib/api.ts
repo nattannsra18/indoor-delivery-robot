@@ -73,11 +73,8 @@ type ApiOccupancyGridMap = {
 };
 
 export type TaskEvent =
-  | "ARRIVED_PICKUP"
   | "CONFIRM_LOADED"
-  | "ARRIVED_DESTINATION"
-  | "CONFIRM_RECEIVED"
-  | "NAVIGATION_FAILED";
+  | "CONFIRM_RECEIVED";
 
 function toRobot(robot: ApiRobot): Robot {
   return {
@@ -222,10 +219,17 @@ export async function applyTaskEvent(
   event: TaskEvent,
   detail?: string
 ): Promise<DeliveryTask> {
-  const task = await request<ApiDeliveryTask>(`/api/tasks/${taskId}/events`, {
-    method: "POST",
-    body: JSON.stringify({ event, source: "WEB_SIMULATOR", detail: detail ?? null })
-  });
+  const task = await request<ApiDeliveryTask>(
+    `/api/tasks/${taskId}/events`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        event,
+        detail: detail ?? null
+      })
+    }
+  );
+
   return toTask(task);
 }
 
@@ -243,14 +247,6 @@ export async function retryTask(taskId: string): Promise<DeliveryTask> {
   return toTask(task);
 }
 
-export async function setRobotOffline(robotId: string): Promise<Robot> {
-  return toRobot(await request<ApiRobot>(`/api/robots/${robotId}/offline`, { method: "POST" }));
-}
-
-export async function setRobotOnline(robotId: string): Promise<Robot> {
-  return toRobot(await request<ApiRobot>(`/api/robots/${robotId}/online`, { method: "POST" }));
-}
-
 export async function recoverRobot(robotId: string): Promise<Robot> {
   return toRobot(await request<ApiRobot>(`/api/robots/${robotId}/recover`, { method: "POST" }));
 }
@@ -264,8 +260,4 @@ export async function addStation(station: Omit<Station, "id">): Promise<Station>
 
 export async function deleteStation(stationId: string): Promise<void> {
   await request<void>(`/api/stations/${stationId}`, { method: "DELETE" });
-}
-
-export async function resetDemo(): Promise<void> {
-  await request<ApiOverview>("/api/demo/reset", { method: "POST" });
 }

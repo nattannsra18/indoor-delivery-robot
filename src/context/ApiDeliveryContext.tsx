@@ -59,12 +59,9 @@ type ApiDeliveryContextValue = {
     stationId: string
   ) => Promise<{ ok: boolean; message: string }>;
   advanceRobotWorkflow: () => Promise<void>;
-  failActiveTask: () => Promise<void>;
   cancelTask: (taskId: string) => Promise<void>;
   retryTask: (taskId: string) => Promise<void>;
-  setRobotOnlineState: (online: boolean) => Promise<void>;
   recoverRobot: () => Promise<void>;
-  resetDemo: () => Promise<void>;
   refreshAll: () => Promise<void>;
   stationName: (stationId: string) => string;
 };
@@ -304,9 +301,7 @@ export function ApiDeliveryProvider({
     const eventByStatus: Partial<
       Record<TaskStatus, api.TaskEvent>
     > = {
-      GOING_TO_PICKUP: "ARRIVED_PICKUP",
       WAITING_FOR_LOADING: "CONFIRM_LOADED",
-      DELIVERING: "ARRIVED_DESTINATION",
       WAITING_FOR_UNLOADING: "CONFIRM_RECEIVED"
     };
     const event = eventByStatus[activeTask.status];
@@ -315,20 +310,6 @@ export function ApiDeliveryProvider({
     await runAndRefresh(
       () => api.applyTaskEvent(activeTask.id, event),
       "Unable to advance workflow"
-    );
-  }, [activeTask, runAndRefresh]);
-
-  const failActiveTask = useCallback(async () => {
-    if (!activeTask) return;
-
-    await runAndRefresh(
-      () =>
-        api.applyTaskEvent(
-          activeTask.id,
-          "NAVIGATION_FAILED",
-          "Simulated Nav2 failure"
-        ),
-      "Unable to mark navigation failure"
     );
   }, [activeTask, runAndRefresh]);
 
@@ -352,32 +333,12 @@ export function ApiDeliveryProvider({
     [runAndRefresh]
   );
 
-  const setRobotOnlineState = useCallback(
-    async (online: boolean) => {
-      await runAndRefresh(
-        () =>
-          online
-            ? api.setRobotOnline(robot.id)
-            : api.setRobotOffline(robot.id),
-        "Unable to change robot connectivity state"
-      );
-    },
-    [robot.id, runAndRefresh]
-  );
-
   const recoverRobot = useCallback(async () => {
     await runAndRefresh(
       () => api.recoverRobot(robot.id),
       "Unable to recover robot"
     );
   }, [robot.id, runAndRefresh]);
-
-  const resetDemo = useCallback(async () => {
-    await runAndRefresh(
-      () => api.resetDemo(),
-      "Unable to reset backend demo"
-    );
-  }, [runAndRefresh]);
 
   const value = useMemo<ApiDeliveryContextValue>(
     () => ({
@@ -395,12 +356,9 @@ export function ApiDeliveryProvider({
       addStation,
       removeStation,
       advanceRobotWorkflow,
-      failActiveTask,
       cancelTask,
       retryTask,
-      setRobotOnlineState,
       recoverRobot,
-      resetDemo,
       refreshAll,
       stationName
     }),
@@ -419,12 +377,9 @@ export function ApiDeliveryProvider({
       addStation,
       removeStation,
       advanceRobotWorkflow,
-      failActiveTask,
       cancelTask,
       retryTask,
-      setRobotOnlineState,
       recoverRobot,
-      resetDemo,
       refreshAll,
       stationName
     ]

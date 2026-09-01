@@ -36,7 +36,7 @@ class TaskEvent(str, Enum):
 
 
 class EventSource(str, Enum):
-    WEB_SIMULATOR = "WEB_SIMULATOR"
+    WEB_OPERATOR = "WEB_OPERATOR"
     ROBOT_AGENT = "ROBOT_AGENT"
     SYSTEM = "SYSTEM"
 
@@ -190,8 +190,10 @@ class DeliveryTaskCreate(BaseModel):
 
 class TaskEventRequest(BaseModel):
     event: TaskEvent
-    source: EventSource = EventSource.WEB_SIMULATOR
-    detail: Optional[str] = Field(default=None, max_length=500)
+    detail: Optional[str] = Field(
+        default=None,
+        max_length=500,
+    )
 
 
 class TaskHistoryEntry(BaseModel):

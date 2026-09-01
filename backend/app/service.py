@@ -353,7 +353,7 @@ class DeliveryService:
         self,
         task_id: str,
         event: TaskEvent,
-        source: EventSource = EventSource.WEB_SIMULATOR,
+        source: EventSource,
         detail: str | None = None,
     ) -> DeliveryTaskORM:
         task = self._task_or_404(task_id, lock=True)
@@ -450,7 +450,7 @@ class DeliveryService:
             "TASK_CANCELLED",
             old_status,
             TaskStatus.CANCELLED,
-            EventSource.WEB_SIMULATOR.value,
+            EventSource.WEB_OPERATOR.value,
         )
 
         if task.robot_id == robot.id and robot.current_task_id == task.id:
@@ -486,7 +486,7 @@ class DeliveryService:
             "TASK_RETRIED",
             old_status,
             TaskStatus.QUEUED,
-            EventSource.WEB_SIMULATOR.value,
+            EventSource.WEB_OPERATOR.value,
         )
 
         if robot.current_task_id == task.id or robot.state == RobotState.ERROR:
