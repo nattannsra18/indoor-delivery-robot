@@ -127,6 +127,62 @@ export function ApiDeliveryProvider({
     return () => window.clearInterval(interval);
   }, [refreshAll]);
 
+    useEffect(() => {
+    let websocket: WebSocket | null = null;
+    let reconnectTimer: number | undefined;
+    let stopped = false;
+
+    const connect = () => {
+      if (stopped) return;
+
+      websocket = new WebSocket(
+        `${api.WS_BASE_URL}/ws/dashboard`
+      );
+
+      websocket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(
+            event.data
+          ) as {
+            type?: string;
+          };
+
+          if (message.type === "workflow_updated") {
+            void refreshAll();
+          }
+        } catch {
+          // Ignore malformed WebSocket messages.
+        }
+      };
+
+      websocket.onerror = () => {
+        websocket?.close();
+      };
+
+      websocket.onclose = () => {
+        websocket = null;
+
+        if (!stopped) {
+          reconnectTimer = window.setTimeout(
+            connect,
+            3000
+          );
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      stopped = true;
+
+      if (reconnectTimer !== undefined) {
+        window.clearTimeout(reconnectTimer);
+      }
+
+      websocket?.close();
+    };
+  }, [refreshAll]);
   useEffect(() => {
     void refreshMap();
     const interval = window.setInterval(
