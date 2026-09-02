@@ -65,6 +65,33 @@ export interface NavigationFeedback {
   angularVelocity?: number;
 }
 
+export type DiagnosticLevel =
+  | "OK"
+  | "WARN"
+  | "ERROR"
+  | "STALE";
+
+export interface DiagnosticKeyValue {
+  key: string;
+  value: string;
+}
+
+export interface DiagnosticStatus {
+  name: string;
+  level: DiagnosticLevel;
+  message: string;
+  hardwareId: string;
+  values: DiagnosticKeyValue[];
+}
+
+export interface RobotDiagnostics {
+  robotId: string;
+  overallLevel: DiagnosticLevel;
+  statuses: DiagnosticStatus[];
+  timestamp?: string;
+  serverTime: string;
+}
+
 export interface DeliveryTask {
   id: string;
   robotId?: string;

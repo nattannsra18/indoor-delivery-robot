@@ -12,9 +12,12 @@ import {
 import * as api from "@/lib/api";
 import {
   DeliveryTask,
+  DiagnosticLevel,
+  DiagnosticStatus,
   NavigationFeedback,
   OccupancyGridMap,
   Robot,
+  RobotDiagnostics,
   Station,
   TaskStatus
 } from "@/types";
@@ -24,6 +27,13 @@ const ACTIVE_STATUSES: TaskStatus[] = [
   "WAITING_FOR_LOADING",
   "DELIVERING",
   "WAITING_FOR_UNLOADING"
+];
+
+const DIAGNOSTIC_LEVELS: DiagnosticLevel[] = [
+  "OK",
+  "WARN",
+  "ERROR",
+  "STALE"
 ];
 
 const EMPTY_ROBOT: Robot = {
@@ -63,6 +73,7 @@ type NavigationFeedbackMessage = {
 type ApiDeliveryContextValue = {
   occupancyMap?: OccupancyGridMap;
   navigationFeedback?: NavigationFeedback;
+  diagnostics?: RobotDiagnostics;
   stations: Station[];
   tasks: DeliveryTask[];
   robot: Robot;
@@ -93,6 +104,103 @@ type ApiDeliveryContextValue = {
 const ApiDeliveryContext =
   createContext<ApiDeliveryContextValue | null>(null);
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object"
+    && value !== null
+    && !Array.isArray(value)
+  );
+}
+
+function isDiagnosticLevel(
+  value: unknown
+): value is DiagnosticLevel {
+  return (
+    typeof value === "string"
+    && DIAGNOSTIC_LEVELS.includes(
+      value as DiagnosticLevel
+    )
+  );
+}
+
+function parseRobotDiagnostics(
+  value: unknown
+): RobotDiagnostics | undefined {
+  if (
+    !isRecord(value)
+    || value.type !== "robot_diagnostics"
+    || typeof value.robot_id !== "string"
+    || !value.robot_id
+    || !isDiagnosticLevel(value.overall_level)
+    || !Array.isArray(value.statuses)
+    || typeof value.server_time !== "string"
+    || !Number.isFinite(Date.parse(value.server_time))
+    || !(
+      value.timestamp === null
+      || typeof value.timestamp === "string"
+    )
+    || (
+      typeof value.timestamp === "string"
+      && !Number.isFinite(Date.parse(value.timestamp))
+    )
+  ) {
+    return undefined;
+  }
+
+  const statuses: DiagnosticStatus[] = [];
+
+  for (const rawStatus of value.statuses) {
+    if (
+      !isRecord(rawStatus)
+      || typeof rawStatus.name !== "string"
+      || !rawStatus.name
+      || !isDiagnosticLevel(rawStatus.level)
+      || typeof rawStatus.message !== "string"
+      || typeof rawStatus.hardware_id !== "string"
+      || !Array.isArray(rawStatus.values)
+    ) {
+      return undefined;
+    }
+
+    const values = [];
+
+    for (const rawValue of rawStatus.values) {
+      if (
+        !isRecord(rawValue)
+        || typeof rawValue.key !== "string"
+        || !rawValue.key
+        || typeof rawValue.value !== "string"
+      ) {
+        return undefined;
+      }
+
+      values.push({
+        key: rawValue.key,
+        value: rawValue.value
+      });
+    }
+
+    statuses.push({
+      name: rawStatus.name,
+      level: rawStatus.level,
+      message: rawStatus.message,
+      hardwareId: rawStatus.hardware_id,
+      values
+    });
+  }
+
+  return {
+    robotId: value.robot_id,
+    overallLevel: value.overall_level,
+    statuses,
+    timestamp:
+      typeof value.timestamp === "string"
+        ? value.timestamp
+        : undefined,
+    serverTime: value.server_time
+  };
+}
+
 export function ApiDeliveryProvider({
   children
 }: {
@@ -104,6 +212,8 @@ export function ApiDeliveryProvider({
     navigationFeedback,
     setNavigationFeedback
   ] = useState<NavigationFeedback | undefined>();
+  const [diagnostics, setDiagnostics] =
+    useState<RobotDiagnostics | undefined>();
   const [stations, setStations] = useState<Station[]>([]);
   const [tasks, setTasks] = useState<DeliveryTask[]>([]);
   const [robot, setRobot] = useState<Robot>(EMPTY_ROBOT);
@@ -129,6 +239,7 @@ export function ApiDeliveryProvider({
           ? err.message
           : "Unable to connect to FastAPI";
       setBackendOnline(false);
+      setDiagnostics(undefined);
       setError(message);
     } finally {
       setLoading(false);
@@ -152,7 +263,7 @@ export function ApiDeliveryProvider({
     return () => window.clearInterval(interval);
   }, [refreshAll]);
 
-    useEffect(() => {
+  useEffect(() => {
     let websocket: WebSocket | null = null;
     let reconnectTimer: number | undefined;
     let stopped = false;
@@ -213,6 +324,15 @@ export function ApiDeliveryProvider({
                 ?? undefined,
               serverTime: feedbackMessage.server_time
             });
+          } else if (
+            message.type === "robot_diagnostics"
+          ) {
+            const nextDiagnostics =
+              parseRobotDiagnostics(message);
+
+            if (nextDiagnostics) {
+              setDiagnostics(nextDiagnostics);
+            }
           }
         } catch {
           // Ignore malformed WebSocket messages.
@@ -222,6 +342,7 @@ export function ApiDeliveryProvider({
       websocket.onclose = () => {
         websocket = null;
         setNavigationFeedback(undefined);
+        setDiagnostics(undefined);
 
         if (!stopped) {
           reconnectTimer = window.setTimeout(
@@ -244,6 +365,7 @@ export function ApiDeliveryProvider({
       websocket?.close();
     };
   }, [refreshAll]);
+
   useEffect(() => {
     void refreshMap();
     const interval = window.setInterval(
@@ -408,6 +530,7 @@ export function ApiDeliveryProvider({
     () => ({
       occupancyMap,
       navigationFeedback,
+      diagnostics,
       stations,
       tasks,
       robot,
@@ -430,6 +553,7 @@ export function ApiDeliveryProvider({
     [
       occupancyMap,
       navigationFeedback,
+      diagnostics,
       stations,
       tasks,
       robot,

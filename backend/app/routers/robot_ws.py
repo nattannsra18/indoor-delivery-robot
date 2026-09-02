@@ -17,6 +17,7 @@ from ..browser_websocket_manager import (
 )
 from ..database import get_db
 from ..models import (
+    DiagnosticsMessage,
     EventSource,
     MapMessage,
     NavigationFeedbackMessage,
@@ -162,6 +163,65 @@ async def robot_websocket(
                         "server_time": (
                             current_utc_time()
                         ),
+                    }
+                )
+
+            elif message_type == "diagnostics":
+                try:
+                    diagnostics = (
+                        DiagnosticsMessage.model_validate(
+                            message
+                        )
+                    )
+                except ValidationError as error:
+                    details = "; ".join(
+                        (
+                            f"{'.'.join(map(str, item['loc']))}: "
+                            f"{item['msg']}"
+                        )
+                        for item in error.errors(
+                            include_url=False
+                        )
+                    )
+
+                    await send_error(
+                        websocket,
+                        "INVALID_DIAGNOSTICS",
+                        details,
+                    )
+                    continue
+
+                severity = {
+                    "OK": 0,
+                    "WARN": 1,
+                    "ERROR": 2,
+                    "STALE": 3,
+                }
+                overall_level = (
+                    max(
+                        (
+                            status.level
+                            for status
+                            in diagnostics.statuses
+                        ),
+                        key=severity.__getitem__,
+                    )
+                    if diagnostics.statuses
+                    else "STALE"
+                )
+
+                await browser_connection_manager.broadcast_json(
+                    {
+                        "type": "robot_diagnostics",
+                        "robot_id": robot_id,
+                        "overall_level": overall_level,
+                        "statuses": [
+                            status.model_dump()
+                            for status
+                            in diagnostics.statuses
+                        ],
+                        "timestamp": diagnostics.timestamp,
+                        "server_time": current_utc_time(),
                     }
                 )
 
@@ -689,7 +749,8 @@ async def robot_websocket(
                     "UNSUPPORTED_MESSAGE_TYPE",
                     (
                         "Supported message types are "
-                        "'heartbeat', 'telemetry', 'map', "
+                        "'heartbeat', 'diagnostics', "
+                        "'telemetry', 'map', "
                         "'navigation_feedback', "
                         "'navigation_result', "
                         "'navigation_cancelled' and "

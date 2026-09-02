@@ -1,3 +1,4 @@
+import asyncio
 import os
 from pathlib import Path
 
@@ -5,6 +6,7 @@ TEST_DB = Path(__file__).resolve().parent / "phase4_test.db"
 TEST_DATABASE_URL = f"sqlite:///{TEST_DB.as_posix()}"
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
+from fastapi import WebSocketDisconnect
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, delete
 from sqlalchemy.orm import sessionmaker
@@ -12,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base, get_db
 from app.db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM
 from app.main import app
+from app.routers.robot_ws import robot_websocket
 from app.seed import seed_database
 from app.map_store import map_store
 from app.browser_websocket_manager import (
@@ -44,6 +47,25 @@ def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
+
+
+class StubWebSocket:
+    def __init__(self, messages: list[dict]):
+        self.messages = iter(messages)
+        self.sent: list[dict] = []
+        self.accepted = False
+
+    async def accept(self) -> None:
+        self.accepted = True
+
+    async def receive_json(self) -> dict:
+        try:
+            return next(self.messages)
+        except StopIteration as error:
+            raise WebSocketDisconnect() from error
+
+    async def send_json(self, message: dict) -> None:
+        self.sent.append(message)
 
 
 def setup_function():
@@ -512,6 +534,151 @@ def test_robot_websocket_rejects_unknown_message():
             response["code"]
             == "UNSUPPORTED_MESSAGE_TYPE"
         )
+
+
+def test_robot_diagnostics_broadcasts_dashboard_update(
+    monkeypatch,
+):
+    timestamp = "2026-09-03T09:15:30.123456+00:00"
+    dashboard_events: list[dict] = []
+    websocket = StubWebSocket(
+        [
+            {
+                "type": "diagnostics",
+                "timestamp": timestamp,
+                "statuses": [
+                    {
+                        "name": "AMR/LiDAR",
+                        "level": "OK",
+                        "message": "LaserScan healthy",
+                        "hardware_id": (
+                            "turtlebot3_waffle_sim"
+                        ),
+                        "values": [
+                            {
+                                "key": "topic",
+                                "value": "/scan",
+                            },
+                            {
+                                "key": "topic",
+                                "value": "/scan/remapped",
+                            },
+                            {
+                                "key": "age_seconds",
+                                "value": "0.12",
+                            },
+                        ],
+                    },
+                    {
+                        "name": "AMR/Localization",
+                        "level": "STALE",
+                        "message": "AMCL pose data timeout",
+                        "hardware_id": (
+                            "turtlebot3_waffle_sim"
+                        ),
+                        "values": [
+                            {
+                                "key": "topic",
+                                "value": "/amcl_pose",
+                            },
+                        ],
+                    },
+                ],
+            }
+        ]
+    )
+
+    async def capture_dashboard_event(
+        message: dict,
+    ) -> None:
+        dashboard_events.append(message)
+
+    monkeypatch.setattr(
+        browser_connection_manager,
+        "broadcast_json",
+        capture_dashboard_event,
+    )
+
+    with TestingSessionLocal() as db:
+        asyncio.run(
+            robot_websocket(
+                websocket,
+                "robot01",
+                db,
+            )
+        )
+
+    assert websocket.accepted is True
+    assert websocket.sent[0]["type"] == "connection_ack"
+    assert len(dashboard_events) == 1
+    dashboard_event = dashboard_events[0]
+    assert dashboard_event["type"] == "robot_diagnostics"
+    assert dashboard_event["robot_id"] == "robot01"
+    assert dashboard_event["overall_level"] == "STALE"
+    assert dashboard_event["timestamp"] == timestamp
+    assert dashboard_event["statuses"][0] == {
+        "name": "AMR/LiDAR",
+        "level": "OK",
+        "message": "LaserScan healthy",
+        "hardware_id": "turtlebot3_waffle_sim",
+        "values": [
+            {
+                "key": "topic",
+                "value": "/scan",
+            },
+            {
+                "key": "topic",
+                "value": "/scan/remapped",
+            },
+            {
+                "key": "age_seconds",
+                "value": "0.12",
+            },
+        ],
+    }
+    assert dashboard_event["statuses"][1]["level"] == "STALE"
+    assert dashboard_event["server_time"]
+
+
+def test_robot_websocket_rejects_invalid_diagnostics():
+    websocket = StubWebSocket(
+        [
+            {
+                "type": "diagnostics",
+                "timestamp": "not-a-timestamp",
+                "statuses": [
+                    {
+                        "name": "AMR/LiDAR",
+                        "level": "CRITICAL",
+                        "message": "Invalid level",
+                        "hardware_id": "simulation",
+                        "values": [],
+                    },
+                ],
+            },
+            {
+                "type": "heartbeat",
+                "timestamp": None,
+            },
+        ]
+    )
+
+    with TestingSessionLocal() as db:
+        asyncio.run(
+            robot_websocket(
+                websocket,
+                "robot01",
+                db,
+            )
+        )
+
+    error = websocket.sent[1]
+    assert error["type"] == "error"
+    assert error["code"] == "INVALID_DIAGNOSTICS"
+    heartbeat = websocket.sent[2]
+    assert heartbeat["type"] == "heartbeat_ack"
+    assert heartbeat["robot_id"] == "robot01"
+
 
 def test_robot_websocket_persists_telemetry():
     with client.websocket_connect(

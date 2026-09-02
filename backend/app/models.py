@@ -3,7 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 class TaskStatus(str, Enum):
@@ -90,6 +96,77 @@ class RobotTelemetry(BaseModel):
         max_length=100,
     )
     timestamp: Optional[str] = None
+
+
+DiagnosticLevel = Literal[
+    "OK",
+    "WARN",
+    "ERROR",
+    "STALE",
+]
+
+
+class DiagnosticKeyValue(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+    )
+
+    key: str = Field(min_length=1, max_length=200)
+    value: str = Field(max_length=1000)
+
+
+class DiagnosticStatusPayload(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+    )
+
+    name: str = Field(min_length=1, max_length=200)
+    level: DiagnosticLevel
+    message: str = Field(max_length=500)
+    hardware_id: str = Field(max_length=200)
+    values: list[DiagnosticKeyValue] = Field(
+        default_factory=list,
+        max_length=100,
+    )
+
+
+class DiagnosticsMessage(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+    )
+
+    type: Literal["diagnostics"]
+    timestamp: Optional[str] = Field(
+        default=None,
+        max_length=100,
+    )
+    statuses: list[DiagnosticStatusPayload] = Field(
+        max_length=100,
+    )
+
+    @field_validator("timestamp")
+    @classmethod
+    def validate_timestamp(
+        cls,
+        value: Optional[str],
+    ) -> Optional[str]:
+        if value is None:
+            return value
+
+        try:
+            datetime.fromisoformat(
+                value.replace("Z", "+00:00")
+            )
+        except ValueError as error:
+            raise ValueError(
+                "timestamp must be ISO-8601"
+            ) from error
+
+        return value
+
 
 class NavigationResultMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")

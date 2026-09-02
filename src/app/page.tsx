@@ -1,6 +1,7 @@
 "use client";
 
 import PageHeader from "@/components/PageHeader";
+import DiagnosticsCards from "@/components/DiagnosticsCards";
 import RobotMap from "@/components/RobotMap";
 import StatusBadge from "@/components/StatusBadge";
 import WorkflowControls from "@/components/WorkflowControls";
@@ -11,6 +12,7 @@ export default function DashboardPage() {
   const {
     occupancyMap,
     navigationFeedback,
+    diagnostics,
     robot,
     activeTask,
     queuedTasks,
@@ -59,6 +61,10 @@ export default function DashboardPage() {
 
       <div className="mt-6">
         <WorkflowControls />
+      </div>
+
+      <div className="mt-6">
+        <DiagnosticsCards diagnostics={diagnostics} />
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
