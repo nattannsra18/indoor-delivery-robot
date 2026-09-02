@@ -39,6 +39,32 @@ export interface Robot {
   lastSeen: string;
 }
 
+export interface NavigationFeedbackPose {
+  frameId: string;
+  x: number;
+  y: number;
+  yaw: number;
+}
+
+export interface NavigationFeedback {
+  robotId: string;
+  commandId: string;
+  taskId: string;
+  stage: "pickup" | "destination";
+  distanceRemaining: number;
+  navigationTimeSeconds: number;
+  estimatedTimeRemainingSeconds?: number;
+  numberOfRecoveries: number;
+  currentPose: NavigationFeedbackPose;
+  timestamp?: string;
+  serverTime: string;
+
+  // These will be populated from ROS odometry
+  // during the velocity sub-step.
+  linearVelocity?: number;
+  angularVelocity?: number;
+}
+
 export interface DeliveryTask {
   id: string;
   robotId?: string;

@@ -164,6 +164,11 @@ class NavigationFeedbackMessage(BaseModel):
     number_of_recoveries: int = Field(
         ge=0
     )
+    linear_velocity: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+    )
+    angular_velocity: Optional[float] = None
     current_pose: NavigationFeedbackPose
     timestamp: Optional[str] = None
 

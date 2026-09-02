@@ -5,10 +5,12 @@ import RobotMap from "@/components/RobotMap";
 import StatusBadge from "@/components/StatusBadge";
 import WorkflowControls from "@/components/WorkflowControls";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
+import NavigationMetrics from "@/components/NavigationMetrics";
 
 export default function DashboardPage() {
   const {
     occupancyMap,
+    navigationFeedback,
     robot,
     activeTask,
     queuedTasks,
@@ -126,6 +128,12 @@ export default function DashboardPage() {
                   />
                 </div>
               </div>
+
+              <NavigationMetrics
+                feedback={navigationFeedback}
+                taskId={activeTask.id}
+                status={activeTask.status}
+              />
 
               <MissionMessage status={activeTask.status} />
             </div>

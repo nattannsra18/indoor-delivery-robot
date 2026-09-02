@@ -888,6 +888,8 @@ def test_navigation_feedback_broadcasts_dashboard_update(
                     "remaining_seconds"
                 ): 18.75,
                 "number_of_recoveries": 1,
+                "linear_velocity": 0.42,
+                "angular_velocity": -0.18,
                 "current_pose": {
                     "frame_id": "map",
                     "x": 2.1,
@@ -951,6 +953,14 @@ def test_navigation_feedback_broadcasts_dashboard_update(
     assert (
         dashboard_event["number_of_recoveries"]
         == 1
+    )
+    assert (
+        dashboard_event["linear_velocity"]
+        == 0.42
+    )
+    assert (
+        dashboard_event["angular_velocity"]
+        == -0.18
     )
     assert dashboard_event["current_pose"] == {
         "frame_id": "map",

@@ -12,6 +12,7 @@ import {
 import * as api from "@/lib/api";
 import {
   DeliveryTask,
+  NavigationFeedback,
   OccupancyGridMap,
   Robot,
   Station,
@@ -37,8 +38,31 @@ const EMPTY_ROBOT: Robot = {
   lastSeen: "Backend unavailable"
 };
 
+type NavigationFeedbackMessage = {
+  type: "navigation_feedback";
+  robot_id: string;
+  command_id: string;
+  task_id: string;
+  stage: "pickup" | "destination";
+  distance_remaining: number;
+  navigation_time_seconds: number;
+  estimated_time_remaining_seconds: number | null;
+  number_of_recoveries: number;
+  linear_velocity: number | null;
+  angular_velocity: number | null;
+  current_pose: {
+    frame_id: string;
+    x: number;
+    y: number;
+    yaw: number;
+  };
+  timestamp: string | null;
+  server_time: string;
+};
+
 type ApiDeliveryContextValue = {
   occupancyMap?: OccupancyGridMap;
+  navigationFeedback?: NavigationFeedback;
   stations: Station[];
   tasks: DeliveryTask[];
   robot: Robot;
@@ -76,6 +100,10 @@ export function ApiDeliveryProvider({
 }) {
   const [occupancyMap, setOccupancyMap] =
     useState<OccupancyGridMap | undefined>();
+  const [
+    navigationFeedback,
+    setNavigationFeedback
+  ] = useState<NavigationFeedback | undefined>();
   const [stations, setStations] = useState<Station[]>([]);
   const [tasks, setTasks] = useState<DeliveryTask[]>([]);
   const [robot, setRobot] = useState<Robot>(EMPTY_ROBOT);
@@ -146,18 +174,54 @@ export function ApiDeliveryProvider({
 
           if (message.type === "workflow_updated") {
             void refreshAll();
+          } else if (
+            message.type === "navigation_feedback"
+          ) {
+            const feedbackMessage =
+              message as NavigationFeedbackMessage;
+
+            setNavigationFeedback({
+              robotId: feedbackMessage.robot_id,
+              commandId: feedbackMessage.command_id,
+              taskId: feedbackMessage.task_id,
+              stage: feedbackMessage.stage,
+              distanceRemaining:
+                feedbackMessage.distance_remaining,
+              navigationTimeSeconds:
+                feedbackMessage.navigation_time_seconds,
+              estimatedTimeRemainingSeconds:
+                feedbackMessage
+                  .estimated_time_remaining_seconds
+                ?? undefined,
+              numberOfRecoveries:
+                feedbackMessage.number_of_recoveries,
+              linearVelocity:
+                feedbackMessage.linear_velocity
+                ?? undefined,
+              angularVelocity:
+                feedbackMessage.angular_velocity
+                ?? undefined,
+              currentPose: {
+                frameId:
+                  feedbackMessage.current_pose.frame_id,
+                x: feedbackMessage.current_pose.x,
+                y: feedbackMessage.current_pose.y,
+                yaw: feedbackMessage.current_pose.yaw
+              },
+              timestamp:
+                feedbackMessage.timestamp
+                ?? undefined,
+              serverTime: feedbackMessage.server_time
+            });
           }
         } catch {
           // Ignore malformed WebSocket messages.
         }
       };
 
-      websocket.onerror = () => {
-        websocket?.close();
-      };
-
       websocket.onclose = () => {
         websocket = null;
+        setNavigationFeedback(undefined);
 
         if (!stopped) {
           reconnectTimer = window.setTimeout(
@@ -343,6 +407,7 @@ export function ApiDeliveryProvider({
   const value = useMemo<ApiDeliveryContextValue>(
     () => ({
       occupancyMap,
+      navigationFeedback,
       stations,
       tasks,
       robot,
@@ -364,6 +429,7 @@ export function ApiDeliveryProvider({
     }),
     [
       occupancyMap,
+      navigationFeedback,
       stations,
       tasks,
       robot,

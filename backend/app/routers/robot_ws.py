@@ -368,6 +368,12 @@ async def robot_websocket(
                             "number_of_recoveries": (
                                 feedback.number_of_recoveries
                             ),
+                            "linear_velocity": (
+                                feedback.linear_velocity
+                            ),
+                            "angular_velocity": (
+                                feedback.angular_velocity
+                            ),
                             "current_pose": (
                                 feedback.current_pose.model_dump()
                             ),
