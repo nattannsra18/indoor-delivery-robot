@@ -1,12 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState
+} from "react";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import WorkflowControls from "@/components/WorkflowControls";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import * as api from "@/lib/api";
 import { TaskHistoryEntry, TaskStatus } from "@/types";
+import TaskHistoryModal from "@/components/TaskHistoryModal";
 
 const filters: Array<"ALL" | TaskStatus> = [
   "ALL",
@@ -35,10 +41,18 @@ export default function TasksPage() {
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [historyTaskId, setHistoryTaskId] = useState<string | null>(null);
   const [history, setHistory] = useState<TaskHistoryEntry[]>([]);
-
+  const [historyLoading, setHistoryLoading] =
+    useState(false);
   const visibleTasks = useMemo(
     () => tasks.filter((task) => filter === "ALL" || task.status === filter),
     [filter, tasks]
+  );
+  const historyTaskStatus = useMemo(
+    () =>
+      tasks.find(
+        (task) => task.id === historyTaskId
+      )?.status,
+    [historyTaskId, tasks]
   );
 
   async function runTaskAction(taskId: string, action: () => Promise<void>, success: string) {
@@ -57,19 +71,60 @@ export default function TasksPage() {
     }
   }
 
-  async function loadHistory(taskId: string) {
-    setBusyTaskId(taskId);
+  function loadHistory(taskId: string) {
+    setHistoryTaskId(taskId);
+    setHistory([]);
+    setHistoryLoading(true);
     setMessage("");
-    try {
-      const entries = await api.getTaskHistory(taskId);
-      setHistoryTaskId(taskId);
-      setHistory(entries);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Unable to load task history.");
-    } finally {
-      setBusyTaskId(null);
-    }
   }
+
+  useEffect(() => {
+    const selectedTaskId = historyTaskId;
+
+    if (selectedTaskId === null) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function refreshHistory(
+      taskId: string
+    ) {
+      try {
+        const entries =
+          await api.getTaskHistory(taskId);
+
+        if (!cancelled) {
+          setHistory(entries);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setMessage(
+            err instanceof Error
+              ? err.message
+              : "Unable to load task history."
+          );
+          setHistoryTaskId(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setHistoryLoading(false);
+        }
+      }
+    }
+
+    void refreshHistory(selectedTaskId);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [historyTaskId, historyTaskStatus]);
+
+  const closeHistory = useCallback(() => {
+    setHistoryTaskId(null);
+    setHistory([]);
+    setHistoryLoading(false);
+  }, []);
 
   return (
     <>
@@ -189,40 +244,12 @@ export default function TasksPage() {
         </div>
       </section>
 
-      {historyTaskId && (
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="font-semibold text-slate-900">{historyTaskId} Event History</h2>
-              <p className="text-sm text-slate-500">Persistent audit trail stored in PostgreSQL.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => { setHistoryTaskId(null); setHistory([]); }}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600"
-            >
-              Close
-            </button>
-          </div>
-
-          <div className="mt-5 space-y-3">
-            {history.map((entry) => (
-              <div key={entry.id} className="rounded-xl border border-slate-200 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-semibold text-slate-900">{entry.eventType.replaceAll("_", " ")}</p>
-                  <span className="text-xs text-slate-400">{new Date(entry.createdAt).toLocaleString()}</span>
-                </div>
-                <p className="mt-2 text-sm text-slate-600">
-                  {entry.fromStatus ? `${entry.fromStatus.replaceAll("_", " ")} → ` : ""}
-                  {entry.toStatus.replaceAll("_", " ")}
-                </p>
-                <p className="mt-1 text-xs text-slate-400">Source: {entry.source}</p>
-                {entry.detail && <p className="mt-2 text-xs text-slate-500">{entry.detail}</p>}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      <TaskHistoryModal
+        taskId={historyTaskId}
+        entries={history}
+        loading={historyLoading}
+        onClose={closeHistory}
+      />
     </>
   );
 }
