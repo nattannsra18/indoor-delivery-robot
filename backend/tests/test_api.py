@@ -14,6 +14,9 @@ from app.db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM
 from app.main import app
 from app.seed import seed_database
 from app.map_store import map_store
+from app.browser_websocket_manager import (
+    browser_connection_manager,
+)
 
 if TEST_DB.exists():
     TEST_DB.unlink()
@@ -838,3 +841,121 @@ def test_robot_map_updates_api_snapshot():
     assert snapshot["revision"] == 1
 
     map_store.clear()
+
+def test_navigation_feedback_broadcasts_dashboard_update(
+    monkeypatch,
+):
+    dashboard_events: list[dict] = []
+
+    async def capture_dashboard_event(
+        message: dict,
+    ) -> None:
+        dashboard_events.append(message)
+
+    with client.websocket_connect(
+        "/ws/robots/robot01"
+    ) as robot_websocket:
+        robot_ack = robot_websocket.receive_json()
+
+        assert (
+            robot_ack["type"]
+            == "connection_ack"
+        )
+
+        task = create_task("A", "C")
+        command = robot_websocket.receive_json()
+
+        assert command["type"] == "command"
+        assert command["task_id"] == task["id"]
+        assert command["stage"] == "pickup"
+
+        monkeypatch.setattr(
+            browser_connection_manager,
+            "broadcast_json",
+            capture_dashboard_event,
+        )
+
+        robot_websocket.send_json(
+            {
+                "type": "navigation_feedback",
+                "command_id": command["command_id"],
+                "task_id": task["id"],
+                "stage": "pickup",
+                "distance_remaining": 4.25,
+                "navigation_time_seconds": 12.5,
+                (
+                    "estimated_time_"
+                    "remaining_seconds"
+                ): 18.75,
+                "number_of_recoveries": 1,
+                "current_pose": {
+                    "frame_id": "map",
+                    "x": 2.1,
+                    "y": 3.2,
+                    "yaw": 0.4,
+                },
+                "timestamp": (
+                    "2026-09-02T16:30:00+00:00"
+                ),
+            }
+        )
+
+        # ใช้ heartbeat เป็น synchronization barrier:
+        # เมื่อได้รับ ack แปลว่า feedback ก่อนหน้าถูกประมวลผลแล้ว
+        robot_websocket.send_json(
+            {
+                "type": "heartbeat",
+                "timestamp": (
+                    "2026-09-02T16:30:01+00:00"
+                ),
+            }
+        )
+
+        heartbeat_ack = (
+            robot_websocket.receive_json()
+        )
+
+        assert (
+            heartbeat_ack["type"]
+            == "heartbeat_ack"
+        )
+
+    assert len(dashboard_events) == 1
+    dashboard_event = dashboard_events[0]
+
+    assert (
+        dashboard_event["type"]
+        == "navigation_feedback"
+    )
+    assert dashboard_event["robot_id"] == "robot01"
+    assert (
+        dashboard_event["command_id"]
+        == command["command_id"]
+    )
+    assert dashboard_event["task_id"] == task["id"]
+    assert dashboard_event["stage"] == "pickup"
+    assert (
+        dashboard_event["distance_remaining"]
+        == 4.25
+    )
+    assert (
+        dashboard_event["navigation_time_seconds"]
+        == 12.5
+    )
+    assert (
+        dashboard_event[
+            "estimated_time_remaining_seconds"
+        ]
+        == 18.75
+    )
+    assert (
+        dashboard_event["number_of_recoveries"]
+        == 1
+    )
+    assert dashboard_event["current_pose"] == {
+        "frame_id": "map",
+        "x": 2.1,
+        "y": 3.2,
+        "yaw": 0.4,
+    }
+    assert "server_time" in dashboard_event

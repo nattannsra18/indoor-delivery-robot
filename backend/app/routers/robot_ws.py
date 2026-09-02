@@ -19,6 +19,7 @@ from ..database import get_db
 from ..models import (
     EventSource,
     MapMessage,
+    NavigationFeedbackMessage,
     NavigationResultMessage,
     RobotTelemetry,
     TaskEvent,
@@ -276,6 +277,106 @@ async def robot_websocket(
                             current_utc_time()
                         ),
                     }
+                )
+            elif message_type == "navigation_feedback":
+                try:
+                    feedback = (
+                        NavigationFeedbackMessage.model_validate(
+                            message
+                        )
+                    )
+                except ValidationError as error:
+                    details = "; ".join(
+                        (
+                            f"{'.'.join(map(str, item['loc']))}: "
+                            f"{item['msg']}"
+                        )
+                        for item in error.errors(
+                            include_url=False
+                        )
+                    )
+
+                    await send_error(
+                        websocket,
+                        "INVALID_NAVIGATION_FEEDBACK",
+                        details,
+                    )
+                    continue
+
+                expected_prefix = (
+                    f"{feedback.task_id}:"
+                    f"{feedback.stage}:"
+                )
+
+                if not feedback.command_id.startswith(
+                    expected_prefix
+                ):
+                    await send_error(
+                        websocket,
+                        "FEEDBACK_COMMAND_MISMATCH",
+                        (
+                            "command_id does not match "
+                            "task_id and stage"
+                        ),
+                    )
+                    continue
+
+                db.expire_all()
+                current_robot = service.get_robot(
+                    robot_id
+                )
+
+                if (
+                    current_robot.current_task_id
+                    != feedback.task_id
+                ):
+                    await send_error(
+                        websocket,
+                        "FEEDBACK_TASK_MISMATCH",
+                        (
+                            "Feedback task is not the "
+                            "robot's current task"
+                        ),
+                    )
+                    continue
+
+                await (
+                    browser_connection_manager.broadcast_json(
+                        {
+                            "type": (
+                                "navigation_feedback"
+                            ),
+                            "robot_id": robot_id,
+                            "command_id": (
+                                feedback.command_id
+                            ),
+                            "task_id": feedback.task_id,
+                            "stage": feedback.stage,
+                            "distance_remaining": (
+                                feedback.distance_remaining
+                            ),
+                            "navigation_time_seconds": (
+                                feedback.navigation_time_seconds
+                            ),
+                            (
+                                "estimated_time_"
+                                "remaining_seconds"
+                            ): (
+                                feedback
+                                .estimated_time_remaining_seconds
+                            ),
+                            "number_of_recoveries": (
+                                feedback.number_of_recoveries
+                            ),
+                            "current_pose": (
+                                feedback.current_pose.model_dump()
+                            ),
+                            "timestamp": feedback.timestamp,
+                            "server_time": (
+                                current_utc_time()
+                            ),
+                        }
+                    )
                 )
 
             elif message_type == "navigation_result":
@@ -583,6 +684,7 @@ async def robot_websocket(
                     (
                         "Supported message types are "
                         "'heartbeat', 'telemetry', 'map', "
+                        "'navigation_feedback', "
                         "'navigation_result', "
                         "'navigation_cancelled' and "
                         "'command_ack'"

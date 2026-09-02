@@ -114,6 +114,59 @@ class NavigationResultMessage(BaseModel):
         max_length=500,
     )
 
+class NavigationFeedbackPose(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        allow_inf_nan=False,
+    )
+
+    frame_id: str = Field(
+        default="map",
+        min_length=1,
+        max_length=100,
+    )
+    x: float
+    y: float
+    yaw: float
+
+
+class NavigationFeedbackMessage(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        allow_inf_nan=False,
+    )
+
+    type: Literal["navigation_feedback"]
+    command_id: str = Field(
+        min_length=1,
+        max_length=200,
+    )
+    task_id: str = Field(
+        min_length=1,
+        max_length=100,
+    )
+    stage: Literal[
+        "pickup",
+        "destination",
+    ]
+    distance_remaining: float = Field(
+        ge=0.0
+    )
+    navigation_time_seconds: float = Field(
+        ge=0.0
+    )
+    estimated_time_remaining_seconds: (
+        Optional[float]
+    ) = Field(
+        default=None,
+        ge=0.0,
+    )
+    number_of_recoveries: int = Field(
+        ge=0
+    )
+    current_pose: NavigationFeedbackPose
+    timestamp: Optional[str] = None
+
 class OccupancyGridPayload(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -162,7 +215,7 @@ class MapMessage(BaseModel):
 class MapSnapshot(OccupancyGridPayload):
     revision: int = Field(ge=1)
     received_at: datetime
-    
+
 class DeliveryTask(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
