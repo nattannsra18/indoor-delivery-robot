@@ -36,11 +36,14 @@ class RobotConnectionManager:
         self,
         robot_id: str,
         websocket: WebSocket,
-    ) -> None:
+    ) -> bool:
         current_connection = self._connections.get(robot_id)
 
         if current_connection is websocket:
             self._connections.pop(robot_id, None)
+            return True
+
+        return False
 
     def is_connected(self, robot_id: str) -> bool:
         return robot_id in self._connections

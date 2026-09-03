@@ -65,6 +65,30 @@ export interface NavigationFeedback {
   angularVelocity?: number;
 }
 
+export interface NavigationPathPose {
+  x: number;
+  y: number;
+  yaw?: number;
+}
+
+export interface NavigationPath {
+  robotId: string;
+  commandId: string;
+  taskId: string;
+  stage: "pickup" | "destination";
+  frameId: string;
+  timestamp: string;
+  serverTime: string;
+  receivedAt: number;
+  poses: NavigationPathPose[];
+}
+
+export type NavigationPathStatus =
+  | "live"
+  | "waiting"
+  | "unavailable"
+  | "stale";
+
 export type DiagnosticLevel =
   | "OK"
   | "WARN"

@@ -24,6 +24,7 @@ from .models import (
     TaskStatus,
     utc_now,
 )
+from .navigation_path_store import navigation_path_store
 from .repository import DeliveryRepository
 from .seed import reset_demo_data
 from .state_machine import (
@@ -251,11 +252,15 @@ class DeliveryService:
         else:
             return None
 
+        command = navigation_path_store.command_for(
+            task.robot_id,
+            task.id,
+            stage,
+        )
+
         return {
             "type": "command",
-            "command_id": (
-                f"{task.id}:{stage}:{uuid4().hex}"
-            ),
+            "command_id": command.command_id,
             "command": "navigate_to_pose",
             "robot_id": task.robot_id,
             "task_id": task.id,
@@ -630,5 +635,6 @@ class DeliveryService:
         )
 
     def reset_demo(self) -> DashboardOverview:
+        navigation_path_store.clear_all()
         reset_demo_data(self.db)
         return self.overview()

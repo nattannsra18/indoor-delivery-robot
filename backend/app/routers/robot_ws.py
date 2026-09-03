@@ -21,6 +21,8 @@ from ..models import (
     EventSource,
     MapMessage,
     NavigationFeedbackMessage,
+    NavigationPathClearMessage,
+    NavigationPathMessage,
     NavigationResultMessage,
     RobotTelemetry,
     TaskEvent,
@@ -28,6 +30,7 @@ from ..models import (
 from ..service import DeliveryService
 from ..websocket_manager import robot_connection_manager
 from ..map_store import map_store
+from ..navigation_path_store import navigation_path_store
 
 router = APIRouter(tags=["robot-websocket"])
 
@@ -46,6 +49,78 @@ async def send_error(
             "type": "error",
             "code": code,
             "detail": detail,
+            "server_time": current_utc_time(),
+        }
+    )
+
+
+def navigation_association_error(
+    service: DeliveryService,
+    robot_id: str,
+    command_id: str,
+    task_id: str,
+    stage: str,
+) -> tuple[str, str] | None:
+    current_robot = service.get_robot(robot_id)
+    if current_robot.current_task_id != task_id:
+        return (
+            "PATH_TASK_MISMATCH",
+            "task_id is not the robot's current task",
+        )
+
+    task = service.get_task(task_id)
+    if task.robot_id != robot_id:
+        return (
+            "PATH_ROBOT_MISMATCH",
+            "task is not assigned to this robot",
+        )
+
+    expected_stage = {
+        "GOING_TO_PICKUP": "pickup",
+        "DELIVERING": "destination",
+    }.get(task.status.value)
+    if expected_stage != stage:
+        return (
+            "PATH_STAGE_MISMATCH",
+            "stage does not match the active workflow state",
+        )
+
+    if not navigation_path_store.matches(
+        robot_id,
+        command_id,
+        task_id,
+        stage,
+    ):
+        return (
+            "PATH_COMMAND_MISMATCH",
+            "command_id is not the active navigation command",
+        )
+
+    return None
+
+
+async def broadcast_path_clear(
+    robot_id: str,
+    reason: str,
+    *,
+    remove_command: bool = True,
+) -> None:
+    command = (
+        navigation_path_store.clear(robot_id)
+        if remove_command
+        else navigation_path_store.clear_path(robot_id)
+    )
+    if command is None:
+        return
+
+    await browser_connection_manager.broadcast_json(
+        {
+            "type": "navigation_path_clear",
+            "robot_id": robot_id,
+            "command_id": command.command_id,
+            "task_id": command.task_id,
+            "stage": command.stage,
+            "reason": reason,
             "server_time": current_utc_time(),
         }
     )
@@ -338,6 +413,115 @@ async def robot_websocket(
                         ),
                     }
                 )
+            elif message_type == "navigation_path":
+                try:
+                    navigation_path = (
+                        NavigationPathMessage.model_validate(
+                            message
+                        )
+                    )
+                except ValidationError as error:
+                    details = "; ".join(
+                        (
+                            f"{'.'.join(map(str, item['loc']))}: "
+                            f"{item['msg']}"
+                        )
+                        for item in error.errors(
+                            include_url=False
+                        )
+                    )
+                    await send_error(
+                        websocket,
+                        "INVALID_NAVIGATION_PATH",
+                        details,
+                    )
+                    continue
+
+                db.expire_all()
+                association_error = (
+                    navigation_association_error(
+                        service,
+                        robot_id,
+                        navigation_path.command_id,
+                        navigation_path.task_id,
+                        navigation_path.stage,
+                    )
+                )
+                if association_error is not None:
+                    await send_error(
+                        websocket,
+                        *association_error,
+                    )
+                    continue
+
+                if not navigation_path_store.update(
+                    robot_id,
+                    navigation_path,
+                ):
+                    await send_error(
+                        websocket,
+                        "PATH_COMMAND_MISMATCH",
+                        "active navigation command changed",
+                    )
+                    continue
+
+                await browser_connection_manager.broadcast_json(
+                    {
+                        "type": "navigation_path",
+                        "robot_id": robot_id,
+                        **navigation_path.model_dump(
+                            exclude={"type"}
+                        ),
+                        "server_time": current_utc_time(),
+                    }
+                )
+
+            elif message_type == "navigation_path_clear":
+                try:
+                    path_clear = (
+                        NavigationPathClearMessage.model_validate(
+                            message
+                        )
+                    )
+                except ValidationError as error:
+                    details = "; ".join(
+                        (
+                            f"{'.'.join(map(str, item['loc']))}: "
+                            f"{item['msg']}"
+                        )
+                        for item in error.errors(
+                            include_url=False
+                        )
+                    )
+                    await send_error(
+                        websocket,
+                        "INVALID_NAVIGATION_PATH_CLEAR",
+                        details,
+                    )
+                    continue
+
+                if not navigation_path_store.matches(
+                    robot_id,
+                    path_clear.command_id,
+                    path_clear.task_id,
+                    path_clear.stage,
+                ):
+                    await send_error(
+                        websocket,
+                        "PATH_COMMAND_MISMATCH",
+                        (
+                            "path clear does not match the "
+                            "active navigation command"
+                        ),
+                    )
+                    continue
+
+                await broadcast_path_clear(
+                    robot_id,
+                    "robot_agent_clear",
+                    remove_command=False,
+                )
+
             elif message_type == "navigation_feedback":
                 try:
                     feedback = (
@@ -382,6 +566,23 @@ async def robot_websocket(
                     continue
 
                 db.expire_all()
+                association_error = navigation_association_error(
+                    service,
+                    robot_id,
+                    feedback.command_id,
+                    feedback.task_id,
+                    feedback.stage,
+                )
+                if association_error is not None:
+                    await send_error(
+                        websocket,
+                        association_error[0].replace(
+                            "PATH_", "FEEDBACK_"
+                        ),
+                        association_error[1],
+                    )
+                    continue
+
                 current_robot = service.get_robot(
                     robot_id
                 )
@@ -488,6 +689,24 @@ async def robot_websocket(
                     )
                     continue
 
+                db.expire_all()
+                association_error = navigation_association_error(
+                    service,
+                    robot_id,
+                    navigation.command_id,
+                    navigation.task_id,
+                    navigation.stage,
+                )
+                if association_error is not None:
+                    await send_error(
+                        websocket,
+                        association_error[0].replace(
+                            "PATH_", "RESULT_"
+                        ),
+                        association_error[1],
+                    )
+                    continue
+
                 if navigation.status == "succeeded":
                     if navigation.stage == "pickup":
                         task_event = (
@@ -503,8 +722,6 @@ async def robot_websocket(
                     )
 
                 try:
-                    db.expire_all()
-
                     updated_task = (
                         service.apply_task_event(
                             navigation.task_id,
@@ -524,6 +741,11 @@ async def robot_websocket(
                         str(error.detail),
                     )
                     continue
+
+                await broadcast_path_clear(
+                    robot_id,
+                    "navigation_result",
+                )
 
                 await websocket.send_json(
                     {
@@ -652,6 +874,11 @@ async def robot_websocket(
                     )
                     continue
 
+                await broadcast_path_clear(
+                    robot_id,
+                    "navigation_cancelled",
+                )
+
                 await websocket.send_json(
                     {
                         "type": (
@@ -751,6 +978,8 @@ async def robot_websocket(
                         "Supported message types are "
                         "'heartbeat', 'diagnostics', "
                         "'telemetry', 'map', "
+                        "'navigation_path', "
+                        "'navigation_path_clear', "
                         "'navigation_feedback', "
                         "'navigation_result', "
                         "'navigation_cancelled' and "
@@ -759,16 +988,28 @@ async def robot_websocket(
                 )
 
     except WebSocketDisconnect:
-        robot_connection_manager.disconnect(
+        disconnected = robot_connection_manager.disconnect(
             robot_id,
             websocket,
         )
+        if disconnected:
+            await broadcast_path_clear(
+                robot_id,
+                "robot_disconnect",
+                remove_command=False,
+            )
 
     except Exception:
-        robot_connection_manager.disconnect(
+        disconnected = robot_connection_manager.disconnect(
             robot_id,
             websocket,
         )
+        if disconnected:
+            await broadcast_path_clear(
+                robot_id,
+                "robot_disconnect",
+                remove_command=False,
+            )
 
         try:
             await websocket.close(code=1011)

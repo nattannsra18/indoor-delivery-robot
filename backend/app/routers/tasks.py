@@ -11,6 +11,7 @@ from ..command_dispatch import (
     schedule_active_navigation_command,
     schedule_navigation_command,
     schedule_navigation_cancel_command,
+    schedule_navigation_path_clear,
 )
 from ..dependencies import get_service
 from ..models import (
@@ -144,6 +145,14 @@ def cancel_task(
     ),
 ):
     task = service.cancel_task(task_id)
+
+    if task.robot_id is not None:
+        schedule_navigation_path_clear(
+            background_tasks,
+            task.robot_id,
+            "cancellation_requested",
+            remove_command=False,
+        )
 
     schedule_navigation_cancel_command(
         background_tasks,

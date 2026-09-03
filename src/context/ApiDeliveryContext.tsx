@@ -7,14 +7,22 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState
 } from "react";
 import * as api from "@/lib/api";
+import {
+  framesAreCompatible,
+  parseNavigationPath,
+  parseNavigationPathClear
+} from "@/lib/navigationPath";
 import {
   DeliveryTask,
   DiagnosticLevel,
   DiagnosticStatus,
   NavigationFeedback,
+  NavigationPath,
+  NavigationPathStatus,
   OccupancyGridMap,
   Robot,
   RobotDiagnostics,
@@ -73,6 +81,8 @@ type NavigationFeedbackMessage = {
 type ApiDeliveryContextValue = {
   occupancyMap?: OccupancyGridMap;
   navigationFeedback?: NavigationFeedback;
+  navigationPath?: NavigationPath;
+  navigationPathStatus: NavigationPathStatus;
   diagnostics?: RobotDiagnostics;
   stations: Station[];
   tasks: DeliveryTask[];
@@ -201,6 +211,18 @@ function parseRobotDiagnostics(
   };
 }
 
+function expectedNavigationStage(
+  task: DeliveryTask | undefined
+): "pickup" | "destination" | undefined {
+  if (task?.status === "GOING_TO_PICKUP") {
+    return "pickup";
+  }
+  if (task?.status === "DELIVERING") {
+    return "destination";
+  }
+  return undefined;
+}
+
 export function ApiDeliveryProvider({
   children
 }: {
@@ -212,6 +234,12 @@ export function ApiDeliveryProvider({
     navigationFeedback,
     setNavigationFeedback
   ] = useState<NavigationFeedback | undefined>();
+  const [navigationPath, setNavigationPath] =
+    useState<NavigationPath | undefined>();
+  const [
+    navigationPathStatus,
+    setNavigationPathStatus
+  ] = useState<NavigationPathStatus>("unavailable");
   const [diagnostics, setDiagnostics] =
     useState<RobotDiagnostics | undefined>();
   const [stations, setStations] = useState<Station[]>([]);
@@ -220,6 +248,25 @@ export function ApiDeliveryProvider({
   const [loading, setLoading] = useState(true);
   const [backendOnline, setBackendOnline] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const navigationPathRef = useRef<NavigationPath | undefined>(
+    undefined
+  );
+  const pendingNavigationPathRef = useRef<NavigationPath | undefined>(
+    undefined
+  );
+  const occupancyMapRef = useRef<OccupancyGridMap | undefined>(
+    undefined
+  );
+  const robotRef = useRef<Robot>(EMPTY_ROBOT);
+  const activeTaskRef = useRef<DeliveryTask | undefined>(undefined);
+
+  const activeTask = useMemo(
+    () =>
+      tasks.find((task) =>
+        ACTIVE_STATUSES.includes(task.status)
+      ),
+    [tasks]
+  );
 
   const refreshAll = useCallback(async () => {
     try {
@@ -240,11 +287,78 @@ export function ApiDeliveryProvider({
           : "Unable to connect to FastAPI";
       setBackendOnline(false);
       setDiagnostics(undefined);
+      navigationPathRef.current = undefined;
+      pendingNavigationPathRef.current = undefined;
+      setNavigationPath(undefined);
+      setNavigationPathStatus("unavailable");
       setError(message);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    occupancyMapRef.current = occupancyMap;
+    const currentPath = navigationPathRef.current;
+    if (
+      occupancyMap
+      && currentPath
+      && !framesAreCompatible(
+        occupancyMap.frameId,
+        currentPath.frameId
+      )
+    ) {
+      navigationPathRef.current = undefined;
+      setNavigationPath(undefined);
+      setNavigationPathStatus("unavailable");
+    }
+  }, [occupancyMap]);
+
+  useEffect(() => {
+    robotRef.current = robot;
+  }, [robot]);
+
+  useEffect(() => {
+    const previous = activeTaskRef.current;
+    const previousStage = expectedNavigationStage(previous);
+    const nextStage = expectedNavigationStage(activeTask);
+    const routeChanged = (
+      previous?.id !== activeTask?.id
+      || previousStage !== nextStage
+    );
+
+    activeTaskRef.current = activeTask;
+    if (routeChanged) {
+      navigationPathRef.current = undefined;
+      setNavigationPath(undefined);
+      setNavigationPathStatus(
+        nextStage ? "waiting" : "unavailable"
+      );
+    }
+
+    const pending = pendingNavigationPathRef.current;
+    const currentMap = occupancyMapRef.current;
+    if (
+      pending
+      && activeTask
+      && pending.taskId === activeTask.id
+      && pending.stage === nextStage
+      && pending.robotId === robotRef.current.id
+      && Date.now() - pending.receivedAt <= 5000
+      && (
+        !currentMap
+        || framesAreCompatible(
+          pending.frameId,
+          currentMap.frameId
+        )
+      )
+    ) {
+      navigationPathRef.current = pending;
+      setNavigationPath(pending);
+      setNavigationPathStatus("live");
+    }
+    pendingNavigationPathRef.current = undefined;
+  }, [activeTask]);
 
   const refreshMap = useCallback(async () => {
     try {
@@ -284,7 +398,76 @@ export function ApiDeliveryProvider({
           };
 
           if (message.type === "workflow_updated") {
+            pendingNavigationPathRef.current = undefined;
+            navigationPathRef.current = undefined;
+            setNavigationPath(undefined);
+            setNavigationPathStatus("waiting");
             void refreshAll();
+          } else if (message.type === "navigation_path") {
+            const nextPath = parseNavigationPath(message);
+            const currentTask = activeTaskRef.current;
+            const expectedStage = expectedNavigationStage(
+              currentTask
+            );
+            const currentMap = occupancyMapRef.current;
+            const currentPath = navigationPathRef.current;
+
+            if (nextPath && !currentTask) {
+              pendingNavigationPathRef.current = nextPath;
+            }
+
+            if (
+              nextPath
+              && currentTask
+              && expectedStage === nextPath.stage
+              && nextPath.taskId === currentTask.id
+              && nextPath.robotId === robotRef.current.id
+              && (
+                !currentMap
+                || framesAreCompatible(
+                  nextPath.frameId,
+                  currentMap.frameId
+                )
+              )
+              && !(
+                currentPath
+                && currentPath.taskId === nextPath.taskId
+                && currentPath.stage === nextPath.stage
+                && currentPath.commandId !== nextPath.commandId
+              )
+            ) {
+              navigationPathRef.current = nextPath;
+              setNavigationPath(nextPath);
+              setNavigationPathStatus("live");
+            }
+          } else if (
+            message.type === "navigation_path_clear"
+          ) {
+            const clear = parseNavigationPathClear(message);
+            const currentTask = activeTaskRef.current;
+            const expectedStage = expectedNavigationStage(
+              currentTask
+            );
+            const currentPath = navigationPathRef.current;
+
+            if (
+              clear
+              && clear.robotId === robotRef.current.id
+              && clear.taskId === currentTask?.id
+              && clear.stage === expectedStage
+              && (
+                !currentPath
+                || currentPath.commandId === clear.commandId
+              )
+            ) {
+              navigationPathRef.current = undefined;
+              setNavigationPath(undefined);
+              setNavigationPathStatus(
+                clear.reason === "robot_disconnect"
+                  ? "unavailable"
+                  : "waiting"
+              );
+            }
           } else if (
             message.type === "navigation_feedback"
           ) {
@@ -343,6 +526,10 @@ export function ApiDeliveryProvider({
         websocket = null;
         setNavigationFeedback(undefined);
         setDiagnostics(undefined);
+        navigationPathRef.current = undefined;
+        pendingNavigationPathRef.current = undefined;
+        setNavigationPath(undefined);
+        setNavigationPathStatus("unavailable");
 
         if (!stopped) {
           reconnectTimer = window.setTimeout(
@@ -367,6 +554,22 @@ export function ApiDeliveryProvider({
   }, [refreshAll]);
 
   useEffect(() => {
+    const interval = window.setInterval(() => {
+      const current = navigationPathRef.current;
+      if (
+        current
+        && Date.now() - current.receivedAt > 5000
+      ) {
+        navigationPathRef.current = undefined;
+        setNavigationPath(undefined);
+        setNavigationPathStatus("stale");
+      }
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
     void refreshMap();
     const interval = window.setInterval(
       () => void refreshMap(),
@@ -374,14 +577,6 @@ export function ApiDeliveryProvider({
     );
     return () => window.clearInterval(interval);
   }, [refreshMap]);
-
-  const activeTask = useMemo(
-    () =>
-      tasks.find((task) =>
-        ACTIVE_STATUSES.includes(task.status)
-      ),
-    [tasks]
-  );
 
   const queuedTasks = useMemo(
     () => tasks.filter((task) => task.status === "QUEUED"),
@@ -530,6 +725,8 @@ export function ApiDeliveryProvider({
     () => ({
       occupancyMap,
       navigationFeedback,
+      navigationPath,
+      navigationPathStatus,
       diagnostics,
       stations,
       tasks,
@@ -553,6 +750,8 @@ export function ApiDeliveryProvider({
     [
       occupancyMap,
       navigationFeedback,
+      navigationPath,
+      navigationPathStatus,
       diagnostics,
       stations,
       tasks,

@@ -249,6 +249,72 @@ class NavigationFeedbackMessage(BaseModel):
     current_pose: NavigationFeedbackPose
     timestamp: Optional[str] = None
 
+
+NavigationStage = Literal["pickup", "destination"]
+MAX_NAVIGATION_PATH_POSES = 500
+
+
+class NavigationPathPose(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        allow_inf_nan=False,
+        strict=True,
+    )
+
+    x: float
+    y: float
+    yaw: Optional[float] = None
+
+
+class NavigationPathMessage(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        allow_inf_nan=False,
+        strict=True,
+    )
+
+    type: Literal["navigation_path"]
+    command_id: str = Field(min_length=1, max_length=200)
+    task_id: str = Field(min_length=1, max_length=100)
+    stage: NavigationStage
+    frame_id: str = Field(min_length=1, max_length=100)
+    timestamp: str = Field(min_length=1, max_length=100)
+    poses: list[NavigationPathPose] = Field(
+        min_length=1,
+        max_length=MAX_NAVIGATION_PATH_POSES,
+    )
+
+    @field_validator("timestamp")
+    @classmethod
+    def validate_path_timestamp(cls, value: str) -> str:
+        try:
+            parsed = datetime.fromisoformat(
+                value.replace("Z", "+00:00")
+            )
+        except ValueError as error:
+            raise ValueError(
+                "timestamp must be ISO-8601"
+            ) from error
+
+        if parsed.tzinfo is None:
+            raise ValueError(
+                "timestamp must include a timezone"
+            )
+
+        return value
+
+
+class NavigationPathClearMessage(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+    )
+
+    type: Literal["navigation_path_clear"]
+    command_id: str = Field(min_length=1, max_length=200)
+    task_id: str = Field(min_length=1, max_length=100)
+    stage: NavigationStage
+
 class OccupancyGridPayload(BaseModel):
     model_config = ConfigDict(
         extra="forbid",

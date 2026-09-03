@@ -75,7 +75,7 @@ export default function DashboardPage() {
                 Live Robot Map
               </h2>
               <p className="text-sm text-slate-500">
-                ROS OccupancyGrid with live AMCL robot pose
+                ROS OccupancyGrid, real Nav2 global path and live AMCL pose
               </p>
             </div>
             <div className="flex flex-wrap gap-2">

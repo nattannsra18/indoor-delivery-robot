@@ -12,6 +12,7 @@ from fastapi import (
 from ..browser_websocket_manager import (
     browser_connection_manager,
 )
+from ..navigation_path_store import navigation_path_store
 
 router = APIRouter(tags=["dashboard-websocket"])
 
@@ -42,6 +43,16 @@ async def dashboard_websocket(
             "server_time": current_utc_time(),
         }
     )
+
+    for robot_id, path in navigation_path_store.all_paths():
+        await websocket.send_json(
+            {
+                "type": "navigation_path",
+                "robot_id": robot_id,
+                **path.model_dump(exclude={"type"}),
+                "server_time": current_utc_time(),
+            }
+        )
 
     try:
         while True:

@@ -3,16 +3,22 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import PageHeader from "@/components/PageHeader";
+import RobotMap, { StationSelectionMode } from "@/components/RobotMap";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
+import { Station } from "@/types";
 
 export default function CreateDeliveryPage() {
   const router = useRouter();
-  const { stations, createTask, robot, backendOnline } = useDeliveryApi();
+  const {
+    stations, createTask, robot, backendOnline, loading, occupancyMap
+  } = useDeliveryApi();
   const [pickup, setPickup] = useState("");
   const [destination, setDestination] = useState("");
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [selectionMode, setSelectionMode] =
+    useState<StationSelectionMode>("pickup");
 
   useEffect(() => {
     if (!stations.length) return;
@@ -29,6 +35,25 @@ export default function CreateDeliveryPage() {
     () => stations.find((station) => station.id === destination),
     [destination, stations]
   );
+
+  function selectStation(station: Station) {
+    const conflicts = selectionMode === "pickup"
+      ? station.id === destination
+      : station.id === pickup;
+    if (conflicts) {
+      setIsError(true);
+      setMessage("Pickup and destination cannot be the same station.");
+      return;
+    }
+
+    if (selectionMode === "pickup") {
+      setPickup(station.id);
+    } else {
+      setDestination(station.id);
+    }
+    setIsError(false);
+    setMessage(`${station.name} selected as ${selectionMode}. Submit the form to create the task.`);
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -63,8 +88,57 @@ export default function CreateDeliveryPage() {
     <>
       <PageHeader
         title="Create Delivery"
-        description="Create a real REST request to FastAPI and see the result on Dashboard and Task Queue."
+        description="Choose predefined stations on the live map, then submit the validated delivery request to FastAPI."
       />
+
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-slate-900">Select Stations on Map</h2>
+            <p className="text-sm text-slate-500">
+              Map clicks select predefined markers only and never send a navigation command.
+            </p>
+          </div>
+          <fieldset className="flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+            <legend className="sr-only">Map selection mode</legend>
+            {(["pickup", "destination"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={selectionMode === mode}
+                onClick={() => setSelectionMode(mode)}
+                disabled={!backendOnline || stations.length === 0}
+                className={`rounded-lg px-3 py-2 text-sm font-semibold capitalize transition ${
+                  selectionMode === mode
+                    ? mode === "pickup"
+                      ? "bg-cyan-600 text-white"
+                      : "bg-violet-600 text-white"
+                    : "text-slate-600 hover:bg-white"
+                } disabled:cursor-not-allowed disabled:opacity-50`}
+              >
+                Select {mode}
+              </button>
+            ))}
+          </fieldset>
+        </div>
+        {!backendOnline && !loading && (
+          <div className="mb-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+            FastAPI is offline. Existing station controls are disabled until it reconnects.
+          </div>
+        )}
+        {!occupancyMap && backendOnline && (
+          <div className="mb-3 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            The ROS map is not available. Use the station dropdowns below as a fallback.
+          </div>
+        )}
+        <RobotMap
+          interactive={backendOnline && stations.length > 0}
+          selectedPickupStationId={pickup}
+          selectedDestinationStationId={destination}
+          selectionMode={selectionMode}
+          onStationSelect={selectStation}
+        />
+      </section>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
         <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-7">
@@ -82,12 +156,15 @@ export default function CreateDeliveryPage() {
             <Field label="Pickup Station">
               <select
                 value={pickup}
-                onChange={(event) => setPickup(event.target.value)}
+                onChange={(event) => {
+                  setPickup(event.target.value);
+                  setSelectionMode("pickup");
+                }}
                 disabled={!backendOnline || stations.length === 0}
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none ring-blue-500 transition focus:ring-2 disabled:bg-slate-100"
               >
                 {stations.map((station) => (
-                  <option key={station.id} value={station.id}>{station.name} — {station.description}</option>
+                  <option key={station.id} value={station.id} disabled={station.id === destination}>{station.name} — {station.description}</option>
                 ))}
               </select>
             </Field>
@@ -95,12 +172,15 @@ export default function CreateDeliveryPage() {
             <Field label="Destination Station">
               <select
                 value={destination}
-                onChange={(event) => setDestination(event.target.value)}
+                onChange={(event) => {
+                  setDestination(event.target.value);
+                  setSelectionMode("destination");
+                }}
                 disabled={!backendOnline || stations.length === 0}
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none ring-blue-500 transition focus:ring-2 disabled:bg-slate-100"
               >
                 {stations.map((station) => (
-                  <option key={station.id} value={station.id}>{station.name} — {station.description}</option>
+                  <option key={station.id} value={station.id} disabled={station.id === pickup}>{station.name} — {station.description}</option>
                 ))}
               </select>
             </Field>
