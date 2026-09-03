@@ -17,6 +17,16 @@ export type TaskStatus =
   | "FAILED"
   | "CANCELLED";
 
+export type TaskPriority = "NORMAL" | "HIGH";
+
+export interface TaskCreateInput {
+  pickupStationId: string;
+  destinationStationId: string;
+  priority: TaskPriority;
+  recipientName?: string;
+  deliveryNote?: string;
+}
+
 export interface Station {
   id: string;
   name: string;
@@ -127,6 +137,9 @@ export interface DeliveryTask {
   completedAt?: string;
   progress: number;
   ownerId?: string;
+  priority: TaskPriority;
+  recipientName?: string;
+  deliveryNote?: string;
 }
 
 export interface TaskEstimate {

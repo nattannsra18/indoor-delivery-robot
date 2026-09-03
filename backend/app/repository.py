@@ -1,10 +1,22 @@
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from .db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM
-from .models import TaskStatus
+from .models import TaskPriority, TaskStatus
+
+
+def queued_task_ordering():
+    """Canonical dispatcher/ETA order for tasks that are still queued."""
+    return (
+        case(
+            (DeliveryTaskORM.priority == TaskPriority.HIGH, 0),
+            else_=1,
+        ),
+        DeliveryTaskORM.created_at.asc(),
+        DeliveryTaskORM.id.asc(),
+    )
 
 
 class DeliveryRepository:
@@ -96,7 +108,7 @@ class DeliveryRepository:
         stmt = (
             select(DeliveryTaskORM)
             .where(DeliveryTaskORM.status == TaskStatus.QUEUED)
-            .order_by(DeliveryTaskORM.created_at.asc(), DeliveryTaskORM.id.asc())
+            .order_by(*queued_task_ordering())
         )
         return list(self.db.scalars(stmt).all())
 
@@ -104,7 +116,7 @@ class DeliveryRepository:
         stmt = (
             select(DeliveryTaskORM)
             .where(DeliveryTaskORM.status == TaskStatus.QUEUED)
-            .order_by(DeliveryTaskORM.created_at.asc(), DeliveryTaskORM.id.asc())
+            .order_by(*queued_task_ordering())
             .limit(1)
             .with_for_update()
         )

@@ -22,6 +22,7 @@ from ..models import (
     TaskEventRequest,
     TaskHistoryEntry,
     TaskEstimate,
+    TaskPriority,
     TaskStatus,
 )
 from ..service import DeliveryService
@@ -107,6 +108,11 @@ def create_task(
     service: DeliveryService = Depends(get_service),
     user: UserORM = Depends(require_user),
 ):
+    if user.role != UserRole.ADMIN and payload.priority == TaskPriority.HIGH:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can create HIGH priority tasks",
+        )
     task = service.create_task(payload, owner_id=user.id)
 
     schedule_navigation_command(

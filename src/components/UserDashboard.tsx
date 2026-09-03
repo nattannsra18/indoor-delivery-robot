@@ -6,6 +6,7 @@ import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import WorkflowControls from "@/components/WorkflowControls";
 import TaskArrivalEstimate from "@/components/TaskArrivalEstimate";
+import TaskMetadata from "@/components/TaskMetadata";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import {
   classifyMyDeliveries,
@@ -151,6 +152,7 @@ function DeliverySummary({
         </div>
         <StatusBadge status={task.status} />
       </div>
+      <TaskMetadata task={task} />
       <div className={`grid gap-3 ${compact ? "mt-4 sm:grid-cols-2" : "sm:grid-cols-2"}`}>
         <Route label="Pickup" value={stationName(task.pickupStationId)} />
         <Route label="Destination" value={stationName(task.destinationStationId)} />

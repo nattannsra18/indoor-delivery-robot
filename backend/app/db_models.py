@@ -6,7 +6,15 @@ from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Int
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
-from .models import AlertSeverity, EmergencyStopState, RobotState, TaskStatus, UserRole, utc_now
+from .models import (
+    AlertSeverity,
+    EmergencyStopState,
+    RobotState,
+    TaskPriority,
+    TaskStatus,
+    UserRole,
+    utc_now,
+)
 
 
 def enum_column(enum_type, name: str):
@@ -105,6 +113,14 @@ class DeliveryTaskORM(Base):
     owner_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    priority: Mapped[TaskPriority] = mapped_column(
+        enum_column(TaskPriority, "task_priority"),
+        nullable=False,
+        default=TaskPriority.NORMAL,
+        server_default=TaskPriority.NORMAL.value,
+    )
+    recipient_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    delivery_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class TaskEventORM(Base):

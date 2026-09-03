@@ -12,6 +12,7 @@ import StatusBadge from "@/components/StatusBadge";
 import TaskHistoryModal from "@/components/TaskHistoryModal";
 import WorkflowControls from "@/components/WorkflowControls";
 import TaskArrivalEstimate from "@/components/TaskArrivalEstimate";
+import TaskMetadata from "@/components/TaskMetadata";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api";
@@ -253,6 +254,9 @@ export default function TasksPage() {
                   Status
                 </th>
                 <th className="px-3 py-3">
+                  Delivery details
+                </th>
+                <th className="px-3 py-3">
                   Progress
                 </th>
                 <th className="px-3 py-3">
@@ -294,6 +298,10 @@ export default function TasksPage() {
                     <StatusBadge
                       status={task.status}
                     />
+                  </td>
+
+                  <td className="px-3 py-4">
+                    <TaskMetadata task={task} />
                   </td>
 
                   <td className="px-3 py-4">

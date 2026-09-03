@@ -35,6 +35,7 @@ import {
   RobotDiagnostics,
   Station,
   TaskEstimate,
+  TaskCreateInput,
   TaskStatus
 } from "@/types";
 
@@ -103,10 +104,7 @@ type ApiDeliveryContextValue = {
   error: string | null;
   emergencyStop?: EmergencyStop;
   taskEstimates: TaskEstimate[];
-  createTask: (
-    pickupStationId: string,
-    destinationStationId: string
-  ) => Promise<DeliveryTask>;
+  createTask: (input: TaskCreateInput) => Promise<DeliveryTask>;
   addStation: (
     station: Omit<Station, "id">
   ) => Promise<Station>;
@@ -662,15 +660,9 @@ export function ApiDeliveryProvider({
   );
 
   const createTask = useCallback(
-    async (
-      pickupStationId: string,
-      destinationStationId: string
-    ) => {
+    async (input: TaskCreateInput) => {
       try {
-        const created = await api.createTask(
-          pickupStationId,
-          destinationStationId
-        );
+        const created = await api.createTask(input);
         await refreshAll();
         return created;
       } catch (err) {

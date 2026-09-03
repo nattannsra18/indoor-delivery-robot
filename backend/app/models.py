@@ -23,6 +23,11 @@ class TaskStatus(str, Enum):
     CANCELLED = "CANCELLED"
 
 
+class TaskPriority(str, Enum):
+    NORMAL = "NORMAL"
+    HIGH = "HIGH"
+
+
 class TaskEstimateAvailability(str, Enum):
     AVAILABLE = "AVAILABLE"
     PARTIAL = "PARTIAL"
@@ -427,6 +432,9 @@ class DeliveryTask(BaseModel):
     completed_at: Optional[datetime] = None
     progress: int = Field(ge=0, le=100)
     owner_id: Optional[str] = None
+    priority: TaskPriority = TaskPriority.NORMAL
+    recipient_name: Optional[str] = None
+    delivery_note: Optional[str] = None
 
 
 class TaskEstimate(BaseModel):
@@ -463,6 +471,19 @@ class Alert(BaseModel):
 class DeliveryTaskCreate(BaseModel):
     pickup_station_id: str
     destination_station_id: str
+    priority: TaskPriority = TaskPriority.NORMAL
+    recipient_name: Optional[str] = Field(default=None, max_length=100)
+    delivery_note: Optional[str] = Field(default=None, max_length=500)
+
+    @field_validator("recipient_name", "delivery_note", mode="before")
+    @classmethod
+    def normalize_optional_text(cls, value):
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip()
+        return normalized or None
 
     @model_validator(mode="after")
     def validate_stations(self):

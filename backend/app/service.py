@@ -405,6 +405,9 @@ class DeliveryService:
             created_at=utc_now(),
             progress=0,
             owner_id=owner_id,
+            priority=payload.priority,
+            recipient_name=payload.recipient_name,
+            delivery_note=payload.delivery_note,
         )
         self.repo.add_task(task)
         self._log_event(
@@ -416,7 +419,9 @@ class DeliveryService:
         )
 
         if self._robot_available(robot):
-            self._assign_task(task, robot)
+            # Always go through the canonical queue query. This matters when an
+            # idle robot has pending work after a stop/recovery boundary.
+            self.dispatch_next_queued_task(robot=robot)
 
         self.db.commit()
         self.db.refresh(task)

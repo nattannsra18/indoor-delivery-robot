@@ -8,6 +8,7 @@ import type {
   TaskHistoryEntry,
   TaskStatus,
   TaskEstimate,
+  TaskCreateInput,
   UserIdentity
 } from "@/types";
 
@@ -60,6 +61,9 @@ type ApiDeliveryTask = {
   completed_at: string | null;
   progress: number;
   owner_id: string | null;
+  priority: DeliveryTask["priority"];
+  recipient_name: string | null;
+  delivery_note: string | null;
 };
 
 type ApiTaskHistoryEntry = {
@@ -136,7 +140,10 @@ function toTask(task: ApiDeliveryTask): DeliveryTask {
     startedAt: task.started_at ?? undefined,
     completedAt: task.completed_at ?? undefined,
     progress: task.progress,
-    ownerId: task.owner_id ?? undefined
+    ownerId: task.owner_id ?? undefined,
+    priority: task.priority,
+    recipientName: task.recipient_name ?? undefined,
+    deliveryNote: task.delivery_note ?? undefined
   };
 }
 
@@ -285,14 +292,16 @@ export async function getTaskHistory(taskId: string): Promise<TaskHistoryEntry[]
 }
 
 export async function createTask(
-  pickupStationId: string,
-  destinationStationId: string
+  input: TaskCreateInput
 ): Promise<DeliveryTask> {
   const task = await request<ApiDeliveryTask>("/api/tasks", {
     method: "POST",
     body: JSON.stringify({
-      pickup_station_id: pickupStationId,
-      destination_station_id: destinationStationId
+      pickup_station_id: input.pickupStationId,
+      destination_station_id: input.destinationStationId,
+      priority: input.priority,
+      recipient_name: input.recipientName?.trim() || null,
+      delivery_note: input.deliveryNote?.trim() || null
     })
   });
   return toTask(task);
