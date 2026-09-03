@@ -126,6 +126,41 @@ export interface DeliveryTask {
   startedAt?: string;
   completedAt?: string;
   progress: number;
+  ownerId?: string;
+}
+
+export interface UserIdentity {
+  id: string;
+  username: string;
+  role: "ADMIN" | "USER";
+}
+
+export interface Alert {
+  id: string;
+  deduplication_key: string;
+  robot_id?: string;
+  severity: "INFO" | "WARNING" | "CRITICAL";
+  title: string;
+  message: string;
+  source: string;
+  first_occurrence_at: string;
+  latest_occurrence_at: string;
+  occurrence_count: number;
+  acknowledged: boolean;
+  acknowledged_at?: string;
+  acknowledged_by_user_id?: string;
+  active: boolean;
+  resolved_at?: string;
+}
+
+export interface EmergencyStop {
+  robot_id: string;
+  state: "NORMAL" | "STOP_REQUESTED" | "STOPPED" | "RESET_REQUESTED" | "FAILED";
+  latched: boolean;
+  pending_command_id?: string;
+  failure_detail?: string;
+  activated_at?: string;
+  updated_at: string;
 }
 
 export interface TaskHistoryEntry {

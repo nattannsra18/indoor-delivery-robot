@@ -24,6 +24,7 @@ export default function WorkflowControls() {
     advanceRobotWorkflow,
     recoverRobot,
     backendOnline
+    ,emergencyStop
   } = useDeliveryApi();
 
   const [busy, setBusy] = useState(false);
@@ -104,6 +105,7 @@ export default function WorkflowControls() {
               busy ||
               !backendOnline ||
               !robot.online
+              || emergencyStop?.latched
             }
             className="min-h-11 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -123,6 +125,8 @@ export default function WorkflowControls() {
             Bridge connection.
           </span>
         )}
+
+        {emergencyStop?.latched && <span className="rounded-xl bg-red-100 px-4 py-3 text-sm font-bold text-red-800">Motion controls disabled while Emergency Stop is latched.</span>}
 
         {robot.state === "ERROR" && robot.online && (
           <button

@@ -1,11 +1,32 @@
-import {
+import type {
+  Alert,
   DeliveryTask,
+  EmergencyStop,
   OccupancyGridMap,
   Robot,
   Station,
   TaskHistoryEntry,
-  TaskStatus
+  TaskStatus,
+  UserIdentity
 } from "@/types";
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly detail: string;
+
+  constructor(status: number, detail: string) {
+    super(detail);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+let unauthorizedHandler: (() => void) | undefined;
+
+export function setUnauthorizedHandler(handler: (() => void) | undefined) {
+  unauthorizedHandler = handler;
+}
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -37,6 +58,7 @@ type ApiDeliveryTask = {
   started_at: string | null;
   completed_at: string | null;
   progress: number;
+  owner_id: string | null;
 };
 
 type ApiTaskHistoryEntry = {
@@ -107,7 +129,8 @@ function toTask(task: ApiDeliveryTask): DeliveryTask {
     createdAt: formatCreatedAt(task.created_at),
     startedAt: task.started_at ?? undefined,
     completedAt: task.completed_at ?? undefined,
-    progress: task.progress
+    progress: task.progress,
+    ownerId: task.owner_id ?? undefined
   };
 }
 
@@ -133,7 +156,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers,
-    cache: "no-store"
+    cache: "no-store",
+    credentials: "include"
   });
 
   if (!response.ok) {
@@ -148,7 +172,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // Keep HTTP status if the response is not JSON.
     }
-    throw new Error(detail);
+    const error = new ApiError(response.status, detail);
+    if (response.status === 401) unauthorizedHandler?.();
+    throw error;
   }
 
   if (response.status === 204) {
@@ -156,6 +182,44 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+export function login(username: string, password: string): Promise<UserIdentity> {
+  return request<UserIdentity>("/api/auth/login", {
+    method: "POST", body: JSON.stringify({ username, password })
+  });
+}
+
+export function logout(): Promise<void> {
+  return request<void>("/api/auth/logout", { method: "POST" });
+}
+
+export function getCurrentUser(): Promise<UserIdentity> {
+  return request<UserIdentity>("/api/auth/me");
+}
+
+export function getActiveAlerts(): Promise<Alert[]> {
+  return request<Alert[]>("/api/alerts/active");
+}
+
+export function acknowledgeAlert(alertId: string): Promise<Alert> {
+  return request<Alert>(`/api/alerts/${alertId}/acknowledge`, { method: "POST" });
+}
+
+export function resolveAlert(alertId: string): Promise<Alert> {
+  return request<Alert>(`/api/alerts/${alertId}/resolve`, { method: "POST" });
+}
+
+export function getEmergencyStop(robotId: string): Promise<EmergencyStop> {
+  return request<EmergencyStop>(`/api/robots/${robotId}/emergency-stop`);
+}
+
+export function activateEmergencyStop(robotId: string): Promise<EmergencyStop> {
+  return request<EmergencyStop>(`/api/robots/${robotId}/emergency-stop`, { method: "POST" });
+}
+
+export function resetEmergencyStop(robotId: string): Promise<EmergencyStop> {
+  return request<EmergencyStop>(`/api/robots/${robotId}/emergency-stop/reset`, { method: "POST" });
 }
 
 export async function getOverview() {

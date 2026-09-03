@@ -217,8 +217,10 @@ class DeliveryService:
         self.db.commit()
 
     # Tasks
-    def list_tasks(self, task_status: TaskStatus | None = None) -> list[DeliveryTaskORM]:
-        return self.repo.list_tasks(task_status)
+    def list_tasks(
+        self, task_status: TaskStatus | None = None, owner_id: str | None = None
+    ) -> list[DeliveryTaskORM]:
+        return self.repo.list_tasks(task_status, owner_id)
 
     def get_task(self, task_id: str) -> DeliveryTaskORM:
         return self._task_or_404(task_id)
@@ -235,6 +237,9 @@ class DeliveryService:
         task: DeliveryTaskORM,
     ) -> dict | None:
         if task.robot_id is None:
+            return None
+        from .emergency_service import EmergencyStopService
+        if EmergencyStopService(self.db).is_latched(task.robot_id):
             return None
 
         if task.status == TaskStatus.GOING_TO_PICKUP:
@@ -385,7 +390,7 @@ class DeliveryService:
         self.db.refresh(task)
         return task
 
-    def create_task(self, payload: DeliveryTaskCreate) -> DeliveryTaskORM:
+    def create_task(self, payload: DeliveryTaskCreate, owner_id: str | None = None) -> DeliveryTaskORM:
         self.get_station(payload.pickup_station_id)
         self.get_station(payload.destination_station_id)
         robot = self._robot_or_404(lock=True)
@@ -397,6 +402,7 @@ class DeliveryService:
             status=TaskStatus.QUEUED,
             created_at=utc_now(),
             progress=0,
+            owner_id=owner_id,
         )
         self.repo.add_task(task)
         self._log_event(
@@ -415,11 +421,13 @@ class DeliveryService:
         return task
 
     def _robot_available(self, robot: RobotORM) -> bool:
+        from .emergency_service import EmergencyStopService
         return (
             robot.online
             and robot.state == RobotState.IDLE
             and robot.current_task_id is None
             and self.repo.active_task_for_robot(robot.id, ACTIVE_STATUSES) is None
+            and not EmergencyStopService(self.db).is_latched(robot.id)
         )
 
     def _assign_task(self, task: DeliveryTaskORM, robot: RobotORM) -> DeliveryTaskORM:
@@ -623,15 +631,17 @@ class DeliveryService:
         self.db.refresh(task)
         return task
 
-    def overview(self) -> DashboardOverview:
+    def overview(self, owner_id: str | None = None) -> DashboardOverview:
         robot = self._robot_or_404()
         active = self.active_task()
+        if active is not None and owner_id is not None and active.owner_id != owner_id:
+            active = None
         return DashboardOverview(
             robot=Robot.model_validate(robot),
             active_task=DeliveryTask.model_validate(active) if active else None,
-            queued_count=self.repo.count_tasks(TaskStatus.QUEUED),
-            completed_count=self.repo.count_tasks(TaskStatus.COMPLETED),
-            failed_count=self.repo.count_tasks(TaskStatus.FAILED),
+            queued_count=self.repo.count_tasks(TaskStatus.QUEUED, owner_id),
+            completed_count=self.repo.count_tasks(TaskStatus.COMPLETED, owner_id),
+            failed_count=self.repo.count_tasks(TaskStatus.FAILED, owner_id),
         )
 
     def reset_demo(self) -> DashboardOverview:

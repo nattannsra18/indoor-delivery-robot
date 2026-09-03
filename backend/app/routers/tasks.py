@@ -24,6 +24,9 @@ from ..models import (
     TaskStatus,
 )
 from ..service import DeliveryService
+from ..auth import require_user
+from ..db_models import DeliveryTaskORM, UserORM
+from ..models import UserRole
 
 router = APIRouter(
     prefix="/api/tasks",
@@ -38,6 +41,11 @@ OPERATOR_EVENTS = frozenset(
 )
 
 
+def authorize_task(user: UserORM, task: DeliveryTaskORM) -> None:
+    if user.role != UserRole.ADMIN and task.owner_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Task access denied")
+
+
 @router.get("", response_model=list[DeliveryTask])
 def list_tasks(
     task_status: TaskStatus | None = Query(
@@ -45,8 +53,9 @@ def list_tasks(
         alias="status",
     ),
     service: DeliveryService = Depends(get_service),
+    user: UserORM = Depends(require_user),
 ):
-    return service.list_tasks(task_status)
+    return service.list_tasks(task_status, None if user.role == UserRole.ADMIN else user.id)
 
 
 @router.get(
@@ -56,8 +65,11 @@ def list_tasks(
 def get_task(
     task_id: str,
     service: DeliveryService = Depends(get_service),
+    user: UserORM = Depends(require_user),
 ):
-    return service.get_task(task_id)
+    task = service.get_task(task_id)
+    authorize_task(user, task)
+    return task
 
 
 @router.get(
@@ -67,7 +79,9 @@ def get_task(
 def get_task_history(
     task_id: str,
     service: DeliveryService = Depends(get_service),
+    user: UserORM = Depends(require_user),
 ):
+    authorize_task(user, service.get_task(task_id))
     return service.get_task_history(task_id)
 
 
@@ -80,8 +94,9 @@ def create_task(
     payload: DeliveryTaskCreate,
     background_tasks: BackgroundTasks,
     service: DeliveryService = Depends(get_service),
+    user: UserORM = Depends(require_user),
 ):
-    task = service.create_task(payload)
+    task = service.create_task(payload, owner_id=user.id)
 
     schedule_navigation_command(
         background_tasks,
@@ -101,6 +116,7 @@ def apply_operator_event(
     payload: TaskEventRequest,
     background_tasks: BackgroundTasks,
     service: DeliveryService = Depends(get_service),
+    user: UserORM = Depends(require_user),
 ):
     if payload.event not in OPERATOR_EVENTS:
         raise HTTPException(
@@ -111,6 +127,7 @@ def apply_operator_event(
             ),
         )
 
+    authorize_task(user, service.get_task(task_id))
     task = service.apply_task_event(
         task_id,
         payload.event,
@@ -143,7 +160,9 @@ def cancel_task(
     service: DeliveryService = Depends(
         get_service
     ),
+    user: UserORM = Depends(require_user),
 ):
+    authorize_task(user, service.get_task(task_id))
     task = service.cancel_task(task_id)
 
     if task.robot_id is not None:
@@ -171,7 +190,9 @@ def retry_task(
     task_id: str,
     background_tasks: BackgroundTasks,
     service: DeliveryService = Depends(get_service),
+    user: UserORM = Depends(require_user),
 ):
+    authorize_task(user, service.get_task(task_id))
     task = service.retry_task(task_id)
 
     schedule_navigation_command(

@@ -12,7 +12,9 @@ from sqlalchemy import create_engine, delete
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base, get_db
-from app.db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM
+from app.db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM, SessionORM, UserORM
+from app.auth import hash_password
+from app.models import UserRole
 from app.main import app
 from app.routers.robot_ws import robot_websocket
 from app.seed import seed_database
@@ -70,12 +72,19 @@ class StubWebSocket:
 
 def setup_function():
     with TestingSessionLocal() as db:
+        db.execute(delete(SessionORM))
         db.execute(delete(TaskEventORM))
         db.execute(delete(DeliveryTaskORM))
         db.execute(delete(RobotORM))
         db.execute(delete(StationORM))
         db.commit()
         seed_database(db)
+        user = db.query(UserORM).filter_by(username="test-admin").one_or_none()
+        if user is None:
+            db.add(UserORM(id="test-admin-id", username="test-admin", password_hash=hash_password("test-password", iterations=1000), role=UserRole.ADMIN))
+            db.commit()
+    response = client.post("/api/auth/login", json={"username": "test-admin", "password": "test-password"})
+    assert response.status_code == 200
 
 
 def create_task(pickup="A", destination="C"):
@@ -589,7 +598,7 @@ def test_robot_diagnostics_broadcasts_dashboard_update(
     )
 
     async def capture_dashboard_event(
-        message: dict,
+        message: dict, **_kwargs,
     ) -> None:
         dashboard_events.append(message)
 
@@ -1015,7 +1024,7 @@ def test_navigation_feedback_broadcasts_dashboard_update(
     dashboard_events: list[dict] = []
 
     async def capture_dashboard_event(
-        message: dict,
+        message: dict, **_kwargs,
     ) -> None:
         dashboard_events.append(message)
 

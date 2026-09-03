@@ -4,17 +4,19 @@ from ..command_dispatch import schedule_navigation_path_clear
 from ..dependencies import get_service
 from ..models import Robot
 from ..service import DeliveryService
+from ..auth import require_admin, require_user
+from ..db_models import UserORM
 
 router = APIRouter(prefix="/api/robots", tags=["robots"])
 
 
 @router.get("", response_model=list[Robot])
-def list_robots(service: DeliveryService = Depends(get_service)):
+def list_robots(service: DeliveryService = Depends(get_service), _: UserORM = Depends(require_user)):
     return service.list_robots()
 
 
 @router.get("/{robot_id}", response_model=Robot)
-def get_robot(robot_id: str, service: DeliveryService = Depends(get_service)):
+def get_robot(robot_id: str, service: DeliveryService = Depends(get_service), _: UserORM = Depends(require_user)):
     return service.get_robot(robot_id)
 
 
@@ -23,6 +25,7 @@ def set_offline(
     robot_id: str,
     background_tasks: BackgroundTasks,
     service: DeliveryService = Depends(get_service),
+    _: UserORM = Depends(require_admin),
 ):
     robot = service.set_robot_offline(robot_id)
     schedule_navigation_path_clear(
@@ -34,10 +37,10 @@ def set_offline(
 
 
 @router.post("/{robot_id}/online", response_model=Robot)
-def set_online(robot_id: str, service: DeliveryService = Depends(get_service)):
+def set_online(robot_id: str, service: DeliveryService = Depends(get_service), _: UserORM = Depends(require_admin)):
     return service.set_robot_online(robot_id)
 
 
 @router.post("/{robot_id}/recover", response_model=Robot)
-def recover_robot(robot_id: str, service: DeliveryService = Depends(get_service)):
+def recover_robot(robot_id: str, service: DeliveryService = Depends(get_service), _: UserORM = Depends(require_admin)):
     return service.recover_robot(robot_id)

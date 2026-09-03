@@ -46,10 +46,14 @@ class DeliveryRepository:
         return self.db.scalar(stmt)
 
     # Tasks
-    def list_tasks(self, task_status: TaskStatus | None = None) -> list[DeliveryTaskORM]:
+    def list_tasks(
+        self, task_status: TaskStatus | None = None, owner_id: str | None = None
+    ) -> list[DeliveryTaskORM]:
         stmt = select(DeliveryTaskORM)
         if task_status is not None:
             stmt = stmt.where(DeliveryTaskORM.status == task_status)
+        if owner_id is not None:
+            stmt = stmt.where(DeliveryTaskORM.owner_id == owner_id)
         stmt = stmt.order_by(DeliveryTaskORM.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
@@ -106,10 +110,12 @@ class DeliveryRepository:
         )
         return self.db.scalar(stmt)
 
-    def count_tasks(self, task_status: TaskStatus) -> int:
+    def count_tasks(self, task_status: TaskStatus, owner_id: str | None = None) -> int:
         stmt = select(func.count()).select_from(DeliveryTaskORM).where(
             DeliveryTaskORM.status == task_status
         )
+        if owner_id is not None:
+            stmt = stmt.where(DeliveryTaskORM.owner_id == owner_id)
         return int(self.db.scalar(stmt) or 0)
 
     def next_task_id(self) -> str:

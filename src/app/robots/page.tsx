@@ -3,6 +3,7 @@
 import PageHeader from "@/components/PageHeader";
 import WorkflowControls from "@/components/WorkflowControls";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
+import EmergencyStopControl from "@/components/EmergencyStopControl";
 
 export default function RobotStatusPage() {
   const {
@@ -20,6 +21,8 @@ export default function RobotStatusPage() {
         title="Robot Status"
         description="Live robot connectivity, AMCL pose and mission status from the ROS 2 Web Bridge."
       />
+
+      <div className="mb-6"><EmergencyStopControl /></div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">

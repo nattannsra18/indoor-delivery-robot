@@ -47,6 +47,38 @@ class EventSource(str, Enum):
     SYSTEM = "SYSTEM"
 
 
+class UserRole(str, Enum):
+    ADMIN = "ADMIN"
+    USER = "USER"
+
+
+class AlertSeverity(str, Enum):
+    INFO = "INFO"
+    WARNING = "WARNING"
+    CRITICAL = "CRITICAL"
+
+
+class EmergencyStopState(str, Enum):
+    NORMAL = "NORMAL"
+    STOP_REQUESTED = "STOP_REQUESTED"
+    STOPPED = "STOPPED"
+    RESET_REQUESTED = "RESET_REQUESTED"
+    FAILED = "FAILED"
+
+
+class UserIdentity(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    username: str
+    role: UserRole
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=1, max_length=1024)
+
+
 class Station(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -79,6 +111,18 @@ class Robot(BaseModel):
     yaw: float
     current_task_id: Optional[str] = None
     last_seen: str
+
+
+class EmergencyStop(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    robot_id: str
+    state: EmergencyStopState
+    latched: bool
+    pending_command_id: Optional[str] = None
+    failure_detail: Optional[str] = None
+    activated_at: Optional[datetime] = None
+    updated_at: datetime
 
 class RobotTelemetry(BaseModel):
     model_config = ConfigDict(
@@ -376,6 +420,27 @@ class DeliveryTask(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     progress: int = Field(ge=0, le=100)
+    owner_id: Optional[str] = None
+
+
+class Alert(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    deduplication_key: str
+    robot_id: Optional[str] = None
+    severity: AlertSeverity
+    title: str
+    message: str
+    source: str
+    first_occurrence_at: datetime
+    latest_occurrence_at: datetime
+    occurrence_count: int
+    acknowledged: bool
+    acknowledged_at: Optional[datetime] = None
+    acknowledged_by_user_id: Optional[str] = None
+    active: bool
+    resolved_at: Optional[datetime] = None
 
 
 class DeliveryTaskCreate(BaseModel):

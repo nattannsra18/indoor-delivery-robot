@@ -78,3 +78,23 @@ http://localhost:3000
 ```
 
 See `PHASE_4_GUIDE.md` for the full workflow test.
+
+## Step 9 startup
+
+Configure the Step 9 variables documented in `backend/.env.example`, then run:
+
+```bash
+docker compose up -d postgres
+cd backend && source .venv/bin/activate
+python3 -m uvicorn app.main:app --reload --port 8000
+```
+
+In another terminal:
+
+```bash
+cd ~/indoor-delivery-robot
+npm run dev
+```
+
+Sign in at `http://localhost:3000/login`. Browser authentication uses only an
+HttpOnly server session cookie; no token is stored in browser JavaScript.

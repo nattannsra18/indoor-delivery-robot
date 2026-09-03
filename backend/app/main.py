@@ -8,6 +8,9 @@ from .database import Base, SessionLocal, engine
 from .routers import (
     dashboard,
     dashboard_ws,
+    auth,
+    alerts,
+    emergency,
     health,
     maps,
     robot_ws,
@@ -16,14 +19,18 @@ from .routers import (
     tasks,
 )
 from .seed import seed_database
+from .auth import bootstrap_admin
+from .schema import apply_compatibility_migrations
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
+    apply_compatibility_migrations(engine)
 
     with SessionLocal() as db:
         seed_database(db)
+        bootstrap_admin(db)
 
     yield
 
@@ -52,6 +59,9 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(auth.router)
+app.include_router(alerts.router)
+app.include_router(emergency.router)
 app.include_router(dashboard.router)
 app.include_router(stations.router)
 app.include_router(robots.router)

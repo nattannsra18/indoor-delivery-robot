@@ -12,11 +12,17 @@ import {
 } from "react";
 import * as api from "@/lib/api";
 import {
+  classifyAuthenticatedFailure,
+  shouldReconnectDashboardWebSocket
+} from "@/lib/authLifecycle";
+import { useAuth } from "@/context/AuthContext";
+import {
   framesAreCompatible,
   parseNavigationPath,
   parseNavigationPathClear
 } from "@/lib/navigationPath";
 import {
+  EmergencyStop,
   DeliveryTask,
   DiagnosticLevel,
   DiagnosticStatus,
@@ -93,6 +99,7 @@ type ApiDeliveryContextValue = {
   loading: boolean;
   backendOnline: boolean;
   error: string | null;
+  emergencyStop?: EmergencyStop;
   createTask: (
     pickupStationId: string,
     destinationStationId: string
@@ -228,6 +235,7 @@ export function ApiDeliveryProvider({
 }: {
   children: ReactNode;
 }) {
+  const { loseSession } = useAuth();
   const [occupancyMap, setOccupancyMap] =
     useState<OccupancyGridMap | undefined>();
   const [
@@ -248,6 +256,7 @@ export function ApiDeliveryProvider({
   const [loading, setLoading] = useState(true);
   const [backendOnline, setBackendOnline] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emergencyStop, setEmergencyStop] = useState<EmergencyStop>();
   const navigationPathRef = useRef<NavigationPath | undefined>(
     undefined
   );
@@ -259,6 +268,14 @@ export function ApiDeliveryProvider({
   );
   const robotRef = useRef<Robot>(EMPTY_ROBOT);
   const activeTaskRef = useRef<DeliveryTask | undefined>(undefined);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const activeTask = useMemo(
     () =>
@@ -270,32 +287,37 @@ export function ApiDeliveryProvider({
 
   const refreshAll = useCallback(async () => {
     try {
-      const [overview, stationData, taskData] = await Promise.all([
+      const [overview, stationData, taskData, stopState] = await Promise.all([
         api.getOverview(),
         api.getStations(),
-        api.getTasks()
+        api.getTasks(),
+        api.getEmergencyStop("robot01")
       ]);
+      if (!mountedRef.current) return;
       setRobot(overview.robot);
       setStations(stationData);
       setTasks(taskData);
+      setEmergencyStop(stopState);
       setBackendOnline(true);
       setError(null);
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Unable to connect to FastAPI";
-      setBackendOnline(false);
+      if (!mountedRef.current) return;
+      const failure = classifyAuthenticatedFailure(err);
+      if (failure.kind === "unauthorized") {
+        loseSession();
+        return;
+      }
+      setBackendOnline(failure.kind === "http");
       setDiagnostics(undefined);
       navigationPathRef.current = undefined;
       pendingNavigationPathRef.current = undefined;
       setNavigationPath(undefined);
       setNavigationPathStatus("unavailable");
-      setError(message);
+      setError(failure.message);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  }, []);
+  }, [loseSession]);
 
   useEffect(() => {
     occupancyMapRef.current = occupancyMap;
@@ -362,9 +384,10 @@ export function ApiDeliveryProvider({
 
   const refreshMap = useCallback(async () => {
     try {
-      setOccupancyMap(await api.getMap());
+      const map = await api.getMap();
+      if (mountedRef.current) setOccupancyMap(map);
     } catch {
-      setOccupancyMap(undefined);
+      if (mountedRef.current) setOccupancyMap(undefined);
     }
   }, []);
 
@@ -390,6 +413,7 @@ export function ApiDeliveryProvider({
       );
 
       websocket.onmessage = (event) => {
+        if (stopped) return;
         try {
           const message = JSON.parse(
             event.data
@@ -516,14 +540,23 @@ export function ApiDeliveryProvider({
             if (nextDiagnostics) {
               setDiagnostics(nextDiagnostics);
             }
+          } else if (message.type === "emergency_stop_changed") {
+            const value = (message as { emergency_stop?: EmergencyStop }).emergency_stop;
+            if (value) setEmergencyStop(value);
           }
         } catch {
           // Ignore malformed WebSocket messages.
         }
       };
 
-      websocket.onclose = () => {
+      websocket.onclose = (event) => {
         websocket = null;
+        if (stopped) return;
+        if (event.code === 1008) {
+          stopped = true;
+          loseSession();
+          return;
+        }
         setNavigationFeedback(undefined);
         setDiagnostics(undefined);
         navigationPathRef.current = undefined;
@@ -531,7 +564,7 @@ export function ApiDeliveryProvider({
         setNavigationPath(undefined);
         setNavigationPathStatus("unavailable");
 
-        if (!stopped) {
+        if (shouldReconnectDashboardWebSocket(stopped, event.code)) {
           reconnectTimer = window.setTimeout(
             connect,
             3000
@@ -551,7 +584,7 @@ export function ApiDeliveryProvider({
 
       websocket?.close();
     };
-  }, [refreshAll]);
+  }, [loseSession, refreshAll]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -737,6 +770,7 @@ export function ApiDeliveryProvider({
       loading,
       backendOnline,
       error,
+      emergencyStop,
       createTask,
       addStation,
       removeStation,
@@ -762,6 +796,7 @@ export function ApiDeliveryProvider({
       loading,
       backendOnline,
       error,
+      emergencyStop,
       createTask,
       addStation,
       removeStation,

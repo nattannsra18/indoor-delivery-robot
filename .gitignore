@@ -13,3 +13,6 @@ backend/**/__pycache__/
 backend/.pytest_cache/
 *.pyc
 backend/tests/*.db
+
+# TypeScript incremental build cache
+*.tsbuildinfo

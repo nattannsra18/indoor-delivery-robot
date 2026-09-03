@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+from ..auth import require_user
 
 from ..map_store import map_store
 from ..models import MapSnapshot
 
 router = APIRouter(
     prefix="/api/map",
-    tags=["map"],
+    tags=["map"], dependencies=[Depends(require_user)],
 )
 
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
+import { useAuth } from "@/context/AuthContext";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: "▦" },
@@ -15,6 +16,7 @@ const navItems = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { backendOnline, loading } = useDeliveryApi();
+  const { user, logout } = useAuth();
 
   return (
     <aside className="border-b border-slate-200 bg-slate-950 text-white lg:min-h-screen lg:w-64 lg:border-b-0 lg:border-r lg:border-slate-800">
@@ -43,6 +45,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="hidden px-5 py-6 lg:block">
+        <div className="mb-3 flex items-center justify-between text-xs text-slate-300"><span>{user?.username} · {user?.role}</span><button onClick={() => void logout()} className="rounded border border-slate-700 px-2 py-1">Logout</button></div>
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
           <div className="mb-2 flex items-center gap-2">
             <span className={`h-2.5 w-2.5 rounded-full ${loading ? "bg-amber-400" : backendOnline ? "bg-emerald-400" : "bg-red-400"}`} />

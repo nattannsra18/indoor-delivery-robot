@@ -14,8 +14,11 @@ from app.db_models import (
     RobotORM,
     StationORM,
     TaskEventORM,
+    SessionORM,
+    UserORM,
 )
-from app.models import DeliveryTaskCreate, NavigationPathMessage
+from app.models import DeliveryTaskCreate, NavigationPathMessage, UserRole
+from app.auth import create_session, hash_password, SESSION_COOKIE_NAME
 from app.navigation_path_store import navigation_path_store
 from app.routers.dashboard_ws import dashboard_websocket
 from app.routers.robot_ws import robot_websocket
@@ -37,6 +40,8 @@ class StubWebSocket:
         self.messages = iter(messages)
         self.sent: list[dict] = []
         self.accepted = False
+        self.headers = {}
+        self.cookies = {}
 
     async def accept(self) -> None:
         self.accepted = True
@@ -56,11 +61,15 @@ def reset_state():
     navigation_path_store.clear_all()
     with Session() as db:
         db.execute(delete(TaskEventORM))
+        db.execute(delete(SessionORM))
         db.execute(delete(DeliveryTaskORM))
         db.execute(delete(RobotORM))
         db.execute(delete(StationORM))
         db.commit()
         seed_database(db)
+        if db.get(UserORM, "admin-id") is None:
+            db.add(UserORM(id="admin-id", username="admin", password_hash=hash_password("pw", iterations=1000), role=UserRole.ADMIN))
+            db.commit()
     yield
     navigation_path_store.clear_all()
 
@@ -96,7 +105,7 @@ def path_message(command, poses=None):
 def run_robot(messages, monkeypatch):
     events: list[dict] = []
 
-    async def capture(message: dict) -> None:
+    async def capture(message: dict, **_kwargs) -> None:
         events.append(message)
 
     monkeypatch.setattr(
@@ -269,7 +278,11 @@ def test_browser_cannot_inject_navigation_path():
             "poses": [{"x": 0.0, "y": 0.0}],
         }
     ])
-    asyncio.run(dashboard_websocket(websocket))
+    with Session() as db:
+        user = db.get(UserORM, "admin-id")
+        token, _ = create_session(db, user)
+        websocket.cookies[SESSION_COOKIE_NAME] = token
+        asyncio.run(dashboard_websocket(websocket, db))
     assert websocket.sent[0]["type"] == "dashboard_connection_ack"
     assert websocket.sent[1]["type"] == "error"
     assert websocket.sent[1]["code"] == "UNSUPPORTED_MESSAGE"

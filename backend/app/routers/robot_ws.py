@@ -31,6 +31,11 @@ from ..service import DeliveryService
 from ..websocket_manager import robot_connection_manager
 from ..map_store import map_store
 from ..navigation_path_store import navigation_path_store
+from ..alert_service import AlertService
+from ..config import security_settings
+from ..emergency_service import EmergencyStopService
+from ..models import Alert, AlertSeverity, EmergencyStop
+from ..auth import require_admin, robot_authorization_valid
 
 router = APIRouter(tags=["robot-websocket"])
 
@@ -126,7 +131,7 @@ async def broadcast_path_clear(
     )
 
 
-@router.get("/api/robot-connections")
+@router.get("/api/robot-connections", dependencies=[Depends(require_admin)])
 def list_robot_connections() -> dict[str, Any]:
     robot_ids = (
         robot_connection_manager.connected_robot_ids()
@@ -145,6 +150,15 @@ async def robot_websocket(
     db: Session = Depends(get_db),
 ) -> None:
     service = DeliveryService(db)
+    settings = security_settings()
+    authorization = websocket.headers.get("authorization", "")
+    if not robot_authorization_valid(
+        authorization,
+        settings.robot_ws_token,
+        settings.robot_ws_auth_required,
+    ):
+        await websocket.close(code=1008, reason="Robot authentication failed")
+        return
 
     try:
         robot = service.get_robot(robot_id)
@@ -170,6 +184,17 @@ async def robot_websocket(
         }
     )
 
+    offline_alert = AlertService(db).resolve_key(f"robot-offline:{robot_id}")
+    if offline_alert is not None:
+        await browser_connection_manager.broadcast_json(
+            {"type": "alert_changed", "event": "resolved", "alert": Alert.model_validate(offline_alert).model_dump(mode="json")},
+            admin_only=True,
+        )
+
+    emergency_command = EmergencyStopService(db).reconnect_command(robot_id)
+    if emergency_command is not None:
+        await websocket.send_json(emergency_command)
+
     # A cancellation request has priority over
     # resending an active navigation command.
     pending_cancel = (
@@ -178,7 +203,9 @@ async def robot_websocket(
         )
     )
 
-    if pending_cancel is not None:
+    if emergency_command is not None:
+        pass
+    elif pending_cancel is not None:
         cancel_command = (
             service.build_navigation_cancel_command(
                 pending_cancel
@@ -299,6 +326,28 @@ async def robot_websocket(
                         "server_time": current_utc_time(),
                     }
                 )
+
+                alerts = AlertService(db)
+                for diagnostic in diagnostics.statuses:
+                    key = f"diagnostic:{robot_id}:{diagnostic.name}"
+                    if diagnostic.level == "OK":
+                        alert = alerts.resolve_key(key)
+                        event = "resolved"
+                    else:
+                        severity_value = (
+                            AlertSeverity.CRITICAL if diagnostic.level == "ERROR"
+                            else AlertSeverity.WARNING
+                        )
+                        alert, event = alerts.upsert(
+                            key, severity_value, f"{diagnostic.name}: {diagnostic.level}",
+                            diagnostic.message or "Diagnostic condition requires attention",
+                            "DIAGNOSTIC", robot_id,
+                        )
+                    if alert is not None:
+                        await browser_connection_manager.broadcast_json(
+                            {"type": "alert_changed", "event": event, "alert": Alert.model_validate(alert).model_dump(mode="json")},
+                            admin_only=True,
+                        )
 
             elif message_type == "telemetry":
                 telemetry_data = message.get("data")
@@ -473,9 +522,9 @@ async def robot_websocket(
                             exclude={"type"}
                         ),
                         "server_time": current_utc_time(),
-                    }
+                    },
+                    owner_id=service.get_task(navigation_path.task_id).owner_id,
                 )
-
             elif message_type == "navigation_path_clear":
                 try:
                     path_clear = (
@@ -642,7 +691,8 @@ async def robot_websocket(
                             "server_time": (
                                 current_utc_time()
                             ),
-                        }
+                        },
+                        owner_id=service.get_task(feedback.task_id).owner_id,
                     )
                 )
 
@@ -786,8 +836,19 @@ async def robot_websocket(
                         "server_time": (
                             current_utc_time()
                         ),
-                    }
+                    },
+                    owner_id=updated_task.owner_id,
                 )
+                if navigation.status != "succeeded":
+                    alert, event = AlertService(db).upsert(
+                        f"navigation-failed:{robot_id}:{navigation.task_id}", AlertSeverity.CRITICAL,
+                        "Nav2 navigation aborted", navigation.detail or "Navigation did not complete",
+                        "NAVIGATION", robot_id,
+                    )
+                    await browser_connection_manager.broadcast_json(
+                        {"type": "alert_changed", "event": event, "alert": Alert.model_validate(alert).model_dump(mode="json")},
+                        admin_only=True,
+                    )
             elif message_type == "navigation_cancelled":
                 cancel_id = message.get(
                     "cancel_id"
@@ -931,6 +992,25 @@ async def robot_websocket(
                             next_command
                         )
 
+            elif message_type == "emergency_ack":
+                command_id = message.get("command_id")
+                command = message.get("command")
+                accepted = message.get("accepted")
+                if not isinstance(command_id, str) or command not in {"emergency_stop", "emergency_stop_reset"} or not isinstance(accepted, bool):
+                    await send_error(websocket, "INVALID_EMERGENCY_ACK", "Invalid Emergency Stop acknowledgement")
+                    continue
+                state, matched = EmergencyStopService(db).acknowledge(
+                    robot_id, command_id, command, accepted,
+                    str(message.get("detail")) if message.get("detail") else None,
+                )
+                if not matched:
+                    await send_error(websocket, "STALE_EMERGENCY_ACK", "Acknowledgement does not match the pending command")
+                    continue
+                await websocket.send_json({"type": "emergency_ack_received", "command_id": command_id, "accepted": True, "server_time": current_utc_time()})
+                await browser_connection_manager.broadcast_json(
+                    {"type": "emergency_stop_changed", "emergency_stop": EmergencyStop.model_validate(state).model_dump(mode="json")}
+                )
+
             elif message_type == "command_ack":
                 command_id = message.get(
                     "command_id"
@@ -997,6 +1077,14 @@ async def robot_websocket(
                 robot_id,
                 "robot_disconnect",
                 remove_command=False,
+            )
+            alert, event = AlertService(db).upsert(
+                f"robot-offline:{robot_id}", AlertSeverity.CRITICAL, "Robot disconnected",
+                "Robot WebSocket connection was lost.", "CONNECTION", robot_id,
+            )
+            await browser_connection_manager.broadcast_json(
+                {"type": "alert_changed", "event": event, "alert": Alert.model_validate(alert).model_dump(mode="json")},
+                admin_only=True,
             )
 
     except Exception:

@@ -10,7 +10,7 @@ import { Station } from "@/types";
 export default function CreateDeliveryPage() {
   const router = useRouter();
   const {
-    stations, createTask, robot, backendOnline, loading, occupancyMap
+    stations, createTask, robot, backendOnline, loading, occupancyMap, emergencyStop
   } = useDeliveryApi();
   const [pickup, setPickup] = useState("");
   const [destination, setDestination] = useState("");
@@ -26,7 +26,7 @@ export default function CreateDeliveryPage() {
     setDestination((current) => current || stations[2]?.id || stations[1]?.id || "");
   }, [stations]);
 
-  const valid = Boolean(pickup && destination && pickup !== destination && backendOnline);
+  const valid = Boolean(pickup && destination && pickup !== destination && backendOnline && !emergencyStop?.latched);
   const pickupStation = useMemo(
     () => stations.find((station) => station.id === pickup),
     [pickup, stations]
@@ -126,6 +126,7 @@ export default function CreateDeliveryPage() {
             FastAPI is offline. Existing station controls are disabled until it reconnects.
           </div>
         )}
+        {emergencyStop?.latched && <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">New motion is disabled while Emergency Stop is latched.</div>}
         {!occupancyMap && backendOnline && (
           <div className="mb-3 rounded-xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             The ROS map is not available. Use the station dropdowns below as a fallback.

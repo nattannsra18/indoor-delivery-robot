@@ -7,6 +7,7 @@ import StatusBadge from "@/components/StatusBadge";
 import WorkflowControls from "@/components/WorkflowControls";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import NavigationMetrics from "@/components/NavigationMetrics";
+import EmergencyStopControl from "@/components/EmergencyStopControl";
 
 export default function DashboardPage() {
   const {
@@ -27,6 +28,8 @@ export default function DashboardPage() {
         title="Dashboard"
         description="Validated delivery queue, retry and recovery controls, and persistent task history."
       />
+
+      <EmergencyStopControl />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
