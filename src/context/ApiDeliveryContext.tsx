@@ -15,6 +15,7 @@ import {
   classifyAuthenticatedFailure,
   shouldReconnectDashboardWebSocket
 } from "@/lib/authLifecycle";
+import { dashboardRequestsForRole } from "@/lib/roleDashboard";
 import { useAuth } from "@/context/AuthContext";
 import {
   framesAreCompatible,
@@ -235,7 +236,7 @@ export function ApiDeliveryProvider({
 }: {
   children: ReactNode;
 }) {
-  const { loseSession } = useAuth();
+  const { loseSession, user } = useAuth();
   const [occupancyMap, setOccupancyMap] =
     useState<OccupancyGridMap | undefined>();
   const [
@@ -287,12 +288,15 @@ export function ApiDeliveryProvider({
 
   const refreshAll = useCallback(async () => {
     try {
-      const [overview, stationData, taskData, stopState] = await Promise.all([
+      const [overview, stationData, taskData] = await Promise.all([
         api.getOverview(),
         api.getStations(),
-        api.getTasks(),
-        api.getEmergencyStop("robot01")
+        api.getTasks()
       ]);
+      const requestedData = dashboardRequestsForRole(user?.role ?? "USER");
+      const stopState = requestedData.includes("emergency-stop")
+        ? await api.getEmergencyStop("robot01")
+        : undefined;
       if (!mountedRef.current) return;
       setRobot(overview.robot);
       setStations(stationData);
@@ -317,7 +321,7 @@ export function ApiDeliveryProvider({
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [loseSession]);
+  }, [loseSession, user?.role]);
 
   useEffect(() => {
     occupancyMapRef.current = occupancyMap;
@@ -532,7 +536,8 @@ export function ApiDeliveryProvider({
               serverTime: feedbackMessage.server_time
             });
           } else if (
-            message.type === "robot_diagnostics"
+            user?.role === "ADMIN"
+            && message.type === "robot_diagnostics"
           ) {
             const nextDiagnostics =
               parseRobotDiagnostics(message);
@@ -540,7 +545,10 @@ export function ApiDeliveryProvider({
             if (nextDiagnostics) {
               setDiagnostics(nextDiagnostics);
             }
-          } else if (message.type === "emergency_stop_changed") {
+          } else if (
+            user?.role === "ADMIN"
+            && message.type === "emergency_stop_changed"
+          ) {
             const value = (message as { emergency_stop?: EmergencyStop }).emergency_stop;
             if (value) setEmergencyStop(value);
           }
@@ -584,7 +592,7 @@ export function ApiDeliveryProvider({
 
       websocket?.close();
     };
-  }, [loseSession, refreshAll]);
+  }, [loseSession, refreshAll, user?.role]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {

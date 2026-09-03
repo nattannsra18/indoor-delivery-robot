@@ -21,6 +21,7 @@ from app.auth import (
     token_digest,
     verify_password,
 )
+from app.browser_websocket_manager import BrowserConnectionManager
 from app.database import Base
 from app.db_models import (
     AlertORM,
@@ -36,7 +37,7 @@ from app.emergency_service import EmergencyStopService
 from app.models import AlertSeverity, DeliveryTaskCreate, LoginRequest, UserRole, utc_now
 from app.routers.auth import login
 from app.routers.dashboard_ws import dashboard_websocket
-from app.routers.tasks import authorize_task
+from app.routers.tasks import authorize_task, list_tasks as list_visible_tasks
 from app.seed import seed_database
 from app.service import DeliveryService
 
@@ -166,6 +167,66 @@ def test_admin_user_authorization_and_task_ownership():
         with pytest.raises(HTTPException):
             authorize_task(alice, legacy)
         authorize_task(admin, legacy)
+
+
+def test_role_task_listing_uses_server_enforced_ownership():
+    with Session() as db:
+        alice = db.get(UserORM, "alice")
+        bob = db.get(UserORM, "bob")
+        admin = db.get(UserORM, "admin")
+        service = DeliveryService(db)
+        alice_task = service.create_task(
+            DeliveryTaskCreate(pickup_station_id="A", destination_station_id="B"),
+            owner_id=alice.id,
+        )
+        bob_task = service.create_task(
+            DeliveryTaskCreate(pickup_station_id="B", destination_station_id="C"),
+            owner_id=bob.id,
+        )
+        legacy_task = service.create_task(
+            DeliveryTaskCreate(pickup_station_id="C", destination_station_id="D")
+        )
+
+        alice_ids = {
+            item.id for item in list_visible_tasks(None, service, alice)
+        }
+        admin_ids = {
+            item.id for item in list_visible_tasks(None, service, admin)
+        }
+        assert alice_ids == {alice_task.id}
+        assert {alice_task.id, bob_task.id, legacy_task.id} <= admin_ids
+
+
+def test_browser_websocket_admin_only_broadcast_filtering():
+    class Socket:
+        def __init__(self):
+            self.accepted = False
+            self.messages = []
+
+        async def accept(self):
+            self.accepted = True
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    async def exercise():
+        manager = BrowserConnectionManager()
+        admin_socket = Socket()
+        user_socket = Socket()
+        await manager.connect(admin_socket, UserRole.ADMIN, "admin")
+        await manager.connect(user_socket, UserRole.USER, "alice")
+
+        admin_message = {"type": "robot_diagnostics"}
+        await manager.broadcast_json(admin_message, admin_only=True)
+        assert admin_socket.messages == [admin_message]
+        assert user_socket.messages == []
+
+        shared_message = {"type": "workflow_updated"}
+        await manager.broadcast_json(shared_message)
+        assert admin_socket.messages == [admin_message, shared_message]
+        assert user_socket.messages == [shared_message]
+
+    asyncio.run(exercise())
 
 
 def test_alert_creation_deduplication_acknowledgement_and_resolution():

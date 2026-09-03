@@ -7,6 +7,7 @@ import { ApiDeliveryProvider, useDeliveryApi } from "@/context/ApiDeliveryContex
 import { API_BASE_URL } from "@/lib/api";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import AlertCenter from "@/components/AlertCenter";
+import { routeAllowedForRole } from "@/lib/roleDashboard";
 
 export default function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -21,9 +22,16 @@ function AuthGate({ children }: { children: ReactNode }) {
   const loginPage = pathname === "/login";
   useEffect(() => {
     if (!loading && !user && !loginPage) router.replace("/login");
+    if (
+      !loading
+      && user
+      && !loginPage
+      && !routeAllowedForRole(pathname, user.role)
+    ) router.replace("/");
     if (!loading && user && loginPage) router.replace("/");
-  }, [loading, user, loginPage, router]);
-  if (loading || (!user && !loginPage) || (user && loginPage)) {
+  }, [loading, user, loginPage, pathname, router]);
+  const routeAllowed = !user || routeAllowedForRole(pathname, user.role);
+  if (loading || (!user && !loginPage) || (user && loginPage) || !routeAllowed) {
     return <main className="grid min-h-screen place-items-center text-sm text-slate-500">Checking session…</main>;
   }
   if (loginPage) return children;
@@ -32,12 +40,13 @@ function AuthGate({ children }: { children: ReactNode }) {
 
 function ShellContent({ children }: { children: ReactNode }) {
   const { backendOnline, error, loading, refreshAll } = useDeliveryApi();
+  const { user } = useAuth();
 
   return (
     <div className="min-h-screen lg:flex">
       <Sidebar />
       <main className="min-w-0 flex-1 p-4 md:p-6 lg:p-8">
-        <AlertCenter />
+        {user?.role === "ADMIN" && <AlertCenter />}
         {!loading && !backendOnline && (
           <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800 sm:flex-row sm:items-center sm:justify-between">
             <div>

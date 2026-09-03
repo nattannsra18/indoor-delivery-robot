@@ -324,7 +324,8 @@ async def robot_websocket(
                         ],
                         "timestamp": diagnostics.timestamp,
                         "server_time": current_utc_time(),
-                    }
+                    },
+                    admin_only=True,
                 )
 
                 alerts = AlertService(db)

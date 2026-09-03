@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
+import { useAuth } from "@/context/AuthContext";
 
 const actionLabels = {
   WAITING_FOR_LOADING: "Confirm Package Loaded",
@@ -16,6 +17,7 @@ const helperText = {
 } as const;
 
 export default function WorkflowControls() {
+  const { user } = useAuth();
   const {
     activeTask,
     queuedTasks,
@@ -128,7 +130,7 @@ export default function WorkflowControls() {
 
         {emergencyStop?.latched && <span className="rounded-xl bg-red-100 px-4 py-3 text-sm font-bold text-red-800">Motion controls disabled while Emergency Stop is latched.</span>}
 
-        {robot.state === "ERROR" && robot.online && (
+        {user?.role === "ADMIN" && robot.state === "ERROR" && robot.online && (
           <button
             type="button"
             onClick={() =>

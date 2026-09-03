@@ -12,6 +12,7 @@ import StatusBadge from "@/components/StatusBadge";
 import TaskHistoryModal from "@/components/TaskHistoryModal";
 import WorkflowControls from "@/components/WorkflowControls";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
+import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api";
 import {
   buildQueueEstimates
@@ -42,6 +43,7 @@ const cancellableStatuses: TaskStatus[] = [
 ];
 
 export default function TasksPage() {
+  const { user } = useAuth();
   const {
     tasks,
     activeTask,
@@ -187,8 +189,10 @@ export default function TasksPage() {
   return (
     <>
       <PageHeader
-        title="Task Queue"
-        description="Validated delivery queue, realtime estimates, retry controls and persistent task history."
+        title={user?.role === "ADMIN" ? "All Delivery Tasks" : "My Tasks"}
+        description={user?.role === "ADMIN"
+          ? "Validated delivery queue, realtime estimates, retry controls and persistent task history."
+          : "Track and manage only the delivery tasks owned by your account."}
       />
 
       <WorkflowControls />

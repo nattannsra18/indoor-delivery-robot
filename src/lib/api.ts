@@ -113,12 +113,6 @@ function toRobot(robot: ApiRobot): Robot {
   };
 }
 
-function formatCreatedAt(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
 function toTask(task: ApiDeliveryTask): DeliveryTask {
   return {
     id: task.id,
@@ -126,7 +120,7 @@ function toTask(task: ApiDeliveryTask): DeliveryTask {
     pickupStationId: task.pickup_station_id,
     destinationStationId: task.destination_station_id,
     status: task.status,
-    createdAt: formatCreatedAt(task.created_at),
+    createdAt: task.created_at,
     startedAt: task.started_at ?? undefined,
     completedAt: task.completed_at ?? undefined,
     progress: task.progress,

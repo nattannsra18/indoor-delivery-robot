@@ -4,19 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useAuth } from "@/context/AuthContext";
-
-const navItems = [
-  { href: "/", label: "Dashboard", icon: "▦" },
-  { href: "/delivery", label: "Create Delivery", icon: "＋" },
-  { href: "/tasks", label: "Task Queue", icon: "≡" },
-  { href: "/stations", label: "Stations", icon: "⌖" },
-  { href: "/robots", label: "Robot Status", icon: "◉" }
-];
+import { navigationForRole } from "@/lib/roleDashboard";
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { backendOnline, loading } = useDeliveryApi();
   const { user, logout } = useAuth();
+  const navItems = navigationForRole(user?.role ?? "USER");
 
   return (
     <aside className="border-b border-slate-200 bg-slate-950 text-white lg:min-h-screen lg:w-64 lg:border-b-0 lg:border-r lg:border-slate-800">

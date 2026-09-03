@@ -15,7 +15,8 @@ router = APIRouter(prefix="/api/robots", tags=["emergency-stop"])
 
 async def broadcast_state(state: EmergencyStop) -> None:
     await browser_connection_manager.broadcast_json(
-        {"type": "emergency_stop_changed", "emergency_stop": state.model_dump(mode="json")}
+        {"type": "emergency_stop_changed", "emergency_stop": state.model_dump(mode="json")},
+        admin_only=True,
     )
 
 

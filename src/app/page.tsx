@@ -8,19 +8,28 @@ import WorkflowControls from "@/components/WorkflowControls";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import NavigationMetrics from "@/components/NavigationMetrics";
 import EmergencyStopControl from "@/components/EmergencyStopControl";
+import UserDashboard from "@/components/UserDashboard";
+import { useAuth } from "@/context/AuthContext";
+import {
+  formatTaskTimestamp,
+  taskStatusCounts
+} from "@/lib/roleDashboard";
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const {
     occupancyMap,
     navigationFeedback,
     diagnostics,
     robot,
     activeTask,
-    queuedTasks,
     tasks,
     stationName,
     backendOnline
   } = useDeliveryApi();
+  const counts = taskStatusCounts(tasks);
+
+  if (user?.role === "USER") return <UserDashboard />;
 
   return (
     <>
@@ -51,15 +60,14 @@ export default function DashboardPage() {
           accent="amber"
         />
         <MetricCard
-          label="Task Queue"
-          value={`${queuedTasks.length} waiting`}
-          note={
-            activeTask
-              ? `${activeTask.id} active`
-              : "No active task"
-          }
+          label="Active Tasks"
+          value={String(counts.active)}
+          note={activeTask ? `${activeTask.id} active` : "No active task"}
           accent="violet"
         />
+        <MetricCard label="Queued" value={String(counts.queued)} note="Waiting for dispatch" accent="amber" />
+        <MetricCard label="Failed" value={String(counts.failed)} note="Requires attention" accent="amber" />
+        <MetricCard label="Completed" value={String(counts.completed)} note="Persisted deliveries" accent="emerald" />
       </div>
 
       <div className="mt-6">
@@ -196,7 +204,7 @@ export default function DashboardPage() {
                     <StatusBadge status={task.status} />
                   </td>
                   <td className="px-3 py-4 text-slate-500">
-                    {task.createdAt}
+                    {formatTaskTimestamp(task.createdAt)}
                   </td>
                 </tr>
               ))}
