@@ -298,9 +298,7 @@ export function ApiDeliveryProvider({
       const stopState = requestedData.includes("emergency-stop")
         ? await api.getEmergencyStop("robot01")
         : undefined;
-      const estimates = user?.role === "USER"
-        ? await api.getTaskEstimates()
-        : [];
+      const estimates = await api.getTaskEstimates();
       if (!mountedRef.current) return;
       setRobot(overview.robot);
       setStations(stationData);

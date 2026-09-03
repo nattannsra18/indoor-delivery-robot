@@ -7,7 +7,6 @@ import {
   useState
 } from "react";
 import PageHeader from "@/components/PageHeader";
-import QueueEta from "@/components/QueueEta";
 import StatusBadge from "@/components/StatusBadge";
 import TaskHistoryModal from "@/components/TaskHistoryModal";
 import WorkflowControls from "@/components/WorkflowControls";
@@ -16,9 +15,6 @@ import TaskMetadata from "@/components/TaskMetadata";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api";
-import {
-  buildQueueEstimates
-} from "@/lib/queueEta";
 import {
   TaskHistoryEntry,
   TaskStatus
@@ -48,8 +44,6 @@ export default function TasksPage() {
   const { user } = useAuth();
   const {
     tasks,
-    activeTask,
-    navigationFeedback,
     stationName,
     cancelTask,
     retryTask,
@@ -89,25 +83,6 @@ export default function TasksPage() {
         (task) => task.id === historyTaskId
       )?.status,
     [historyTaskId, tasks]
-  );
-
-  const queueEstimateByTaskId = useMemo(
-    () =>
-      new Map(
-        buildQueueEstimates(
-          tasks,
-          activeTask,
-          navigationFeedback
-        ).map((estimate) => [
-          estimate.taskId,
-          estimate
-        ])
-      ),
-    [
-      tasks,
-      activeTask,
-      navigationFeedback
-    ]
   );
 
   async function runTaskAction(
@@ -260,7 +235,7 @@ export default function TasksPage() {
                   Progress
                 </th>
                 <th className="px-3 py-3">
-                  {user?.role === "ADMIN" ? "Queue ETA" : "Arrival estimate"}
+                  Queue / arrival estimate
                 </th>
                 <th className="px-3 py-3">
                   Actions
@@ -323,12 +298,7 @@ export default function TasksPage() {
                   </td>
 
                   <td className="px-3 py-4">
-                    {user?.role === "ADMIN" ? (
-                      <QueueEta
-                        estimate={queueEstimateByTaskId.get(task.id)}
-                        active={activeTask?.id === task.id}
-                      />
-                    ) : ["COMPLETED", "FAILED", "CANCELLED"].includes(task.status) ? (
+                    {["COMPLETED", "FAILED", "CANCELLED"].includes(task.status) ? (
                       <span className="text-xs text-slate-500">
                         {task.status.replaceAll("_", " ")} · {task.completedAt
                           ? new Date(task.completedAt).toLocaleString()
