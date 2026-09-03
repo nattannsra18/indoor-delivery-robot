@@ -129,6 +129,17 @@ export interface DeliveryTask {
   ownerId?: string;
 }
 
+export interface TaskEstimate {
+  taskId: string;
+  status: TaskStatus;
+  queuePosition?: number;
+  pickupEtaSeconds?: number;
+  destinationEtaSeconds?: number;
+  generatedAt: string;
+  availability: "AVAILABLE" | "PARTIAL" | "UNAVAILABLE";
+  completedAt?: string;
+}
+
 export interface UserIdentity {
   id: string;
   username: string;

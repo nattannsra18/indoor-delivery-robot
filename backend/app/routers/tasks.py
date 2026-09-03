@@ -21,12 +21,14 @@ from ..models import (
     TaskEvent,
     TaskEventRequest,
     TaskHistoryEntry,
+    TaskEstimate,
     TaskStatus,
 )
 from ..service import DeliveryService
 from ..auth import require_user
 from ..db_models import DeliveryTaskORM, UserORM
 from ..models import UserRole
+from ..queue_estimate_service import QueueEstimateService
 
 router = APIRouter(
     prefix="/api/tasks",
@@ -39,6 +41,15 @@ OPERATOR_EVENTS = frozenset(
         TaskEvent.CONFIRM_RECEIVED,
     }
 )
+
+
+@router.get("/estimates", response_model=list[TaskEstimate])
+def list_task_estimates(
+    service: DeliveryService = Depends(get_service),
+    user: UserORM = Depends(require_user),
+):
+    owner_id = None if user.role == UserRole.ADMIN else user.id
+    return QueueEstimateService(service.db).list_for_owner(owner_id)
 
 
 def authorize_task(user: UserORM, task: DeliveryTaskORM) -> None:

@@ -36,6 +36,10 @@ from ..config import security_settings
 from ..emergency_service import EmergencyStopService
 from ..models import Alert, AlertSeverity, EmergencyStop
 from ..auth import require_admin, robot_authorization_valid
+from ..navigation_feedback_store import (
+    LatestNavigationEstimate,
+    navigation_feedback_store,
+)
 
 router = APIRouter(tags=["robot-websocket"])
 
@@ -651,6 +655,18 @@ async def robot_websocket(
                     )
                     continue
 
+                navigation_feedback_store.set(
+                    robot_id,
+                    LatestNavigationEstimate(
+                        task_id=feedback.task_id,
+                        stage=feedback.stage,
+                        distance_remaining=feedback.distance_remaining,
+                        estimated_time_remaining_seconds=(
+                            feedback.estimated_time_remaining_seconds
+                        ),
+                    ),
+                )
+
                 await (
                     browser_connection_manager.broadcast_json(
                         {
@@ -797,6 +813,11 @@ async def robot_websocket(
                     robot_id,
                     "navigation_result",
                 )
+                navigation_feedback_store.clear_matching(
+                    robot_id,
+                    navigation.task_id,
+                    navigation.stage,
+                )
 
                 await websocket.send_json(
                     {
@@ -940,6 +961,10 @@ async def robot_websocket(
                     robot_id,
                     "navigation_cancelled",
                 )
+                navigation_feedback_store.clear_matching(
+                    robot_id,
+                    task_id,
+                )
 
                 await websocket.send_json(
                     {
@@ -1074,6 +1099,7 @@ async def robot_websocket(
             websocket,
         )
         if disconnected:
+            navigation_feedback_store.clear_robot(robot_id)
             await broadcast_path_clear(
                 robot_id,
                 "robot_disconnect",
@@ -1094,6 +1120,7 @@ async def robot_websocket(
             websocket,
         )
         if disconnected:
+            navigation_feedback_store.clear_robot(robot_id)
             await broadcast_path_clear(
                 robot_id,
                 "robot_disconnect",

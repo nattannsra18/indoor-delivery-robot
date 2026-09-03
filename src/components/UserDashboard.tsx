@@ -5,6 +5,7 @@ import NavigationMetrics from "@/components/NavigationMetrics";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import WorkflowControls from "@/components/WorkflowControls";
+import TaskArrivalEstimate from "@/components/TaskArrivalEstimate";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import {
   classifyMyDeliveries,
@@ -21,8 +22,12 @@ export default function UserDashboard() {
     stationName,
     loading,
     backendOnline,
-    error
+    error,
+    taskEstimates
   } = useDeliveryApi();
+  const estimateByTaskId = new Map(
+    taskEstimates.map((estimate) => [estimate.taskId, estimate])
+  );
   const { active, pending, recent } = classifyMyDeliveries(tasks);
   const viewState = myDeliveriesViewState(
     loading,
@@ -74,6 +79,10 @@ export default function UserDashboard() {
                   taskId={active.id}
                   status={active.status}
                 />
+                <TaskArrivalEstimate
+                  task={active}
+                  estimate={estimateByTaskId.get(active.id)}
+                />
                 <WorkflowControls />
               </div>
             ) : (
@@ -91,7 +100,15 @@ export default function UserDashboard() {
             ) : (
               <div className="mt-4 grid gap-3">
                 {pending.map((task) => (
-                  <DeliverySummary key={task.id} task={task} stationName={stationName} compact />
+                  <div key={task.id} className="rounded-xl border border-slate-200 p-4">
+                    <DeliverySummary task={task} stationName={stationName} />
+                    <div className="mt-4">
+                      <TaskArrivalEstimate
+                        task={task}
+                        estimate={estimateByTaskId.get(task.id)}
+                      />
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

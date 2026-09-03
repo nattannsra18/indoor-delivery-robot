@@ -23,6 +23,12 @@ class TaskStatus(str, Enum):
     CANCELLED = "CANCELLED"
 
 
+class TaskEstimateAvailability(str, Enum):
+    AVAILABLE = "AVAILABLE"
+    PARTIAL = "PARTIAL"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
 class RobotState(str, Enum):
     IDLE = "IDLE"
     GOING_TO_PICKUP = "GOING_TO_PICKUP"
@@ -421,6 +427,17 @@ class DeliveryTask(BaseModel):
     completed_at: Optional[datetime] = None
     progress: int = Field(ge=0, le=100)
     owner_id: Optional[str] = None
+
+
+class TaskEstimate(BaseModel):
+    task_id: str
+    status: TaskStatus
+    queue_position: Optional[int] = Field(default=None, ge=1)
+    pickup_eta_seconds: Optional[float] = Field(default=None, ge=0)
+    destination_eta_seconds: Optional[float] = Field(default=None, ge=0)
+    generated_at: datetime
+    availability: TaskEstimateAvailability
+    completed_at: Optional[datetime] = None
 
 
 class Alert(BaseModel):

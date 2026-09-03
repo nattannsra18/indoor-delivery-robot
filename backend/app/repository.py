@@ -73,7 +73,7 @@ class DeliveryRepository:
         stmt = (
             select(DeliveryTaskORM)
             .where(DeliveryTaskORM.status.in_(active_statuses))
-            .order_by(DeliveryTaskORM.created_at.asc())
+            .order_by(DeliveryTaskORM.created_at.asc(), DeliveryTaskORM.id.asc())
             .limit(1)
         )
         return self.db.scalar(stmt)
@@ -87,7 +87,7 @@ class DeliveryRepository:
                 DeliveryTaskORM.robot_id == robot_id,
                 DeliveryTaskORM.status.in_(active_statuses),
             )
-            .order_by(DeliveryTaskORM.created_at.asc())
+            .order_by(DeliveryTaskORM.created_at.asc(), DeliveryTaskORM.id.asc())
             .limit(1)
         )
         return self.db.scalar(stmt)
@@ -96,7 +96,7 @@ class DeliveryRepository:
         stmt = (
             select(DeliveryTaskORM)
             .where(DeliveryTaskORM.status == TaskStatus.QUEUED)
-            .order_by(DeliveryTaskORM.created_at.asc())
+            .order_by(DeliveryTaskORM.created_at.asc(), DeliveryTaskORM.id.asc())
         )
         return list(self.db.scalars(stmt).all())
 
@@ -104,7 +104,7 @@ class DeliveryRepository:
         stmt = (
             select(DeliveryTaskORM)
             .where(DeliveryTaskORM.status == TaskStatus.QUEUED)
-            .order_by(DeliveryTaskORM.created_at.asc())
+            .order_by(DeliveryTaskORM.created_at.asc(), DeliveryTaskORM.id.asc())
             .limit(1)
             .with_for_update()
         )

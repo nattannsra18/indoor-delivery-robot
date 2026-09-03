@@ -34,6 +34,7 @@ import {
   Robot,
   RobotDiagnostics,
   Station,
+  TaskEstimate,
   TaskStatus
 } from "@/types";
 
@@ -101,6 +102,7 @@ type ApiDeliveryContextValue = {
   backendOnline: boolean;
   error: string | null;
   emergencyStop?: EmergencyStop;
+  taskEstimates: TaskEstimate[];
   createTask: (
     pickupStationId: string,
     destinationStationId: string
@@ -258,6 +260,7 @@ export function ApiDeliveryProvider({
   const [backendOnline, setBackendOnline] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [emergencyStop, setEmergencyStop] = useState<EmergencyStop>();
+  const [taskEstimates, setTaskEstimates] = useState<TaskEstimate[]>([]);
   const navigationPathRef = useRef<NavigationPath | undefined>(
     undefined
   );
@@ -297,11 +300,15 @@ export function ApiDeliveryProvider({
       const stopState = requestedData.includes("emergency-stop")
         ? await api.getEmergencyStop("robot01")
         : undefined;
+      const estimates = user?.role === "USER"
+        ? await api.getTaskEstimates()
+        : [];
       if (!mountedRef.current) return;
       setRobot(overview.robot);
       setStations(stationData);
       setTasks(taskData);
       setEmergencyStop(stopState);
+      setTaskEstimates(estimates);
       setBackendOnline(true);
       setError(null);
     } catch (err) {
@@ -779,6 +786,7 @@ export function ApiDeliveryProvider({
       backendOnline,
       error,
       emergencyStop,
+      taskEstimates,
       createTask,
       addStation,
       removeStation,
@@ -805,6 +813,7 @@ export function ApiDeliveryProvider({
       backendOnline,
       error,
       emergencyStop,
+      taskEstimates,
       createTask,
       addStation,
       removeStation,

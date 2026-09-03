@@ -25,6 +25,7 @@ from .models import (
     utc_now,
 )
 from .navigation_path_store import navigation_path_store
+from .navigation_feedback_store import navigation_feedback_store
 from .repository import DeliveryRepository
 from .seed import reset_demo_data
 from .state_machine import (
@@ -125,6 +126,7 @@ class DeliveryService:
 
     def set_robot_offline(self, robot_id: str) -> RobotORM:
         robot = self._robot_or_404(robot_id, lock=True)
+        navigation_feedback_store.clear_robot(robot_id)
         if not robot.online and robot.state == RobotState.OFFLINE:
             return robot
         active = self.repo.active_task_for_robot(robot.id, ACTIVE_STATUSES)
@@ -599,6 +601,7 @@ class DeliveryService:
                 detail="Only FAILED tasks can be retried",
             )
 
+        previous_robot_id = task.robot_id
         robot = self._robot_or_404(task.robot_id or "robot01", lock=True)
         old_status = task.status
         task.status = TaskStatus.QUEUED
@@ -628,6 +631,11 @@ class DeliveryService:
             self.dispatch_next_queued_task(robot=robot)
 
         self.db.commit()
+        if previous_robot_id is not None:
+            navigation_feedback_store.clear_matching(
+                previous_robot_id,
+                task.id,
+            )
         self.db.refresh(task)
         return task
 
@@ -646,5 +654,6 @@ class DeliveryService:
 
     def reset_demo(self) -> DashboardOverview:
         navigation_path_store.clear_all()
+        navigation_feedback_store.clear()
         reset_demo_data(self.db)
         return self.overview()

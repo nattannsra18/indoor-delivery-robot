@@ -11,6 +11,7 @@ import QueueEta from "@/components/QueueEta";
 import StatusBadge from "@/components/StatusBadge";
 import TaskHistoryModal from "@/components/TaskHistoryModal";
 import WorkflowControls from "@/components/WorkflowControls";
+import TaskArrivalEstimate from "@/components/TaskArrivalEstimate";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useAuth } from "@/context/AuthContext";
 import * as api from "@/lib/api";
@@ -51,8 +52,13 @@ export default function TasksPage() {
     stationName,
     cancelTask,
     retryTask,
-    backendOnline
+    backendOnline,
+    taskEstimates
   } = useDeliveryApi();
+  const taskEstimateById = useMemo(
+    () => new Map(taskEstimates.map((estimate) => [estimate.taskId, estimate])),
+    [taskEstimates]
+  );
 
   const [filter, setFilter] =
     useState<(typeof filters)[number]>("ALL");
@@ -250,7 +256,7 @@ export default function TasksPage() {
                   Progress
                 </th>
                 <th className="px-3 py-3">
-                  Queue ETA
+                  {user?.role === "ADMIN" ? "Queue ETA" : "Arrival estimate"}
                 </th>
                 <th className="px-3 py-3">
                   Actions
@@ -309,16 +315,23 @@ export default function TasksPage() {
                   </td>
 
                   <td className="px-3 py-4">
-                    <QueueEta
-                      estimate={
-                        queueEstimateByTaskId.get(
-                          task.id
-                        )
-                      }
-                      active={
-                        activeTask?.id === task.id
-                      }
-                    />
+                    {user?.role === "ADMIN" ? (
+                      <QueueEta
+                        estimate={queueEstimateByTaskId.get(task.id)}
+                        active={activeTask?.id === task.id}
+                      />
+                    ) : ["COMPLETED", "FAILED", "CANCELLED"].includes(task.status) ? (
+                      <span className="text-xs text-slate-500">
+                        {task.status.replaceAll("_", " ")} · {task.completedAt
+                          ? new Date(task.completedAt).toLocaleString()
+                          : "Time unavailable"}
+                      </span>
+                    ) : (
+                      <TaskArrivalEstimate
+                        task={task}
+                        estimate={taskEstimateById.get(task.id)}
+                      />
+                    )}
                   </td>
 
                   <td className="px-3 py-4">

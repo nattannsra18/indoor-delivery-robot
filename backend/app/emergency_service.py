@@ -11,6 +11,7 @@ from .alert_service import AlertService
 from .db_models import EmergencyStopORM, RobotORM, TaskEventORM
 from .models import AlertSeverity, EmergencyStop, EmergencyStopState, EventSource, RobotState, TaskStatus, utc_now
 from .navigation_path_store import navigation_path_store
+from .navigation_feedback_store import navigation_feedback_store
 from .repository import DeliveryRepository
 from .service import ACTIVE_STATUSES, PROGRESS
 from .config import security_settings
@@ -94,6 +95,7 @@ class EmergencyStopService:
         robot.current_task_id = None
         robot.state = RobotState.ERROR if robot.online else RobotState.OFFLINE
         navigation_path_store.clear(robot_id)
+        navigation_feedback_store.clear_robot(robot_id)
         self.db.commit()
         self.db.refresh(state)
         AlertService(self.db).upsert(

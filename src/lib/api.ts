@@ -7,6 +7,7 @@ import type {
   Station,
   TaskHistoryEntry,
   TaskStatus,
+  TaskEstimate,
   UserIdentity
 } from "@/types";
 
@@ -70,6 +71,17 @@ type ApiTaskHistoryEntry = {
   source: string;
   detail: string | null;
   created_at: string;
+};
+
+type ApiTaskEstimate = {
+  task_id: string;
+  status: TaskStatus;
+  queue_position: number | null;
+  pickup_eta_seconds: number | null;
+  destination_eta_seconds: number | null;
+  generated_at: string;
+  availability: TaskEstimate["availability"];
+  completed_at: string | null;
 };
 
 type ApiOverview = {
@@ -251,6 +263,20 @@ export async function getMap(): Promise<OccupancyGridMap> {
 export async function getTasks(): Promise<DeliveryTask[]> {
   const tasks = await request<ApiDeliveryTask[]>("/api/tasks");
   return tasks.map(toTask);
+}
+
+export async function getTaskEstimates(): Promise<TaskEstimate[]> {
+  const estimates = await request<ApiTaskEstimate[]>("/api/tasks/estimates");
+  return estimates.map((estimate) => ({
+    taskId: estimate.task_id,
+    status: estimate.status,
+    queuePosition: estimate.queue_position ?? undefined,
+    pickupEtaSeconds: estimate.pickup_eta_seconds ?? undefined,
+    destinationEtaSeconds: estimate.destination_eta_seconds ?? undefined,
+    generatedAt: estimate.generated_at,
+    availability: estimate.availability,
+    completedAt: estimate.completed_at ?? undefined
+  }));
 }
 
 export async function getTaskHistory(taskId: string): Promise<TaskHistoryEntry[]> {
