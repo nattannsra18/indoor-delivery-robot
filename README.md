@@ -38,6 +38,41 @@ MQTT and the real Robot Agent are intentionally not connected yet. They are plan
 - Robot offline/online/recovery simulation
 - Persistent task event history
 
+## One-command development stack
+
+The launcher runs FastAPI, Next.js, Gazebo/Nav2/RViz2, and the ROS Web Bridge
+in separate tmux windows while sharing one persistent robot token:
+
+```bash
+sudo apt install tmux
+./scripts/run_dev_stack.sh
+```
+
+The ROS workspace defaults to the sibling directory
+`../amr-navigation-vision-diagnostics`. Override it when needed:
+
+```bash
+AMR_ROS_WORKSPACE=/path/to/amr-navigation-vision-diagnostics \
+  ./scripts/run_dev_stack.sh
+```
+
+Manage the stack without starting duplicate processes:
+
+```bash
+./scripts/run_dev_stack.sh status
+./scripts/run_dev_stack.sh attach
+./scripts/run_dev_stack.sh logs bridge
+./scripts/run_dev_stack.sh restart
+./scripts/run_dev_stack.sh stop
+```
+
+The launcher refuses to start when ports `3000` or `8000`, Gazebo/Nav2, or a
+Web Bridge are already running outside its tmux session. `stop` sends Ctrl+C to
+the four managed services before removing the session; it does not use broad
+`pkill` patterns. The token is generated only when missing, stored in
+`backend/.env`, and injected into FastAPI and the ROS Bridge without being
+printed.
+
 ## Run PostgreSQL
 
 From project root:
