@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.browser_websocket_manager import browser_connection_manager
 from app.command_dispatch import schedule_navigation_path_clear
+from app.config import security_settings
 from app.database import Base
 from app.db_models import (
     DeliveryTaskORM,
@@ -27,6 +28,9 @@ from app.service import DeliveryService
 
 
 TEST_DB = Path(__file__).resolve().parent / "navigation_path_test.db"
+if TEST_DB.exists():
+    TEST_DB.unlink()
+
 engine = create_engine(
     f"sqlite:///{TEST_DB.as_posix()}",
     connect_args={"check_same_thread": False},
@@ -35,12 +39,20 @@ Session = sessionmaker(bind=engine, expire_on_commit=False)
 Base.metadata.create_all(bind=engine)
 
 
+def robot_auth_headers() -> dict[str, str]:
+    settings = security_settings()
+    if settings.robot_ws_auth_required:
+        assert settings.robot_ws_token is not None
+        return {"authorization": f"Bearer {settings.robot_ws_token}"}
+    return {}
+
+
 class StubWebSocket:
     def __init__(self, messages: list[dict]):
         self.messages = iter(messages)
         self.sent: list[dict] = []
         self.accepted = False
-        self.headers = {}
+        self.headers = robot_auth_headers()
         self.cookies = {}
 
     async def accept(self) -> None:
@@ -54,6 +66,9 @@ class StubWebSocket:
 
     async def send_json(self, message: dict) -> None:
         self.sent.append(message)
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        pass
 
 
 @pytest.fixture(autouse=True)
@@ -283,7 +298,11 @@ def test_browser_cannot_inject_navigation_path():
         token, _ = create_session(db, user)
         websocket.cookies[SESSION_COOKIE_NAME] = token
         asyncio.run(dashboard_websocket(websocket, db))
-    assert websocket.sent[0]["type"] == "dashboard_connection_ack"
-    assert websocket.sent[1]["type"] == "error"
-    assert websocket.sent[1]["code"] == "UNSUPPORTED_MESSAGE"
+    assert [message["type"] for message in websocket.sent] == [
+        "dashboard_connection_ack",
+        "alert_snapshot",
+        "emergency_stop_snapshot",
+        "error",
+    ]
+    assert websocket.sent[-1]["code"] == "UNSUPPORTED_MESSAGE"
     assert navigation_path_store.get("robot01") is None

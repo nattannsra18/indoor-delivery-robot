@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.auth import hash_password
+from app.config import security_settings
 from app.database import Base
 from app.db_models import (
     AlertORM,
@@ -42,6 +43,14 @@ engine = create_engine(
 )
 Session = sessionmaker(bind=engine, expire_on_commit=False)
 Base.metadata.create_all(engine)
+
+
+def robot_auth_headers() -> dict[str, str]:
+    settings = security_settings()
+    if settings.robot_ws_auth_required:
+        assert settings.robot_ws_token is not None
+        return {"authorization": f"Bearer {settings.robot_ws_token}"}
+    return {}
 
 
 @pytest.fixture(autouse=True)
@@ -125,7 +134,7 @@ def feedback(task_id: str, stage: str = "pickup", eta: float | None = 37.0):
 
 class StubRobotWebSocket:
     def __init__(self, messages: list[dict]):
-        self.headers: dict[str, str] = {}
+        self.headers = robot_auth_headers()
         self.messages = iter(messages)
         self.sent: list[dict] = []
 

@@ -59,7 +59,31 @@ source_ros() {
 run_gazebo() {
   cd "${ROS_WORKSPACE}"
   source_ros
-  exec ros2 launch amr_bringup navigation.launch.py
+  exec ros2 launch amr_bringup navigation.launch.py headless:=True
+}
+
+run_gazebo_gui() {
+  cd "${ROS_WORKSPACE}"
+  source_ros
+  local deadline topics
+  deadline=$((SECONDS + 120))
+
+  printf '%s\n' "Waiting for Gazebo world and robot state..."
+
+  while ((SECONDS < deadline)); do
+    topics="$(
+      timeout 5 gz topic -l 2>/dev/null || true
+    )"
+
+    if grep -Fxq "/world/warehouse/scene/info" <<<"${topics}" &&
+      timeout 10 ros2 topic echo --once /odom >/dev/null 2>&1; then
+      printf '%s\n' "Gazebo world and robot state are ready; starting GUI."
+      exec gz sim -g -v 4
+    fi
+    sleep 1
+  done
+
+  die "Gazebo world and robot state did not become ready within 120 seconds"
 }
 
 run_bridge() {
@@ -115,7 +139,9 @@ preflight_start() {
   require_command tmux
   require_command ss
   require_command curl
+  require_command gz
   require_command npm
+  require_command timeout
   [[ -f /opt/ros/jazzy/setup.bash ]] || die "ROS 2 Jazzy setup was not found"
   [[ -x "${BACKEND_PYTHON}" ]] || die "Backend virtual environment not found: ${BACKEND_PYTHON}"
   [[ -f "${PROJECT_ROOT}/package.json" ]] || die "Frontend package.json not found"
@@ -130,6 +156,14 @@ preflight_start() {
     pgrep -af '[n]avigation.launch.py' >&2 || true
     die "Gazebo/Nav2 is already running. Stop it before starting this stack."
   fi
+  if pgrep -af '[g]z sim -g' >/dev/null; then
+    pgrep -af '[g]z sim -g' >&2 || true
+    die "A Gazebo GUI is already running. Stop it before starting this stack."
+  fi
+  if pgrep -af '[g]z sim -r -s ' >/dev/null; then
+    pgrep -af '[g]z sim -r -s ' >&2 || true
+    die "A Gazebo server is already running. Stop it before starting this stack."
+  fi
 }
 
 start_stack() {
@@ -140,7 +174,7 @@ start_stack() {
   fi
   preflight_start
   ensure_shared_token
-  local quoted_script fastapi_window frontend_window gazebo_window bridge_window
+  local quoted_script fastapi_window frontend_window gazebo_window gazebo_gui_window bridge_window
   printf -v quoted_script '%q' "${SCRIPT_PATH}"
   tmux new-session -d -s "${SESSION_NAME}" -n fastapi
   tmux set-environment -t "${SESSION_NAME}" ROBOT_WS_TOKEN "${ROBOT_WS_TOKEN}"
@@ -158,6 +192,9 @@ start_stack() {
   gazebo_window="$(tmux new-window -d -P -F '#{window_id}' -t "${SESSION_NAME}" -n gazebo)"
   configure_window "${gazebo_window}" gazebo
   tmux respawn-pane -k -t "${gazebo_window}" "${quoted_script} __gazebo"
+  gazebo_gui_window="$(tmux new-window -d -P -F '#{window_id}' -t "${SESSION_NAME}" -n gazebo_gui)"
+  configure_window "${gazebo_gui_window}" gazebo_gui
+  tmux respawn-pane -k -t "${gazebo_gui_window}" "${quoted_script} __gazebo_gui"
   bridge_window="$(tmux new-window -d -P -F '#{window_id}' -t "${SESSION_NAME}" -n bridge)"
   configure_window "${bridge_window}" bridge
   tmux respawn-pane -k -t "${bridge_window}" "${quoted_script} __bridge"
@@ -200,11 +237,11 @@ show_logs() {
   local service="${1:-}" window_target
   if [[ -n "${service}" ]]; then
     window_target="$(find_service_window "${service}")" \
-      || die "Unknown service '${service}'. Use fastapi, frontend, gazebo, or bridge."
+      || die "Unknown service '${service}'. Use fastapi, frontend, gazebo, gazebo_gui, or bridge."
     tmux capture-pane -p -t "${window_target}" -S -200
     return
   fi
-  for service in fastapi frontend gazebo bridge; do
+  for service in fastapi frontend gazebo gazebo_gui bridge; do
     printf '\n===== %s =====\n' "${service}"
     if window_target="$(find_service_window "${service}")"; then
       tmux capture-pane -p -t "${window_target}" -S -40
@@ -218,11 +255,11 @@ print_help() {
   cat <<EOF
 Usage: ./scripts/run_dev_stack.sh [command]
 
-  start             Start FastAPI, Next.js, Gazebo/Nav2, and ROS Bridge (default)
+  start             Start FastAPI, Next.js, Gazebo/Nav2, Gazebo GUI, and ROS Bridge (default)
   stop              Gracefully stop this script's services
   restart           Stop and start the complete stack with the saved token
   status            Show service windows and FastAPI readiness
-  attach            Open tmux (Ctrl+b then 0-3 changes windows; Ctrl+b d detaches)
+  attach            Open tmux (Ctrl+b then 0-4 changes windows; Ctrl+b d detaches)
   logs [service]    Show logs for all services or one named service
   help              Show this help
 
@@ -234,6 +271,7 @@ case "${1:-start}" in
   __fastapi) run_fastapi ;;
   __frontend) run_frontend ;;
   __gazebo) run_gazebo ;;
+  __gazebo_gui) run_gazebo_gui ;;
   __bridge) run_bridge ;;
   start) start_stack ;;
   stop) stop_stack ;;

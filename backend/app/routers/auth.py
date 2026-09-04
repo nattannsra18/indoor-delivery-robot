@@ -38,6 +38,7 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     revoke_session(db, request.cookies.get(SESSION_COOKIE_NAME))
+    response.status_code = status.HTTP_204_NO_CONTENT
     response.delete_cookie(SESSION_COOKIE_NAME, path="/")
     return response
 

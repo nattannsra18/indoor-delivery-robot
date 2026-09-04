@@ -12,7 +12,16 @@ from sqlalchemy import create_engine, delete
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base, get_db
-from app.db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM, SessionORM, UserORM
+from app.db_models import (
+    AlertORM,
+    DeliveryTaskORM,
+    EmergencyStopORM,
+    RobotORM,
+    SessionORM,
+    StationORM,
+    TaskEventORM,
+    UserORM,
+)
 from app.auth import hash_password
 from app.config import security_settings
 from app.models import OccupancyGridPayload, TaskPriority, UserRole
@@ -20,6 +29,10 @@ from app.main import app
 from app.routers.robot_ws import robot_websocket
 from app.seed import seed_database
 from app.map_store import map_store
+from app.navigation_feedback_store import (
+    navigation_feedback_store,
+)
+from app.navigation_path_store import navigation_path_store
 from app.route_preview import route_preview_coordinator
 from app.browser_websocket_manager import (
     browser_connection_manager,
@@ -72,6 +85,36 @@ def robot_websocket_connect():
     )
 
 
+def receive_message_of_type(
+    websocket,
+    expected_type: str,
+    *,
+    max_messages: int,
+    skippable_types: set[str] | None = None,
+) -> dict:
+    """Receive a bounded sequence, allowing only known queued messages."""
+    skipped = skippable_types or set()
+    received_types: list[str | None] = []
+
+    for _ in range(max_messages):
+        message = websocket.receive_json()
+        message_type = message.get("type")
+        received_types.append(message_type)
+        if message_type == expected_type:
+            return message
+        if message_type not in skipped:
+            raise AssertionError(
+                f"Expected {expected_type!r}, received "
+                f"unexpected {message_type!r} after "
+                f"{received_types!r}"
+            )
+
+    raise AssertionError(
+        f"Did not receive {expected_type!r} within "
+        f"{max_messages} messages; received {received_types!r}"
+    )
+
+
 class StubWebSocket:
     def __init__(self, messages: list[dict]):
         self.messages = iter(messages)
@@ -94,11 +137,15 @@ class StubWebSocket:
 
 def setup_function():
     route_preview_coordinator.clear()
+    navigation_path_store.clear_all()
+    navigation_feedback_store.clear()
     map_store.clear()
     with TestingSessionLocal() as db:
         db.execute(delete(SessionORM))
         db.execute(delete(TaskEventORM))
         db.execute(delete(DeliveryTaskORM))
+        db.execute(delete(EmergencyStopORM))
+        db.execute(delete(AlertORM))
         db.execute(delete(RobotORM))
         db.execute(delete(StationORM))
         db.commit()
@@ -946,8 +993,17 @@ def test_navigation_result_broadcasts_dashboard_update():
                 == "navigation_result_received"
             )
 
-        dashboard_event = (
-            dashboard_websocket.receive_json()
+        dashboard_event = receive_message_of_type(
+            dashboard_websocket,
+            "workflow_updated",
+            max_messages=5,
+            skippable_types={
+                "navigation_path",
+                "alert_snapshot",
+                "emergency_stop_snapshot",
+                # Completing navigation clears its active path first.
+                "navigation_path_clear",
+            },
         )
 
         assert (

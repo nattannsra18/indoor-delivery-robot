@@ -35,11 +35,47 @@ test("stop is scoped to the owned tmux session", () => {
   assert.doesNotMatch(source, /killall/);
 });
 
+test("preflight rejects external Gazebo servers without broad self-matching", () => {
+  assert.match(source, /pgrep -af '\[g\]z sim -r -s '/);
+  assert.match(source, /A Gazebo server is already running/);
+  assert.doesNotMatch(source, /pgrep -af 'gz sim -r -s /);
+  assert.doesNotMatch(source, /\bpkill\b/);
+  assert.doesNotMatch(source, /killall/);
+});
+
 test("service logs use stable tmux window metadata", () => {
   assert.match(source, /automatic-rename off/);
   assert.match(source, /@amr_service/);
   assert.match(source, /find_service_window/);
   assert.match(source, /capture-pane[^\n]+window_target/);
+});
+
+test("Gazebo starts server-first and waits before opening its GUI", () => {
+  const gazebo = source.match(/run_gazebo\(\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const gazeboGui = source.match(/run_gazebo_gui\(\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.match(gazebo, /navigation\.launch\.py headless:=True/);
+  assert.match(gazeboGui, /deadline=\$\(\(SECONDS \+ 120\)\)/);
+  assert.match(gazeboGui, /while \(\(SECONDS < deadline\)\)/);
+  assert.match(gazeboGui, /timeout 5 gz topic -l/);
+  assert.match(gazeboGui, /grep -Fxq "\/world\/warehouse\/scene\/info"/);
+  assert.match(gazeboGui, /timeout 10 ros2 topic echo --once \/odom/);
+  assert.match(gazeboGui, /Waiting for Gazebo world and robot state\.\.\./);
+  assert.match(gazeboGui, /Gazebo world and robot state are ready; starting GUI\./);
+  assert.match(gazeboGui, /exec gz sim -g -v 4/);
+  assert.doesNotMatch(
+    gazeboGui,
+    /ros2 topic echo --once \/world\/warehouse\/scene\/info/,
+  );
+});
+
+test("Gazebo GUI is an owned service with logs and duplicate-process safeguards", () => {
+  assert.match(source, /configure_window[^\n]+gazebo_gui/);
+  assert.match(source, /__gazebo_gui\) run_gazebo_gui/);
+  assert.match(source, /for service in fastapi frontend gazebo gazebo_gui bridge/);
+  assert.match(source, /\[g\]z sim -g/);
+  assert.match(source, /require_command gz/);
+  assert.doesNotMatch(source, /\bpkill\b/);
+  assert.doesNotMatch(source, /killall/);
 });
 
 test("ROS setup files are sourced without nounset failures", () => {
