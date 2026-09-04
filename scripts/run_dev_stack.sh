@@ -14,6 +14,27 @@ session_exists() { tmux has-session -t "${SESSION_NAME}" 2>/dev/null; }
 require_command() { command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"; }
 port_is_listening() { ss -H -ltn "sport = :$1" 2>/dev/null | grep -q .; }
 
+configure_window() {
+  local window_id="$1"
+  local service="$2"
+  tmux rename-window -t "${window_id}" "${service}"
+  tmux set-option -w -t "${window_id}" automatic-rename off
+  tmux set-option -w -t "${window_id}" remain-on-exit on
+  tmux set-option -w -t "${window_id}" @amr_service "${service}"
+}
+
+find_service_window() {
+  local requested_service="$1"
+  local window_id window_name service
+  while IFS='|' read -r window_id window_name service; do
+    if [[ "${service}" == "${requested_service}" || ( -z "${service}" && "${window_name}" == "${requested_service}" ) ]]; then
+      printf '%s\n' "${window_id}"
+      return 0
+    fi
+  done < <(tmux list-windows -t "${SESSION_NAME}" -F '#{window_id}|#{window_name}|#{@amr_service}')
+  return 1
+}
+
 run_fastapi() {
   cd "${BACKEND_DIR}"
   exec "${BACKEND_PYTHON}" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
@@ -115,22 +136,28 @@ start_stack() {
   fi
   preflight_start
   ensure_shared_token
-  local quoted_script
+  local quoted_script fastapi_window frontend_window gazebo_window bridge_window
   printf -v quoted_script '%q' "${SCRIPT_PATH}"
-  tmux new-session -d -s "${SESSION_NAME}" -n bootstrap
-  tmux set-option -t "${SESSION_NAME}" remain-on-exit on
+  tmux new-session -d -s "${SESSION_NAME}" -n fastapi
   tmux set-environment -t "${SESSION_NAME}" ROBOT_WS_TOKEN "${ROBOT_WS_TOKEN}"
   tmux set-environment -t "${SESSION_NAME}" ROBOT_WS_AUTH_REQUIRED "${ROBOT_WS_AUTH_REQUIRED}"
   tmux set-environment -t "${SESSION_NAME}" APP_ENV "${APP_ENV}"
   tmux set-environment -t "${SESSION_NAME}" SESSION_COOKIE_SECURE "${SESSION_COOKIE_SECURE}"
   tmux set-environment -t "${SESSION_NAME}" RMW_IMPLEMENTATION "${RMW_IMPLEMENTATION}"
   tmux set-environment -t "${SESSION_NAME}" ROS_DOMAIN_ID "${ROS_DOMAIN_ID}"
-  tmux rename-window -t "${SESSION_NAME}:bootstrap" fastapi
-  tmux respawn-pane -k -t "${SESSION_NAME}:fastapi" "${quoted_script} __fastapi"
-  tmux new-window -d -t "${SESSION_NAME}" -n frontend "${quoted_script} __frontend"
-  tmux new-window -d -t "${SESSION_NAME}" -n gazebo "${quoted_script} __gazebo"
-  tmux new-window -d -t "${SESSION_NAME}" -n bridge "${quoted_script} __bridge"
-  tmux select-window -t "${SESSION_NAME}:fastapi"
+  fastapi_window="$(tmux display-message -p -t "${SESSION_NAME}:fastapi" '#{window_id}')"
+  configure_window "${fastapi_window}" fastapi
+  tmux respawn-pane -k -t "${fastapi_window}" "${quoted_script} __fastapi"
+  frontend_window="$(tmux new-window -d -P -F '#{window_id}' -t "${SESSION_NAME}" -n frontend)"
+  configure_window "${frontend_window}" frontend
+  tmux respawn-pane -k -t "${frontend_window}" "${quoted_script} __frontend"
+  gazebo_window="$(tmux new-window -d -P -F '#{window_id}' -t "${SESSION_NAME}" -n gazebo)"
+  configure_window "${gazebo_window}" gazebo
+  tmux respawn-pane -k -t "${gazebo_window}" "${quoted_script} __gazebo"
+  bridge_window="$(tmux new-window -d -P -F '#{window_id}' -t "${SESSION_NAME}" -n bridge)"
+  configure_window "${bridge_window}" bridge
+  tmux respawn-pane -k -t "${bridge_window}" "${quoted_script} __bridge"
+  tmux select-window -t "${fastapi_window}"
   printf 'Started development stack in tmux session %s.\n' "${SESSION_NAME}"
   printf 'Attach: %s attach\nStatus: %s status\nStop:   %s stop\n' "${SCRIPT_PATH}" "${SCRIPT_PATH}" "${SCRIPT_PATH}"
 }
@@ -166,17 +193,20 @@ attach_stack() {
 
 show_logs() {
   session_exists || die "Development stack is not running"
-  local service="${1:-}"
+  local service="${1:-}" window_target
   if [[ -n "${service}" ]]; then
-    tmux display-message -p -t "${SESSION_NAME}:${service}" '#{window_name}' >/dev/null 2>&1 \
+    window_target="$(find_service_window "${service}")" \
       || die "Unknown service '${service}'. Use fastapi, frontend, gazebo, or bridge."
-    tmux capture-pane -p -t "${SESSION_NAME}:${service}" -S -200
+    tmux capture-pane -p -t "${window_target}" -S -200
     return
   fi
-  local window
-  for window in fastapi frontend gazebo bridge; do
-    printf '\n===== %s =====\n' "${window}"
-    tmux capture-pane -p -t "${SESSION_NAME}:${window}" -S -40
+  for service in fastapi frontend gazebo bridge; do
+    printf '\n===== %s =====\n' "${service}"
+    if window_target="$(find_service_window "${service}")"; then
+      tmux capture-pane -p -t "${window_target}" -S -40
+    else
+      printf 'Service window is unavailable. Restart the stack to recreate it.\n'
+    fi
   done
 }
 

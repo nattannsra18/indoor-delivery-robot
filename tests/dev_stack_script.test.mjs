@@ -34,3 +34,10 @@ test("stop is scoped to the owned tmux session", () => {
   assert.doesNotMatch(source, /\bpkill\b/);
   assert.doesNotMatch(source, /killall/);
 });
+
+test("service logs use stable tmux window metadata", () => {
+  assert.match(source, /automatic-rename off/);
+  assert.match(source, /@amr_service/);
+  assert.match(source, /find_service_window/);
+  assert.match(source, /capture-pane[^\n]+window_target/);
+});
