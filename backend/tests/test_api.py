@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base, get_db
 from app.db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM, SessionORM, UserORM
 from app.auth import hash_password
+from app.config import security_settings
 from app.models import OccupancyGridPayload, TaskPriority, UserRole
 from app.main import app
 from app.routers.robot_ws import robot_websocket
@@ -50,6 +51,20 @@ def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
+
+
+def robot_websocket_connect():
+    settings = security_settings()
+    headers = {}
+    if settings.robot_ws_auth_required:
+        assert settings.robot_ws_token is not None
+        headers["authorization"] = (
+            f"Bearer {settings.robot_ws_token}"
+        )
+    return client.websocket_connect(
+        "/ws/robots/robot01",
+        headers=headers,
+    )
 
 
 class StubWebSocket:
@@ -122,9 +137,7 @@ def report_navigation_result(
     stage: str,
     navigation_status: str = "succeeded",
 ):
-    with client.websocket_connect(
-        "/ws/robots/robot01"
-    ) as websocket:
+    with robot_websocket_connect() as websocket:
         connection = websocket.receive_json()
 
         assert connection["type"] == "connection_ack"
@@ -318,9 +331,7 @@ def test_second_task_is_queued_and_auto_dispatches():
     assert second_after["robot_id"] == "robot01"
 
 def test_cancel_active_task_waits_for_robot_confirmation():
-    with client.websocket_connect(
-        "/ws/robots/robot01"
-    ) as websocket:
+    with robot_websocket_connect() as websocket:
         connection = websocket.receive_json()
         assert connection["type"] == "connection_ack"
 
@@ -511,9 +522,7 @@ def test_task_persists_across_database_sessions():
     assert fetched.json()["pickup_station_id"] == "A"
 
 def test_robot_websocket_heartbeat_round_trip():
-    with client.websocket_connect(
-        "/ws/robots/robot01"
-    ) as websocket:
+    with robot_websocket_connect() as websocket:
         connection = websocket.receive_json()
 
         assert connection["type"] == "connection_ack"
@@ -546,9 +555,7 @@ def test_robot_websocket_heartbeat_round_trip():
 
 
 def test_robot_websocket_rejects_unknown_message():
-    with client.websocket_connect(
-        "/ws/robots/robot01"
-    ) as websocket:
+    with robot_websocket_connect() as websocket:
         websocket.receive_json()
 
         websocket.send_json(
@@ -711,9 +718,7 @@ def test_robot_websocket_rejects_invalid_diagnostics():
 
 
 def test_robot_websocket_persists_telemetry():
-    with client.websocket_connect(
-        "/ws/robots/robot01"
-    ) as websocket:
+    with robot_websocket_connect() as websocket:
         websocket.receive_json()
 
         websocket.send_json(
@@ -751,9 +756,7 @@ def test_robot_websocket_persists_telemetry():
 
 
 def test_robot_websocket_rejects_invalid_telemetry():
-    with client.websocket_connect(
-        "/ws/robots/robot01"
-    ) as websocket:
+    with robot_websocket_connect() as websocket:
         websocket.receive_json()
 
         websocket.send_json(
@@ -774,9 +777,7 @@ def test_robot_websocket_rejects_invalid_telemetry():
         assert response["code"] == "INVALID_TELEMETRY"
 
 def test_robot_receives_pickup_navigation_command():
-    with client.websocket_connect(
-        "/ws/robots/robot01"
-    ) as websocket:
+    with robot_websocket_connect() as websocket:
         websocket.receive_json()
 
         task = create_task("A", "C")
@@ -814,9 +815,7 @@ def test_robot_receives_pickup_navigation_command():
         assert receipt["accepted"] is True
 
 def test_robot_receives_destination_command():
-    with client.websocket_connect(
-        "/ws/robots/robot01"
-    ) as websocket:
+    with robot_websocket_connect() as websocket:
         websocket.receive_json()
 
         task = create_task("A", "C")
@@ -869,9 +868,7 @@ def test_robot_receives_destination_command():
         )
 
 def test_navigation_result_advances_pickup():
-    with client.websocket_connect(
-        "/ws/robots/robot01"
-    ) as websocket:
+    with robot_websocket_connect() as websocket:
         websocket.receive_json()
 
         task = create_task("A", "C")
@@ -915,9 +912,7 @@ def test_navigation_result_broadcasts_dashboard_update():
             == "dashboard_connection_ack"
         )
 
-        with client.websocket_connect(
-            "/ws/robots/robot01"
-        ) as robot_websocket:
+        with robot_websocket_connect() as robot_websocket:
             robot_websocket.receive_json()
 
             task = create_task("A", "C")
@@ -965,9 +960,7 @@ def test_navigation_result_broadcasts_dashboard_update():
             == "WAITING_FOR_LOADING"
         )
 def test_navigation_failure_marks_task_failed():
-    with client.websocket_connect(
-        "/ws/robots/robot01"
-    ) as websocket:
+    with robot_websocket_connect() as websocket:
         websocket.receive_json()
 
         task = create_task("A", "C")
@@ -1000,9 +993,7 @@ def test_robot_map_updates_api_snapshot():
     missing = client.get("/api/map")
     assert missing.status_code == 404
 
-    with client.websocket_connect(
-        "/ws/robots/robot01"
-    ) as websocket:
+    with robot_websocket_connect() as websocket:
         websocket.receive_json()
 
         websocket.send_json(
@@ -1049,9 +1040,7 @@ def test_navigation_feedback_broadcasts_dashboard_update(
     ) -> None:
         dashboard_events.append(message)
 
-    with client.websocket_connect(
-        "/ws/robots/robot01"
-    ) as robot_websocket:
+    with robot_websocket_connect() as robot_websocket:
         robot_ack = robot_websocket.receive_json()
 
         assert (
