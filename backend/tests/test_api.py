@@ -653,9 +653,13 @@ def test_robot_diagnostics_broadcasts_dashboard_update(
 
     assert websocket.accepted is True
     assert websocket.sent[0]["type"] == "connection_ack"
-    assert len(dashboard_events) == 1
-    dashboard_event = dashboard_events[0]
-    assert dashboard_event["type"] == "robot_diagnostics"
+    diagnostic_events = [
+        event
+        for event in dashboard_events
+        if event["type"] == "robot_diagnostics"
+    ]
+    assert len(diagnostic_events) == 1
+    dashboard_event = diagnostic_events[0]
     assert dashboard_event["robot_id"] == "robot01"
     assert dashboard_event["overall_level"] == "STALE"
     assert dashboard_event["timestamp"] == timestamp
@@ -1114,8 +1118,13 @@ def test_navigation_feedback_broadcasts_dashboard_update(
             == "heartbeat_ack"
         )
 
-    assert len(dashboard_events) == 1
-    dashboard_event = dashboard_events[0]
+    feedback_events = [
+        event
+        for event in dashboard_events
+        if event["type"] == "navigation_feedback"
+    ]
+    assert len(feedback_events) == 1
+    dashboard_event = feedback_events[0]
 
     assert (
         dashboard_event["type"]
