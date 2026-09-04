@@ -27,6 +27,9 @@ from .models import (
 from .navigation_path_store import navigation_path_store
 from .navigation_feedback_store import navigation_feedback_store
 from .repository import DeliveryRepository
+from .notification_service import NotificationService
+from .audit_service import AuditService
+from .domain_context import TrustedActor
 from .seed import reset_demo_data
 from .state_machine import (
     DeliveryTaskStateMachine,
@@ -62,6 +65,53 @@ class DeliveryService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.repo = DeliveryRepository(db)
+        self.pending_notification_ids: list[str] = []
+
+    def take_pending_notification_ids(self) -> list[str]:
+        """Consume post-commit notification IDs for this service exactly once.
+
+        A robot WebSocket keeps one DeliveryService alive across multiple
+        messages. IDs cannot remain on that instance after publication, or a
+        later transition could replay an older live notification.
+        """
+        notification_ids = list(dict.fromkeys(self.pending_notification_ids))
+        self.pending_notification_ids.clear()
+        return notification_ids
+
+    def _record_task_change(
+        self,
+        task: DeliveryTaskORM,
+        action: str,
+        actor: TrustedActor | str | None,
+    ) -> None:
+        """Persist required Step-14 records in the caller's domain transaction."""
+        if task.owner_id:
+            notification = NotificationService(self.db).create(
+                task.owner_id, action, "Delivery updated",
+                f"Task {task.id} is now {task.status.value}.",
+                f"task:{task.id}:{action}:{task.status.value}", "task", task.id,
+            )
+            if notification is not None:
+                self.pending_notification_ids.append(notification.id)
+        AuditService(self.db).log(
+            actor, action, "task", task.id,
+            {"task_status": task.status.value, "priority": task.priority.value},
+        )
+
+    def record_robot_connection(self, robot_id: str, connected: bool) -> list[str]:
+        """Record actual socket lifecycle edges, never telemetry heartbeats."""
+        robot = self._robot_or_404(robot_id)
+        action = "robot.connected" if connected else "robot.disconnected"
+        AuditService(self.db).log(None, action, "robot", robot.id, {"robot_id": robot.id})
+        event_key = f"robot:{robot.id}:{action}:{utc_now().isoformat()}"
+        notifications = NotificationService(self.db).create_for_admins(
+            action,
+            "Robot connected" if connected else "Robot disconnected",
+            f"Robot {robot.id} {'connected' if connected else 'disconnected'}.",
+            event_key, "robot", robot.id,
+        )
+        self.db.commit()
+        return [item.id for item in notifications]
 
     def _robot_or_404(self, robot_id: str = "robot01", *, lock: bool = False) -> RobotORM:
         robot = self.repo.get_robot_for_update(robot_id) if lock else self.repo.get_robot(robot_id)
@@ -124,7 +174,7 @@ class DeliveryService:
 
         return robot
 
-    def set_robot_offline(self, robot_id: str) -> RobotORM:
+    def set_robot_offline(self, robot_id: str, actor_id: str | None = None) -> RobotORM:
         robot = self._robot_or_404(robot_id, lock=True)
         navigation_feedback_store.clear_robot(robot_id)
         if not robot.online and robot.state == RobotState.OFFLINE:
@@ -148,11 +198,12 @@ class DeliveryService:
         robot.state = RobotState.OFFLINE
         robot.current_task_id = None
         robot.last_seen = "Offline"
+        AuditService(self.db).log(actor_id, "robot.offline", "robot", robot.id, {"robot_id": robot.id})
         self.db.commit()
         self.db.refresh(robot)
         return robot
 
-    def set_robot_online(self, robot_id: str) -> RobotORM:
+    def set_robot_online(self, robot_id: str, actor_id: str | None = None) -> RobotORM:
         robot = self._robot_or_404(robot_id, lock=True)
         if robot.online and robot.state != RobotState.OFFLINE:
             raise HTTPException(
@@ -165,11 +216,12 @@ class DeliveryService:
         robot.last_seen = "Just now"
         self.db.flush()
         self.dispatch_next_queued_task(robot=robot)
+        AuditService(self.db).log(actor_id, "robot.online", "robot", robot.id, {"robot_id": robot.id})
         self.db.commit()
         self.db.refresh(robot)
         return robot
 
-    def recover_robot(self, robot_id: str) -> RobotORM:
+    def recover_robot(self, robot_id: str, actor_id: str | None = None) -> RobotORM:
         robot = self._robot_or_404(robot_id, lock=True)
         if not robot.online:
             raise HTTPException(
@@ -187,6 +239,7 @@ class DeliveryService:
         robot.last_seen = "Just now"
         self.db.flush()
         self.dispatch_next_queued_task(robot=robot)
+        AuditService(self.db).log(actor_id, "robot.recovered", "robot", robot.id, {"robot_id": robot.id})
         self.db.commit()
         self.db.refresh(robot)
         return robot
@@ -201,14 +254,15 @@ class DeliveryService:
             raise HTTPException(status_code=404, detail="Station not found")
         return station
 
-    def add_station(self, payload: StationCreate) -> StationORM:
+    def add_station(self, payload: StationCreate, actor_id: str | None = None) -> StationORM:
         station = StationORM(id=self.repo.next_station_id(), **payload.model_dump())
         self.repo.add_station(station)
+        AuditService(self.db).log(actor_id, "station.created", "station", station.id)
         self.db.commit()
         self.db.refresh(station)
         return station
 
-    def delete_station(self, station_id: str) -> None:
+    def delete_station(self, station_id: str, actor_id: str | None = None) -> None:
         station = self.get_station(station_id)
         if self.repo.station_is_referenced(station.id):
             raise HTTPException(
@@ -216,6 +270,7 @@ class DeliveryService:
                 detail="Station is referenced by a delivery task",
             )
         self.repo.delete_station(station)
+        AuditService(self.db).log(actor_id, "station.deleted", "station", station.id)
         self.db.commit()
 
     # Tasks
@@ -392,7 +447,7 @@ class DeliveryService:
         self.db.refresh(task)
         return task
 
-    def create_task(self, payload: DeliveryTaskCreate, owner_id: str | None = None) -> DeliveryTaskORM:
+    def create_task(self, payload: DeliveryTaskCreate, owner_id: str | None = None, actor: TrustedActor | None = None, actor_id: str | None = None) -> DeliveryTaskORM:
         self.get_station(payload.pickup_station_id)
         self.get_station(payload.destination_station_id)
         robot = self._robot_or_404(lock=True)
@@ -417,6 +472,7 @@ class DeliveryService:
             TaskStatus.QUEUED,
             EventSource.SYSTEM.value,
         )
+        self._record_task_change(task, "task.created", actor or actor_id or owner_id)
 
         if self._robot_available(robot):
             # Always go through the canonical queue query. This matters when an
@@ -468,6 +524,7 @@ class DeliveryService:
             EventSource.SYSTEM.value,
             f"Assigned to {robot.id}",
         )
+        self._record_task_change(task, "task.dispatched", None)
         return task
 
     def dispatch_next_queued_task(self, robot: RobotORM | None = None) -> DeliveryTaskORM | None:
@@ -486,6 +543,8 @@ class DeliveryService:
         event: TaskEvent,
         source: EventSource,
         detail: str | None = None,
+        actor: TrustedActor | None = None,
+        actor_id: str | None = None,
     ) -> DeliveryTaskORM:
         task = self._task_or_404(task_id, lock=True)
         robot = self._robot_or_404(task.robot_id or "robot01", lock=True)
@@ -553,6 +612,7 @@ class DeliveryService:
             source.value,
             detail,
         )
+        self._record_task_change(task, f"task.{event.value.lower()}", actor or actor_id)
 
         if transition.to_status == TaskStatus.COMPLETED:
             self.db.flush()
@@ -562,7 +622,7 @@ class DeliveryService:
         self.db.refresh(task)
         return task
 
-    def cancel_task(self, task_id: str) -> DeliveryTaskORM:
+    def cancel_task(self, task_id: str, actor: TrustedActor | None = None, actor_id: str | None = None) -> DeliveryTaskORM:
         task = self._task_or_404(task_id, lock=True)
         if task.status in TERMINAL_STATUSES:
             raise HTTPException(
@@ -584,6 +644,7 @@ class DeliveryService:
             EventSource.WEB_OPERATOR.value,
             "Cancellation requested by operator",
         )
+        self._record_task_change(task, "task.cancel", actor or actor_id)
 
         if (
             task.robot_id == robot.id
@@ -598,7 +659,7 @@ class DeliveryService:
         self.db.refresh(task)
         return task
 
-    def retry_task(self, task_id: str) -> DeliveryTaskORM:
+    def retry_task(self, task_id: str, actor: TrustedActor | None = None, actor_id: str | None = None) -> DeliveryTaskORM:
         task = self._task_or_404(task_id, lock=True)
         if task.status != TaskStatus.FAILED:
             raise HTTPException(
@@ -622,6 +683,7 @@ class DeliveryService:
             TaskStatus.QUEUED,
             EventSource.WEB_OPERATOR.value,
         )
+        self._record_task_change(task, "task.retry", actor or actor_id)
 
         if robot.current_task_id == task.id or robot.state == RobotState.ERROR:
             if robot.online:

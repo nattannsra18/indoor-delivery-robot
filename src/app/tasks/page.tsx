@@ -14,6 +14,8 @@ import TaskArrivalEstimate from "@/components/TaskArrivalEstimate";
 import TaskMetadata from "@/components/TaskMetadata";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useAuth } from "@/context/AuthContext";
+import { useLocale } from "@/context/LocaleContext";
+import { formatDate, tasksText } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import {
   TaskHistoryEntry,
@@ -42,6 +44,8 @@ const cancellableStatuses: TaskStatus[] = [
 
 export default function TasksPage() {
   const { user } = useAuth();
+  const { locale, format, t } = useLocale();
+  const copy = tasksText[locale];
   const {
     tasks,
     stationName,
@@ -106,7 +110,7 @@ export default function TasksPage() {
       setMessage(
         err instanceof Error
           ? err.message
-          : "Task action failed."
+          : copy.taskActionFailed
       );
     } finally {
       setBusyTaskId(null);
@@ -144,7 +148,7 @@ export default function TasksPage() {
           setMessage(
             err instanceof Error
               ? err.message
-              : "Unable to load task history."
+              : copy.historyLoadFailed
           );
           setHistoryTaskId(null);
         }
@@ -171,10 +175,9 @@ export default function TasksPage() {
   return (
     <>
       <PageHeader
-        title={user?.role === "ADMIN" ? "All Delivery Tasks" : "My Tasks"}
+        title={user?.role === "ADMIN" ? copy.allTitle : copy.myTitle}
         description={user?.role === "ADMIN"
-          ? "Validated delivery queue, realtime estimates, retry controls and persistent task history."
-          : "Track and manage only the delivery tasks owned by your account."}
+          ? copy.allDescription : copy.myDescription}
       />
 
       <WorkflowControls />
@@ -195,7 +198,7 @@ export default function TasksPage() {
                     )
               }`}
             >
-              {item.replaceAll("_", " ")}
+              {item === "ALL" ? t("allActions") : t("taskStatus")[item]}
             </button>
           ))}
         </div>
@@ -214,31 +217,31 @@ export default function TasksPage() {
             <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
               <tr>
                 <th className="px-3 py-3">
-                  Task
+                  {copy.task}
                 </th>
                 <th className="px-3 py-3">
-                  Pickup
+                  {copy.pickup}
                 </th>
                 <th className="px-3 py-3">
-                  Destination
+                  {copy.destination}
                 </th>
                 <th className="px-3 py-3">
-                  Robot
+                  {copy.robot}
                 </th>
                 <th className="px-3 py-3">
-                  Status
+                  {copy.status}
                 </th>
                 <th className="px-3 py-3">
-                  Delivery details
+                  {copy.details}
                 </th>
                 <th className="px-3 py-3">
-                  Progress
+                  {copy.progress}
                 </th>
                 <th className="px-3 py-3">
-                  Queue / arrival estimate
+                  {copy.estimate}
                 </th>
                 <th className="px-3 py-3">
-                  Actions
+                  {copy.actions}
                 </th>
               </tr>
             </thead>
@@ -266,7 +269,7 @@ export default function TasksPage() {
                   </td>
 
                   <td className="px-3 py-4 text-slate-500">
-                    {task.robotId ?? "Unassigned"}
+                    {task.robotId ?? copy.unassigned}
                   </td>
 
                   <td className="px-3 py-4">
@@ -300,9 +303,9 @@ export default function TasksPage() {
                   <td className="px-3 py-4">
                     {["COMPLETED", "FAILED", "CANCELLED"].includes(task.status) ? (
                       <span className="text-xs text-slate-500">
-                        {task.status.replaceAll("_", " ")} · {task.completedAt
-                          ? new Date(task.completedAt).toLocaleString()
-                          : "Time unavailable"}
+                        {t("taskStatus")[task.status]} · {task.completedAt
+                          ? formatDate(task.completedAt, locale)
+                          : copy.timeUnavailable}
                       </span>
                     ) : (
                       <TaskArrivalEstimate
@@ -325,7 +328,7 @@ export default function TasksPage() {
                         }
                         className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                       >
-                        History
+                        {copy.history}
                       </button>
 
                       {cancellableStatuses.includes(
@@ -343,15 +346,13 @@ export default function TasksPage() {
                               () =>
                                 cancelTask(task.id),
                               (
-                                `${task.id} cancelled. `
-                                + "Queue dispatch was "
-                                + "re-evaluated."
+                                format(copy.cancelled, { id: task.id })
                               )
                             )
                           }
                           className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
                         >
-                          Cancel
+                          {copy.cancel}
                         </button>
                       )}
 
@@ -368,14 +369,13 @@ export default function TasksPage() {
                               () =>
                                 retryTask(task.id),
                               (
-                                `${task.id} returned `
-                                + "to the queue."
+                                format(copy.returned, { id: task.id })
                               )
                             )
                           }
                           className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                         >
-                          Retry
+                          {copy.retry}
                         </button>
                       )}
                     </div>
@@ -387,7 +387,7 @@ export default function TasksPage() {
 
           {visibleTasks.length === 0 && (
             <div className="py-12 text-center text-sm text-slate-500">
-              No tasks match this filter.
+              {copy.noMatch}
             </div>
           )}
         </div>

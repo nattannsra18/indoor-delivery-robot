@@ -8,10 +8,12 @@ import { API_BASE_URL } from "@/lib/api";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import AlertCenter from "@/components/AlertCenter";
 import { routeAllowedForRole } from "@/lib/roleDashboard";
+import { LocaleProvider } from "@/context/LocaleContext";
+import { useLocale } from "@/context/LocaleContext";
 
 export default function AppShell({ children }: { children: ReactNode }) {
   return (
-    <AuthProvider><AuthGate>{children}</AuthGate></AuthProvider>
+    <LocaleProvider><AuthProvider><AuthGate>{children}</AuthGate></AuthProvider></LocaleProvider>
   );
 }
 
@@ -20,6 +22,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const loginPage = pathname === "/login";
+  const { t } = useLocale();
   useEffect(() => {
     if (!loading && !user && !loginPage) router.replace("/login");
     if (
@@ -32,7 +35,7 @@ function AuthGate({ children }: { children: ReactNode }) {
   }, [loading, user, loginPage, pathname, router]);
   const routeAllowed = !user || routeAllowedForRole(pathname, user.role);
   if (loading || (!user && !loginPage) || (user && loginPage) || !routeAllowed) {
-    return <main className="grid min-h-screen place-items-center text-sm text-slate-500">Checking session…</main>;
+    return <main className="grid min-h-screen place-items-center text-sm text-slate-500">{t("loading")}</main>;
   }
   if (loginPage) return children;
   return <ApiDeliveryProvider><ShellContent>{children}</ShellContent></ApiDeliveryProvider>;
@@ -41,6 +44,7 @@ function AuthGate({ children }: { children: ReactNode }) {
 function ShellContent({ children }: { children: ReactNode }) {
   const { backendOnline, error, loading, refreshAll } = useDeliveryApi();
   const { user } = useAuth();
+  const { t } = useLocale();
 
   return (
     <div className="min-h-screen lg:flex">
@@ -50,7 +54,7 @@ function ShellContent({ children }: { children: ReactNode }) {
         {!loading && !backendOnline && (
           <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold">FastAPI backend is offline</p>
+              <p className="text-sm font-semibold">{t("backendOffline")}</p>
               <p className="mt-1 text-xs leading-5">
                 Start the backend at {API_BASE_URL}. {error ? `Error: ${error}` : ""}
               </p>
@@ -60,7 +64,7 @@ function ShellContent({ children }: { children: ReactNode }) {
               onClick={() => void refreshAll()}
               className="min-h-10 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white"
             >
-              Retry connection
+              {t("retry")}
             </button>
           </div>
         )}

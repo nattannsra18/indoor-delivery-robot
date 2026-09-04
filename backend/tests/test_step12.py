@@ -1,3 +1,4 @@
+import asyncio
 from datetime import timedelta
 
 import pytest
@@ -168,7 +169,9 @@ def test_user_cannot_create_high_but_admin_can_and_metadata_round_trips():
         )
 
         with pytest.raises(HTTPException) as denied:
-            create_task_endpoint(request, BackgroundTasks(), service, alice)
+            asyncio.run(
+                create_task_endpoint(request, BackgroundTasks(), service, alice)
+            )
         assert denied.value.status_code == 403
         assert service.list_tasks(owner_id="alice") == []
 
@@ -182,7 +185,9 @@ def test_user_cannot_create_high_but_admin_can_and_metadata_round_trips():
             priority=TaskPriority.HIGH,
             map_revision=snapshot.revision,
         )
-        created = create_task_endpoint(request, BackgroundTasks(), service, admin)
+        created = asyncio.run(
+            create_task_endpoint(request, BackgroundTasks(), service, admin)
+        )
         assert created.priority == TaskPriority.HIGH
         assert created.recipient_name == "Grace Hopper"
         assert created.delivery_note == "Leave with the lab supervisor."

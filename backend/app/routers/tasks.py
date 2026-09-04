@@ -46,6 +46,8 @@ from ..route_preview import (
     route_preview_coordinator,
 )
 from ..websocket_manager import robot_connection_manager
+from ..notification_delivery import publish_committed_notifications
+from ..domain_context import TrustedActor
 
 router = APIRouter(
     prefix="/api/tasks",
@@ -246,7 +248,7 @@ async def preview_task_route(
     response_model=DeliveryTask,
     status_code=status.HTTP_201_CREATED,
 )
-def create_task(
+async def create_task(
     payload: DeliveryTaskCreate,
     background_tasks: BackgroundTasks,
     service: DeliveryService = Depends(get_service),
@@ -267,7 +269,10 @@ def create_task(
             status_code=status.HTTP_409_CONFLICT,
             detail="A fresh successful route preview is required",
         )
-    task = service.create_task(payload, owner_id=user.id)
+    task = service.create_task(payload, owner_id=user.id, actor=TrustedActor.user(user))
+    publish_committed_notifications(
+        service.db, service.take_pending_notification_ids()
+    )
 
     schedule_navigation_command(
         background_tasks,
@@ -282,7 +287,7 @@ def create_task(
     "/{task_id}/events",
     response_model=DeliveryTask,
 )
-def apply_operator_event(
+async def apply_operator_event(
     task_id: str,
     payload: TaskEventRequest,
     background_tasks: BackgroundTasks,
@@ -303,7 +308,10 @@ def apply_operator_event(
         task_id,
         payload.event,
         EventSource.WEB_OPERATOR,
-        payload.detail,
+        payload.detail, actor=TrustedActor.user(user),
+    )
+    publish_committed_notifications(
+        service.db, service.take_pending_notification_ids()
     )
 
     schedule_navigation_command(
@@ -325,7 +333,7 @@ def apply_operator_event(
     "/{task_id}/cancel",
     response_model=DeliveryTask,
 )
-def cancel_task(
+async def cancel_task(
     task_id: str,
     background_tasks: BackgroundTasks,
     service: DeliveryService = Depends(
@@ -334,7 +342,10 @@ def cancel_task(
     user: UserORM = Depends(require_user),
 ):
     authorize_task(user, service.get_task(task_id))
-    task = service.cancel_task(task_id)
+    task = service.cancel_task(task_id, actor=TrustedActor.user(user))
+    publish_committed_notifications(
+        service.db, service.take_pending_notification_ids()
+    )
 
     if task.robot_id is not None:
         schedule_navigation_path_clear(
@@ -357,14 +368,17 @@ def cancel_task(
     "/{task_id}/retry",
     response_model=DeliveryTask,
 )
-def retry_task(
+async def retry_task(
     task_id: str,
     background_tasks: BackgroundTasks,
     service: DeliveryService = Depends(get_service),
     user: UserORM = Depends(require_user),
 ):
     authorize_task(user, service.get_task(task_id))
-    task = service.retry_task(task_id)
+    task = service.retry_task(task_id, actor=TrustedActor.user(user))
+    publish_committed_notifications(
+        service.db, service.take_pending_notification_ids()
+    )
 
     schedule_navigation_command(
         background_tasks,

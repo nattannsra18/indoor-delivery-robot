@@ -3,8 +3,12 @@
 import { FormEvent, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
+import { useLocale } from "@/context/LocaleContext";
+import { stationText } from "@/lib/i18n";
 
 export default function StationsPage() {
+  const { locale, format } = useLocale();
+  const copy = stationText[locale];
   const { stations, addStation, removeStation, backendOnline } = useDeliveryApi();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -23,7 +27,7 @@ export default function StationsPage() {
 
     if (!name.trim() || !Number.isFinite(parsedX) || !Number.isFinite(parsedY) || !Number.isFinite(parsedYaw)) {
       setIsError(true);
-      setMessage("Enter a valid station name and numeric pose.");
+      setMessage(copy.validation);
       return;
     }
 
@@ -33,13 +37,13 @@ export default function StationsPage() {
     try {
       const created = await addStation({
         name: name.trim(),
-        description: description.trim() || "Delivery station",
+        description: description.trim() || copy.defaultDescription,
         x: parsedX,
         y: parsedY,
         yaw: parsedYaw
       });
 
-      setMessage(`${created.name} (${created.id}) added through FastAPI and is now available on Create Delivery.`);
+      setMessage(format(copy.added, { name: created.name, id: created.id }));
       setName("");
       setDescription("");
       setX("0");
@@ -47,7 +51,7 @@ export default function StationsPage() {
       setYaw("0");
     } catch (err) {
       setIsError(true);
-      setMessage(err instanceof Error ? err.message : "Unable to add station.");
+      setMessage(err instanceof Error ? err.message : copy.addFailure);
     } finally {
       setBusy(false);
     }
@@ -64,11 +68,11 @@ export default function StationsPage() {
 
   return (
     <>
-      <PageHeader title="Station Management" description="Create and manage map goals through the FastAPI backend." />
+      <PageHeader title={copy.title} description={copy.description} />
 
       <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-semibold text-slate-900">Configured Stations</h2>
+          <h2 className="font-semibold text-slate-900">{copy.configured}</h2>
           <div className="mt-4 grid gap-3">
             {stations.map((station) => (
               <div key={station.id} className="flex flex-col gap-4 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -80,7 +84,7 @@ export default function StationsPage() {
                       <p className="text-xs text-slate-500">{station.description}</p>
                     </div>
                   </div>
-                  <p className="mt-3 text-xs text-slate-500">Pose: x={station.x.toFixed(2)}, y={station.y.toFixed(2)}, yaw={station.yaw.toFixed(2)}</p>
+                  <p className="mt-3 text-xs text-slate-500">{format(copy.pose, { x: station.x.toFixed(2), y: station.y.toFixed(2), yaw: station.yaw.toFixed(2) })}</p>
                 </div>
 
                 <button
@@ -89,22 +93,22 @@ export default function StationsPage() {
                   disabled={busy || !backendOnline}
                   className="min-h-10 rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Remove
+                  {copy.remove}
                 </button>
               </div>
             ))}
-            {stations.length === 0 && <p className="py-6 text-sm text-slate-500">No stations loaded from FastAPI.</p>}
+            {stations.length === 0 && <p className="py-6 text-sm text-slate-500">{copy.empty}</p>}
           </div>
         </section>
 
         <form onSubmit={handleAddStation} className="h-fit rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-semibold text-slate-900">Add Station</h2>
-          <p className="mt-1 text-sm text-slate-500">Stations are persisted in PostgreSQL through the FastAPI backend.</p>
+          <h2 className="font-semibold text-slate-900">{copy.add}</h2>
+          <p className="mt-1 text-sm text-slate-500">{copy.persisted}</p>
 
           <div className="mt-5 grid gap-4">
-            <Input label="Station name" value={name} onChange={setName} />
-            <Input label="Description" value={description} onChange={setDescription} />
-            <div className="grid grid-cols-3 gap-3">
+            <Input label={copy.stationName} value={name} onChange={setName} />
+            <Input label={copy.stationDescription} value={description} onChange={setDescription} />
+            <div className="grid gap-3 sm:grid-cols-3">
               <Input label="X" value={x} onChange={setX} inputMode="decimal" />
               <Input label="Y" value={y} onChange={setY} inputMode="decimal" />
               <Input label="Yaw" value={yaw} onChange={setYaw} inputMode="decimal" />
@@ -115,7 +119,7 @@ export default function StationsPage() {
               disabled={busy || !backendOnline}
               className="min-h-11 rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              {busy ? "Saving..." : "Add Station via FastAPI"}
+              {busy ? copy.save : copy.addAction}
             </button>
 
             <div aria-live="polite">

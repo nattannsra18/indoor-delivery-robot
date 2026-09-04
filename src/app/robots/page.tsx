@@ -4,8 +4,12 @@ import PageHeader from "@/components/PageHeader";
 import WorkflowControls from "@/components/WorkflowControls";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import EmergencyStopControl from "@/components/EmergencyStopControl";
+import { useLocale } from "@/context/LocaleContext";
+import { robotText } from "@/lib/i18n";
 
 export default function RobotStatusPage() {
+  const { locale, t } = useLocale();
+  const copy = robotText[locale];
   const {
     robot,
     activeTask,
@@ -18,8 +22,7 @@ export default function RobotStatusPage() {
   return (
     <>
       <PageHeader
-        title="Robot Status"
-        description="Live robot connectivity, AMCL pose and mission status from the ROS 2 Web Bridge."
+        title={copy.title} description={copy.description}
       />
 
       <div className="mb-6"><EmergencyStopControl /></div>
@@ -29,7 +32,7 @@ export default function RobotStatusPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm text-slate-500">
-                Robot ID
+                {copy.robotId}
               </p>
               <h2 className="text-xl font-bold text-slate-900">
                 {robot.name}
@@ -43,41 +46,39 @@ export default function RobotStatusPage() {
                   : "bg-red-50 text-red-700"
               }`}
             >
-              ● {robotConnected ? "ONLINE" : "OFFLINE"}
+              ● {robotConnected ? copy.online : copy.offline}
             </span>
           </div>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <Info
-              label="State"
-              value={robot.state.replaceAll("_", " ")}
+              label={copy.state} value={robot.state === "IDLE" ? "IDLE" : robot.state.replaceAll("_", " ")}
             />
             <Info
-              label="Battery"
+              label={copy.battery}
               value={`${robot.battery}%`}
             />
             <Info
-              label="Position X"
+              label={copy.positionX}
               value={`${robot.x.toFixed(2)} m`}
             />
             <Info
-              label="Position Y"
+              label={copy.positionY}
               value={`${robot.y.toFixed(2)} m`}
             />
             <Info
-              label="Yaw"
+              label={copy.yaw}
               value={`${robot.yaw.toFixed(2)} rad`}
             />
             <Info
-              label="Active Task"
-              value={activeTask?.id ?? "None"}
+              label={copy.activeTask} value={activeTask?.id ?? copy.none}
             />
           </div>
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
           <h2 className="font-semibold text-slate-900">
-            Integration Status
+            {copy.integration}
           </h2>
 
           <div className="mt-5 space-y-3">
@@ -85,8 +86,7 @@ export default function RobotStatusPage() {
               name="Next.js → FastAPI"
               state={
                 backendOnline
-                  ? "Connected"
-                  : "Offline"
+                  ? copy.connected : copy.offline
               }
               warning={!backendOnline}
             />
@@ -94,8 +94,7 @@ export default function RobotStatusPage() {
               name="PostgreSQL Storage"
               state={
                 backendOnline
-                  ? "Available"
-                  : "Unavailable"
+                  ? copy.available : copy.unavailable
               }
               warning={!backendOnline}
             />
@@ -103,8 +102,7 @@ export default function RobotStatusPage() {
               name="ROS 2 Web Bridge"
               state={
                 robotConnected
-                  ? "Connected"
-                  : "Offline"
+                  ? copy.connected : copy.offline
               }
               warning={!robotConnected}
             />
@@ -112,8 +110,7 @@ export default function RobotStatusPage() {
               name="AMCL Telemetry"
               state={
                 robotConnected
-                  ? "Streaming"
-                  : "Waiting"
+                  ? copy.streaming : copy.waiting
               }
               warning={!robotConnected}
             />
@@ -121,7 +118,7 @@ export default function RobotStatusPage() {
               name="Nav2 Mission"
               state={
                 activeTask
-                  ? activeTask.status.replaceAll("_", " ")
+                  ? t("taskStatus")[activeTask.status]
                   : "IDLE"
               }
             />
@@ -135,13 +132,10 @@ export default function RobotStatusPage() {
 
       <section className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 p-5">
         <h2 className="font-semibold text-blue-900">
-          Operator confirmation
+          {copy.operatorConfirmation}
         </h2>
         <p className="mt-1 text-sm leading-6 text-blue-800">
-          Nav2 arrival events are reported automatically by
-          the ROS 2 Web Bridge. Loading and unloading
-          confirmations become available when operator
-          action is required.
+          {copy.operatorHelp}
         </p>
       </section>
     </>

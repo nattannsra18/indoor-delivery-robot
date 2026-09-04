@@ -186,7 +186,6 @@ export interface UserIdentity {
 
 export interface Alert {
   id: string;
-  deduplication_key: string;
   robot_id?: string;
   severity: "INFO" | "WARNING" | "CRITICAL";
   title: string;
@@ -200,6 +199,36 @@ export interface Alert {
   acknowledged_by_user_id?: string;
   active: boolean;
   resolved_at?: string;
+}
+
+export interface Notification {
+  id: string;
+  eventType: string;
+  title: string;
+  message: string;
+  entityType?: string;
+  entityId?: string;
+  readAt?: string;
+  createdAt: string;
+}
+
+export interface NotificationPage {
+  items: Notification[];
+  unreadCount: number;
+  nextOffset?: number;
+}
+
+export interface AuditRecord {
+  id: number;
+  actorId?: string;
+  actorType: "USER" | "ROBOT" | "SYSTEM";
+  actorIdentifier?: string;
+  action: string;
+  result: string;
+  entityType: string;
+  entityId?: string;
+  metadataJson: string;
+  createdAt: string;
 }
 
 export interface EmergencyStop {

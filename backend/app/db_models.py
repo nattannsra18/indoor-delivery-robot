@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -177,3 +177,36 @@ class EmergencyStopORM(Base):
     failure_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class NotificationORM(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (
+        UniqueConstraint("recipient_id", "deduplication_key", name="uq_notification_recipient_dedup"),
+        Index("ix_notifications_recipient_read_created", "recipient_id", "read_at", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    recipient_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    entity_type: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    entity_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    deduplication_key: Mapped[str] = mapped_column(String(300), nullable=False)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)
+
+
+class AuditRecordORM(Base):
+    __tablename__ = "audit_records"
+    __table_args__ = (Index("ix_audit_entity_lookup", "entity_type", "entity_id", "created_at"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    actor_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_type: Mapped[str] = mapped_column(String(16), nullable=False, default="SYSTEM", index=True)
+    actor_identifier: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    result: Mapped[str] = mapped_column(String(40), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    entity_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)

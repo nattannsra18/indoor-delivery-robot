@@ -6,6 +6,8 @@ import {
   DiagnosticStatus,
   RobotDiagnostics
 } from "@/types";
+import { useLocale } from "@/context/LocaleContext";
+import { operationalText } from "@/lib/i18n";
 
 const STALE_AFTER_MS = 5000;
 
@@ -55,6 +57,8 @@ type DiagnosticsCardsProps = {
 export default function DiagnosticsCards({
   diagnostics
 }: DiagnosticsCardsProps) {
+  const { locale, format } = useLocale();
+  const copy = operationalText[locale];
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -70,10 +74,10 @@ export default function DiagnosticsCards({
     return (
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="font-semibold text-slate-900">
-          Robot Diagnostics
+          {copy.diagnostics}
         </h2>
         <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
-          Waiting for ROS diagnostics
+          {copy.waitingDiagnostics}
         </div>
       </section>
     );
@@ -94,28 +98,28 @@ export default function DiagnosticsCards({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold text-slate-900">
-            Robot Diagnostics
+            {copy.diagnostics}
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Live ROS 2 topic and sensor health for {diagnostics.robotId}
+            {format(copy.diagnosticsHelp, { id: diagnostics.robotId })}
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <LevelBadge
             level={overallLevel}
             label={
-              locallyStale ? "Unavailable" : overallLevel
+              locallyStale ? copy.unavailable : overallLevel
             }
           />
           <span className="text-xs text-slate-400">
-            {formatAge(ageMs)}
+            {formatAge(ageMs, locale)}
           </span>
         </div>
       </div>
 
       {diagnostics.statuses.length === 0 ? (
         <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-          No diagnostic statuses received
+          {copy.noDiagnosticStatuses}
         </div>
       ) : (
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -124,6 +128,7 @@ export default function DiagnosticsCards({
               key={`${status.name}-${index}`}
               status={status}
               locallyStale={locallyStale}
+              copy={copy}
             />
           ))}
         </div>
@@ -134,10 +139,12 @@ export default function DiagnosticsCards({
 
 function DiagnosticCard({
   status,
-  locallyStale
+  locallyStale,
+  copy
 }: {
   status: DiagnosticStatus;
   locallyStale: boolean;
+  copy: Record<string, string>;
 }) {
   const displayLevel = locallyStale
     ? "STALE"
@@ -174,7 +181,7 @@ function DiagnosticCard({
       </div>
 
       <p className="mt-3 text-sm leading-5 text-slate-600">
-        {status.message || "No diagnostic message"}
+        {status.message || copy.noDiagnosticMessage}
       </p>
 
       {details.length > 0 && (
@@ -220,12 +227,12 @@ function formatKey(key: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatAge(ageMs: number): string {
+function formatAge(ageMs: number, locale: "en" | "th"): string {
   const seconds = Math.floor(ageMs / 1000);
 
-  if (seconds < 1) return "Updated just now";
-  if (seconds < 60) return `Updated ${seconds}s ago`;
+  if (seconds < 1) return locale === "th" ? "อัปเดตเมื่อสักครู่" : "Updated just now";
+  if (seconds < 60) return locale === "th" ? `อัปเดต ${seconds} วินาทีที่แล้ว` : `Updated ${seconds}s ago`;
 
   const minutes = Math.floor(seconds / 60);
-  return `Updated ${minutes}m ago`;
+  return locale === "th" ? `อัปเดต ${minutes} นาทีที่แล้ว` : `Updated ${minutes}m ago`;
 }

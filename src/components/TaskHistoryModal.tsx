@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import TaskTimeline from "@/components/TaskTimeline";
 import { TaskHistoryEntry } from "@/types";
+import { useLocale } from "@/context/LocaleContext";
+import { operationalText } from "@/lib/i18n";
 
 type TaskHistoryModalProps = {
   taskId: string | null;
@@ -17,6 +19,8 @@ export default function TaskHistoryModal({
   loading,
   onClose
 }: TaskHistoryModalProps) {
+  const { locale, format } = useLocale();
+  const copy = operationalText[locale];
   useEffect(() => {
     if (!taskId) {
       return;
@@ -57,7 +61,7 @@ export default function TaskHistoryModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-0 backdrop-blur-sm sm:p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-0 backdrop-blur-sm sm:p-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
@@ -68,7 +72,7 @@ export default function TaskHistoryModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="task-history-title"
-        className="flex h-full w-full max-w-6xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl"
+        className="flex min-h-[100dvh] w-full max-w-6xl flex-col overflow-hidden bg-white shadow-2xl sm:min-h-0 sm:max-h-[90vh] sm:rounded-2xl"
       >
         <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
           <div>
@@ -76,10 +80,10 @@ export default function TaskHistoryModal({
               id="task-history-title"
               className="font-semibold text-slate-900"
             >
-              {taskId} Event History
+              {format(copy.eventHistory, { id: taskId })}
             </h2>
             <p className="mt-0.5 text-sm text-slate-500">
-              Task timeline and stage durations
+              {copy.timelineHelp}
             </p>
           </div>
 
@@ -88,7 +92,7 @@ export default function TaskHistoryModal({
             onClick={onClose}
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
           >
-            Close
+            {copy.close}
           </button>
         </header>
 
@@ -98,7 +102,7 @@ export default function TaskHistoryModal({
               <div className="text-center">
                 <span className="mx-auto block h-8 w-8 animate-spin rounded-full border-4 border-blue-100 border-t-blue-600" />
                 <p className="mt-3 text-sm text-slate-500">
-                  Loading task history...
+                  {copy.loadingHistory}
                 </p>
               </div>
             </div>

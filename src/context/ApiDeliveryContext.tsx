@@ -431,7 +431,9 @@ export function ApiDeliveryProvider({
             type?: string;
           };
 
-          if (message.type === "workflow_updated") {
+          if (message.type === "notification_created") {
+            window.dispatchEvent(new CustomEvent("idr:notification"));
+          } else if (message.type === "workflow_updated") {
             pendingNavigationPathRef.current = undefined;
             navigationPathRef.current = undefined;
             setNavigationPath(undefined);

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import WebSocket
+from anyio import ClosedResourceError
 
 
 class RobotConnectionManager:
@@ -27,7 +28,7 @@ class RobotConnectionManager:
                     code=1012,
                     reason="Replaced by a newer Robot Agent connection",
                 )
-            except RuntimeError:
+            except (RuntimeError, ClosedResourceError):
                 pass
 
         self._connections[robot_id] = websocket

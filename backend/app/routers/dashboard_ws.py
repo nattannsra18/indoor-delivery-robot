@@ -14,13 +14,15 @@ from ..browser_websocket_manager import (
     browser_connection_manager,
 )
 from ..navigation_path_store import navigation_path_store
-from ..auth import require_admin, websocket_user
+from ..auth import require_admin, websocket_session
 from ..database import get_db
 from ..models import Alert, UserRole
 from ..alert_service import AlertService
 from ..emergency_service import EmergencyStopService
 from sqlalchemy.orm import Session
 from ..db_models import DeliveryTaskORM
+from ..notification_service import NotificationService
+from ..models import Notification
 
 router = APIRouter(tags=["dashboard-websocket"])
 
@@ -43,16 +45,32 @@ async def dashboard_websocket(
     websocket: WebSocket,
     db: Session = Depends(get_db),
 ) -> None:
-    user = websocket_user(websocket, db)
-    if user is None:
+    resolved = websocket_session(websocket, db)
+    if resolved is None:
         await websocket.close(code=1008, reason="Authentication required")
         return
-    await browser_connection_manager.connect(websocket, user.role, user.id)
+    user, session = resolved
+    await browser_connection_manager.connect(
+        websocket,
+        user.role,
+        user.id,
+        session.id,
+    )
 
     await websocket.send_json(
         {
             "type": "dashboard_connection_ack",
             "connected": True,
+            "server_time": current_utc_time(),
+        }
+    )
+
+    notifications, unread_count, _ = NotificationService(db).list(user.id, 0, 30)
+    await websocket.send_json(
+        {
+            "type": "notification_snapshot",
+            "notifications": [Notification.model_validate(item).model_dump(mode="json") for item in notifications],
+            "unread_count": unread_count,
             "server_time": current_utc_time(),
         }
     )
@@ -92,9 +110,27 @@ async def dashboard_websocket(
             }
         )
 
+    # Dashboard sockets are long-lived.  All initial reads are complete, so
+    # release SQLite's implicit read transaction before waiting for frames.
+    db.rollback()
+
     try:
         while True:
             message = await websocket.receive_json()
+
+            # A cookie may have been revoked after this socket connected.
+            # Re-check before replying so logout/session expiry does not keep
+            # an authenticated dashboard transport alive indefinitely.
+            try:
+                still_authenticated = websocket_session(websocket, db)
+            finally:
+                # Session revalidation is a short read transaction. Never
+                # retain it while awaiting the next WebSocket frame.
+                db.rollback()
+            if still_authenticated is None:
+                browser_connection_manager.disconnect(websocket)
+                await websocket.close(code=1008, reason="Authentication required")
+                return
 
             if (
                 isinstance(message, dict)
@@ -121,9 +157,11 @@ async def dashboard_websocket(
 
     except WebSocketDisconnect:
         browser_connection_manager.disconnect(websocket)
+        db.rollback()
 
     except Exception:
         browser_connection_manager.disconnect(websocket)
+        db.rollback()
 
         try:
             await websocket.close(code=1011)

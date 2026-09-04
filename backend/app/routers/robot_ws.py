@@ -42,6 +42,8 @@ from ..navigation_feedback_store import (
     navigation_feedback_store,
 )
 from ..route_preview import route_preview_coordinator
+from ..notification_delivery import publish_committed_notifications
+from ..domain_context import TrustedActor
 
 router = APIRouter(tags=["robot-websocket"])
 
@@ -166,6 +168,10 @@ async def robot_websocket(
         await websocket.close(code=1008, reason="Robot authentication failed")
         return
 
+    # Clear any transaction inherited from dependency setup before loading the
+    # robot.  The long-lived receive loop is released separately below.
+    db.rollback()
+
     try:
         robot = service.get_robot(robot_id)
     except HTTPException:
@@ -179,6 +185,9 @@ async def robot_websocket(
         robot_id,
         websocket,
     )
+    publish_committed_notifications(
+        db, service.record_robot_connection(robot_id, True)
+    )
 
     await websocket.send_json(
         {
@@ -190,7 +199,12 @@ async def robot_websocket(
         }
     )
 
-    offline_alert = AlertService(db).resolve_key(f"robot-offline:{robot_id}")
+    offline_alerts = AlertService(db)
+    offline_alert = offline_alerts.resolve_key(f"robot-offline:{robot_id}")
+    publish_committed_notifications(
+        db,
+        offline_alerts.pending_notification_ids,
+    )
     if offline_alert is not None:
         await browser_connection_manager.broadcast_json(
             {"type": "alert_changed", "event": "resolved", "alert": Alert.model_validate(offline_alert).model_dump(mode="json")},
@@ -242,6 +256,10 @@ async def robot_websocket(
                 await websocket.send_json(
                     pending_command
                 )
+
+    # Setup may have read state while preparing resend commands.  End that
+    # transaction before waiting indefinitely for Robot Agent messages.
+    db.rollback()
 
     try:
         while True:
@@ -355,6 +373,10 @@ async def robot_websocket(
                             {"type": "alert_changed", "event": event, "alert": Alert.model_validate(alert).model_dump(mode="json")},
                             admin_only=True,
                         )
+                publish_committed_notifications(
+                    db,
+                    alerts.pending_notification_ids,
+                )
 
             elif message_type == "telemetry":
                 telemetry_data = message.get("data")
@@ -827,7 +849,11 @@ async def robot_websocket(
                                 "Nav2 navigation "
                                 f"{navigation.status}"
                             ),
+                            actor=TrustedActor.robot(robot_id),
                         )
+                    )
+                    publish_committed_notifications(
+                        service.db, service.take_pending_notification_ids()
                     )
                 except HTTPException as error:
                     await send_error(
@@ -890,10 +916,15 @@ async def robot_websocket(
                     owner_id=updated_task.owner_id,
                 )
                 if navigation.status != "succeeded":
-                    alert, event = AlertService(db).upsert(
+                    alerts = AlertService(db)
+                    alert, event = alerts.upsert(
                         f"navigation-failed:{robot_id}:{navigation.task_id}", AlertSeverity.CRITICAL,
                         "Nav2 navigation aborted", navigation.detail or "Navigation did not complete",
                         "NAVIGATION", robot_id,
+                    )
+                    publish_committed_notifications(
+                        db,
+                        alerts.pending_notification_ids,
                     )
                     await browser_connection_manager.broadcast_json(
                         {"type": "alert_changed", "event": event, "alert": Alert.model_validate(alert).model_dump(mode="json")},
@@ -1053,13 +1084,18 @@ async def robot_websocket(
                 if not isinstance(command_id, str) or command not in {"emergency_stop", "emergency_stop_reset"} or not isinstance(accepted, bool):
                     await send_error(websocket, "INVALID_EMERGENCY_ACK", "Invalid Emergency Stop acknowledgement")
                     continue
-                state, matched = EmergencyStopService(db).acknowledge(
+                emergency_service = EmergencyStopService(db)
+                state, matched = emergency_service.acknowledge(
                     robot_id, command_id, command, accepted,
                     str(message.get("detail")) if message.get("detail") else None,
                 )
                 if not matched:
                     await send_error(websocket, "STALE_EMERGENCY_ACK", "Acknowledgement does not match the pending command")
                     continue
+                publish_committed_notifications(
+                    db,
+                    emergency_service.pending_notification_ids,
+                )
                 await websocket.send_json({"type": "emergency_ack_received", "command_id": command_id, "accepted": True, "server_time": current_utc_time()})
                 await browser_connection_manager.broadcast_json(
                     {"type": "emergency_stop_changed", "emergency_stop": EmergencyStop.model_validate(state).model_dump(mode="json")}
@@ -1128,6 +1164,9 @@ async def robot_websocket(
             websocket,
         )
         if disconnected:
+            publish_committed_notifications(
+                db, service.record_robot_connection(robot_id, False)
+            )
             route_preview_coordinator.fail_robot(
                 robot_id,
                 "ROS Bridge disconnected during route preview",
@@ -1138,9 +1177,14 @@ async def robot_websocket(
                 "robot_disconnect",
                 remove_command=False,
             )
-            alert, event = AlertService(db).upsert(
+            alerts = AlertService(db)
+            alert, event = alerts.upsert(
                 f"robot-offline:{robot_id}", AlertSeverity.CRITICAL, "Robot disconnected",
                 "Robot WebSocket connection was lost.", "CONNECTION", robot_id,
+            )
+            publish_committed_notifications(
+                db,
+                alerts.pending_notification_ids,
             )
             await browser_connection_manager.broadcast_json(
                 {"type": "alert_changed", "event": event, "alert": Alert.model_validate(alert).model_dump(mode="json")},
@@ -1153,6 +1197,9 @@ async def robot_websocket(
             websocket,
         )
         if disconnected:
+            publish_committed_notifications(
+                db, service.record_robot_connection(robot_id, False)
+            )
             route_preview_coordinator.fail_robot(
                 robot_id,
                 "ROS Bridge disconnected during route preview",

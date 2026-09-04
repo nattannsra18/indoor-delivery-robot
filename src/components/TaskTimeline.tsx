@@ -9,6 +9,7 @@ import {
   TaskHistoryEntry,
   TaskStatus
 } from "@/types";
+import { useLocale } from "@/context/LocaleContext";
 
 const TERMINAL_STATUSES = new Set<TaskStatus>([
   "COMPLETED",
@@ -39,6 +40,7 @@ export default function TaskTimeline({
 }: {
   entries: TaskHistoryEntry[];
 }) {
+  const { locale, t } = useLocale();
   const [now, setNow] = useState(
     () => Date.now()
   );
@@ -95,15 +97,15 @@ export default function TaskTimeline({
     <div>
       <div className="grid gap-3 sm:grid-cols-3">
         <SummaryCard
-          label="Current status"
-          value={humanize(lastEntry.toStatus)}
+          label={locale === "th" ? "สถานะปัจจุบัน" : "Current status"}
+          value={t("taskStatus")[lastEntry.toStatus]}
         />
         <SummaryCard
-          label="Total elapsed"
+          label={locale === "th" ? "เวลารวม" : "Total elapsed"}
           value={formatDuration(totalDuration)}
         />
         <SummaryCard
-          label="Recorded events"
+          label={locale === "th" ? "เหตุการณ์ที่บันทึก" : "Recorded events"}
           value={String(orderedEntries.length)}
         />
       </div>
@@ -152,12 +154,12 @@ export default function TaskTimeline({
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-semibold text-slate-900">
-                        {humanize(entry.eventType)}
+                      {humanize(entry.eventType)}
                       </h3>
 
                       {isCurrent && (
                         <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
-                          Current stage
+                          {locale === "th" ? "ขั้นตอนปัจจุบัน" : "Current stage"}
                         </span>
                       )}
                     </div>
@@ -165,12 +167,10 @@ export default function TaskTimeline({
                     <p className="mt-1 text-sm text-slate-600">
                       {entry.fromStatus
                         ? (
-                            `${humanize(
-                              entry.fromStatus
-                            )} → `
+                            `${t("taskStatus")[entry.fromStatus]} → `
                           )
                         : ""}
-                      {humanize(entry.toStatus)}
+                      {t("taskStatus")[entry.toStatus]}
                     </p>
                   </div>
 
@@ -181,12 +181,12 @@ export default function TaskTimeline({
 
                 <div className="mt-3 flex flex-wrap gap-2 text-xs">
                   <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-600">
-                    Source: {humanize(entry.source)}
+                    {locale === "th" ? "แหล่งที่มา" : "Source"}: {humanize(entry.source)}
                   </span>
 
                   {stageDuration !== undefined && (
                     <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">
-                      Time in {humanize(entry.toStatus)}:{" "}
+                      {locale === "th" ? "เวลาในสถานะ" : "Time in"} {t("taskStatus")[entry.toStatus]}:{" "}
                       {formatDuration(stageDuration)}
                     </span>
                   )}

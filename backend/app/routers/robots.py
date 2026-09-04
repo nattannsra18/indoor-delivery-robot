@@ -25,9 +25,9 @@ def set_offline(
     robot_id: str,
     background_tasks: BackgroundTasks,
     service: DeliveryService = Depends(get_service),
-    _: UserORM = Depends(require_admin),
+    user: UserORM = Depends(require_admin),
 ):
-    robot = service.set_robot_offline(robot_id)
+    robot = service.set_robot_offline(robot_id, user.id)
     schedule_navigation_path_clear(
         background_tasks,
         robot_id,
@@ -37,10 +37,10 @@ def set_offline(
 
 
 @router.post("/{robot_id}/online", response_model=Robot)
-def set_online(robot_id: str, service: DeliveryService = Depends(get_service), _: UserORM = Depends(require_admin)):
-    return service.set_robot_online(robot_id)
+def set_online(robot_id: str, service: DeliveryService = Depends(get_service), user: UserORM = Depends(require_admin)):
+    return service.set_robot_online(robot_id, user.id)
 
 
 @router.post("/{robot_id}/recover", response_model=Robot)
-def recover_robot(robot_id: str, service: DeliveryService = Depends(get_service), _: UserORM = Depends(require_admin)):
-    return service.recover_robot(robot_id)
+def recover_robot(robot_id: str, service: DeliveryService = Depends(get_service), user: UserORM = Depends(require_admin)):
+    return service.recover_robot(robot_id, user.id)

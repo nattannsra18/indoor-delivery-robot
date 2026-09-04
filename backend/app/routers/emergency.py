@@ -9,6 +9,7 @@ from ..db_models import UserORM
 from ..emergency_service import EmergencyStopService
 from ..models import Alert, EmergencyStop
 from ..websocket_manager import robot_connection_manager
+from ..notification_delivery import publish_committed_notifications
 
 router = APIRouter(prefix="/api/robots", tags=["emergency-stop"])
 
@@ -39,14 +40,16 @@ def get_state(robot_id: str, db: Session = Depends(get_db), _: UserORM = Depends
 
 
 @router.post("/{robot_id}/emergency-stop", response_model=EmergencyStop)
-async def activate(robot_id: str, db: Session = Depends(get_db), _: UserORM = Depends(require_admin)):
+async def activate(robot_id: str, db: Session = Depends(get_db), user: UserORM = Depends(require_admin)):
     service = EmergencyStopService(db)
-    state, command, created = service.activate(robot_id)
+    state, command, created = service.activate(robot_id, user.id)
+    publish_committed_notifications(db, service.pending_notification_ids)
     if created:
         await broadcast_alert(db, f"emergency-stop:{robot_id}", "created")
     delivered = await robot_connection_manager.send_json(robot_id, command)
     if not delivered:
         state = service.mark_delivery_failed(robot_id, str(command["command_id"]), "Robot is offline; stop remains latched")
+        publish_committed_notifications(db, service.pending_notification_ids)
         await broadcast_alert(
             db, f"emergency-command-failure:{robot_id}", "created"
         )
@@ -55,12 +58,14 @@ async def activate(robot_id: str, db: Session = Depends(get_db), _: UserORM = De
 
 
 @router.post("/{robot_id}/emergency-stop/reset", response_model=EmergencyStop)
-async def reset(robot_id: str, db: Session = Depends(get_db), _: UserORM = Depends(require_admin)):
+async def reset(robot_id: str, db: Session = Depends(get_db), user: UserORM = Depends(require_admin)):
     service = EmergencyStopService(db)
-    state, command = service.request_reset(robot_id)
+    state, command = service.request_reset(robot_id, user.id)
+    publish_committed_notifications(db, service.pending_notification_ids)
     delivered = await robot_connection_manager.send_json(robot_id, command)
     if not delivered:
         state = service.mark_delivery_failed(robot_id, str(command["command_id"]), "Robot is offline; reset was not acknowledged")
+        publish_committed_notifications(db, service.pending_notification_ids)
         await broadcast_alert(
             db, f"emergency-command-failure:{robot_id}", "created"
         )

@@ -20,11 +20,11 @@ def get_station(station_id: str, service: DeliveryService = Depends(get_service)
 
 
 @router.post("", response_model=Station, status_code=status.HTTP_201_CREATED)
-def create_station(payload: StationCreate, service: DeliveryService = Depends(get_service), _: UserORM = Depends(require_admin)):
-    return service.add_station(payload)
+def create_station(payload: StationCreate, service: DeliveryService = Depends(get_service), user: UserORM = Depends(require_admin)):
+    return service.add_station(payload, user.id)
 
 
 @router.delete("/{station_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_station(station_id: str, service: DeliveryService = Depends(get_service), _: UserORM = Depends(require_admin)):
-    service.delete_station(station_id)
+def delete_station(station_id: str, service: DeliveryService = Depends(get_service), user: UserORM = Depends(require_admin)):
+    service.delete_station(station_id, user.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -17,6 +17,8 @@ from .routers import (
     robots,
     stations,
     tasks,
+    notifications,
+    audit,
 )
 from .seed import seed_database
 from .auth import bootstrap_admin
@@ -66,6 +68,8 @@ app.include_router(dashboard.router)
 app.include_router(stations.router)
 app.include_router(robots.router)
 app.include_router(tasks.router)
+app.include_router(notifications.router)
+app.include_router(audit.router)
 app.include_router(maps.router)
 app.include_router(robot_ws.router)
 app.include_router(dashboard_ws.router)

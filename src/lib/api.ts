@@ -12,6 +12,7 @@ import type {
   TaskRoutePreview,
   TaskRoutePreviewInput,
   UserIdentity
+  , Notification, NotificationPage, AuditRecord
 } from "@/types";
 
 export class ApiError extends Error {
@@ -404,4 +405,18 @@ export async function addStation(station: Omit<Station, "id">): Promise<Station>
 
 export async function deleteStation(stationId: string): Promise<void> {
   await request<void>(`/api/stations/${stationId}`, { method: "DELETE" });
+}
+
+type ApiNotification = { id: string; event_type: string; title: string; message: string; entity_type: string | null; entity_id: string | null; read_at: string | null; created_at: string };
+const toNotification = (item: ApiNotification): Notification => ({ id: item.id, eventType: item.event_type, title: item.title, message: item.message, entityType: item.entity_type ?? undefined, entityId: item.entity_id ?? undefined, readAt: item.read_at ?? undefined, createdAt: item.created_at });
+export async function getNotifications(offset = 0, limit = 30): Promise<NotificationPage> {
+  const page = await request<{items: ApiNotification[]; unread_count: number; next_offset: number | null}>(`/api/notifications?offset=${offset}&limit=${limit}`);
+  return {items: page.items.map(toNotification), unreadCount: page.unread_count, nextOffset: page.next_offset ?? undefined};
+}
+export async function markNotificationRead(id: string): Promise<Notification> { return toNotification(await request<ApiNotification>(`/api/notifications/${id}/read`, {method: "POST"})); }
+export async function markAllNotificationsRead(): Promise<void> { await request<void>("/api/notifications/read-all", {method: "POST"}); }
+export async function getAudit(offset = 0, limit = 30, action?: string): Promise<{items: AuditRecord[]; nextOffset?: number}> {
+  const query = new URLSearchParams({offset: String(offset), limit: String(limit)}); if (action) query.set("action", action);
+  const page = await request<{items: Array<{id:number;actor_id:string|null;actor_type:"USER"|"ROBOT"|"SYSTEM";actor_identifier:string|null;action:string;result:string;entity_type:string;entity_id:string|null;metadata_json:string;created_at:string}>;next_offset:number|null}>(`/api/audit?${query}`);
+  return {items: page.items.map((item) => ({id:item.id,actorId:item.actor_id ?? undefined,actorType:item.actor_type,actorIdentifier:item.actor_identifier ?? undefined,action:item.action,result:item.result,entityType:item.entity_type,entityId:item.entity_id ?? undefined,metadataJson:item.metadata_json,createdAt:item.created_at})),nextOffset:page.next_offset ?? undefined};
 }

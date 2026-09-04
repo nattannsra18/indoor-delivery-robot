@@ -91,7 +91,11 @@ def create_session(db: Session, user: UserORM) -> tuple[str, SessionORM]:
     return token, session
 
 
-def resolve_session(db: Session, token: str | None) -> UserORM | None:
+def resolve_session_record(
+    db: Session,
+    token: str | None,
+) -> tuple[UserORM, SessionORM] | None:
+    """Resolve an active session without exposing its bearer value."""
     if not token:
         return None
     session = db.scalar(select(SessionORM).where(SessionORM.token_hash == token_digest(token)))
@@ -103,16 +107,25 @@ def resolve_session(db: Session, token: str | None) -> UserORM | None:
     if expires_at <= utc_now():
         return None
     user = db.get(UserORM, session.user_id)
-    return user if user is not None and user.active else None
+    if user is None or not user.active:
+        return None
+    return user, session
 
 
-def revoke_session(db: Session, token: str | None) -> None:
+def resolve_session(db: Session, token: str | None) -> UserORM | None:
+    resolved = resolve_session_record(db, token)
+    return resolved[0] if resolved is not None else None
+
+
+def revoke_session(db: Session, token: str | None) -> str | None:
     if not token:
         return
     session = db.scalar(select(SessionORM).where(SessionORM.token_hash == token_digest(token)))
     if session is not None and session.revoked_at is None:
         session.revoked_at = utc_now()
         db.commit()
+        return session.id
+    return None
 
 
 def require_user(request: Request, db: Session = Depends(get_db)) -> UserORM:
@@ -130,6 +143,14 @@ def require_admin(user: UserORM = Depends(require_user)) -> UserORM:
 
 def websocket_user(websocket: WebSocket, db: Session) -> UserORM | None:
     return resolve_session(db, websocket.cookies.get(SESSION_COOKIE_NAME))
+
+
+def websocket_session(
+    websocket: WebSocket,
+    db: Session,
+) -> tuple[UserORM, SessionORM] | None:
+    """Dashboard identity derived exclusively from its authenticated cookie."""
+    return resolve_session_record(db, websocket.cookies.get(SESSION_COOKIE_NAME))
 
 
 def record_login_failure(key: str) -> float:

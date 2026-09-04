@@ -168,11 +168,15 @@ def test_successful_preview_issues_bound_one_use_validation(monkeypatch):
             destination_station_id="B",
             preview_id=preview.preview_id,
         )
-        created = create_task(payload, BackgroundTasks(), service, alice)
+        created = asyncio.run(
+            create_task(payload, BackgroundTasks(), service, alice)
+        )
         assert created.owner_id == "alice"
 
         with pytest.raises(HTTPException) as reused:
-            create_task(payload, BackgroundTasks(), service, alice)
+            asyncio.run(
+                create_task(payload, BackgroundTasks(), service, alice)
+            )
         assert reused.value.status_code == 409
 
 
@@ -236,14 +240,16 @@ def test_missing_preview_and_unreachable_route_are_rejected(monkeypatch):
         service = DeliveryService(db)
         alice = db.get(UserORM, "alice")
         with pytest.raises(HTTPException) as missing:
-            create_task(
-                DeliveryTaskCreate(
-                    pickup_station_id="A",
-                    destination_station_id="B",
-                ),
-                BackgroundTasks(),
-                service,
-                alice,
+            asyncio.run(
+                create_task(
+                    DeliveryTaskCreate(
+                        pickup_station_id="A",
+                        destination_station_id="B",
+                    ),
+                    BackgroundTasks(),
+                    service,
+                    alice,
+                )
             )
         assert missing.value.status_code == 409
 

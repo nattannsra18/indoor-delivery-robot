@@ -1,4 +1,6 @@
+"use client";
 import { TaskStatus } from "@/types";
+import { useLocale } from "@/context/LocaleContext";
 
 const styles: Record<TaskStatus, string> = {
   QUEUED: "bg-slate-100 text-slate-700",
@@ -12,9 +14,10 @@ const styles: Record<TaskStatus, string> = {
 };
 
 export default function StatusBadge({ status }: { status: TaskStatus }) {
+  const { t } = useLocale();
   return (
     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${styles[status]}`}>
-      {status.replaceAll("_", " ")}
+      {t("taskStatus")[status]}
     </span>
   );
 }

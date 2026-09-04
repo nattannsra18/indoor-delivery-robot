@@ -13,12 +13,16 @@ import {
   routePreviewIsFresh
 } from "@/lib/routePreview";
 import { Station, TaskPriority, TaskRoutePreview } from "@/types";
+import { useLocale } from "@/context/LocaleContext";
+import { deliveryText } from "@/lib/i18n";
 
 const RECIPIENT_MAX_LENGTH = 100;
 const NOTE_MAX_LENGTH = 500;
 const inputClassName = "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 outline-none ring-blue-500 transition focus:ring-2 disabled:bg-slate-100";
 
 export default function CreateDeliveryPage() {
+  const { locale, format, t } = useLocale();
+  const copy = deliveryText[locale];
   const router = useRouter();
   const { user } = useAuth();
   const {
@@ -58,7 +62,7 @@ export default function CreateDeliveryPage() {
       setRoutePreview(undefined);
       setReviewing(false);
       setIsError(true);
-      setMessage("The ROS map changed. Run route validation again.");
+      setMessage(copy.mapChanged);
     }
   }, [occupancyMap, routePreview]);
 
@@ -91,7 +95,7 @@ export default function CreateDeliveryPage() {
       : station.id === pickup;
     if (conflicts) {
       setIsError(true);
-      setMessage("Pickup and destination cannot be the same station.");
+      setMessage(copy.sameStation);
       return;
     }
     invalidateReview();
@@ -110,14 +114,13 @@ export default function CreateDeliveryPage() {
     if (action === "invalid") {
       setIsError(true);
       setMessage(backendOnline
-        ? "Complete the form and choose different pickup and destination stations."
-        : "FastAPI backend is not connected.");
+        ? copy.completeForm : copy.backendDisconnected);
       return;
     }
     if (action === "review") {
       setPreviewing(true);
       setIsError(false);
-      setMessage("Asking Nav2 to validate both route segments...");
+      setMessage(copy.validatingRoutes);
       try {
         const preview = await previewTaskRoute({
           pickupStationId: pickup,
@@ -126,12 +129,12 @@ export default function CreateDeliveryPage() {
         });
         setRoutePreview(preview);
         setReviewing(true);
-        setMessage("Nav2 validated both routes. Review the summary, then confirm.");
+        setMessage(copy.routesValidated);
       } catch (err) {
         setRoutePreview(undefined);
         setReviewing(false);
         setIsError(true);
-        setMessage(err instanceof Error ? err.message : "Unable to validate route.");
+        setMessage(err instanceof Error ? err.message : copy.routeUnavailable);
       } finally {
         setPreviewing(false);
       }
@@ -142,7 +145,7 @@ export default function CreateDeliveryPage() {
       setRoutePreview(undefined);
       setReviewing(false);
       setIsError(true);
-      setMessage("The route preview expired. Run Review Delivery Request again.");
+      setMessage(copy.routePreviewExpired);
       return;
     }
 
@@ -160,18 +163,14 @@ export default function CreateDeliveryPage() {
       });
       setCreatedTaskId(created.id);
       setReviewing(false);
-      setMessage(`${created.id} created successfully. ${
-        created.status === "GOING_TO_PICKUP"
-          ? "The robot was available and accepted the task."
-          : "The task was added to the priority queue."
-      }`);
+      setMessage(format(copy.taskId, { id: created.id }));
     } catch (err) {
       setRoutePreview(undefined);
       setReviewing(false);
       setIsError(true);
       setMessage(`${
-        err instanceof Error ? err.message : "Unable to create delivery task."
-      } Run route validation again before retrying.`);
+        err instanceof Error ? err.message : copy.createUnavailable
+      } ${copy.retryValidation}`);
     } finally {
       setSubmitting(false);
     }
@@ -180,18 +179,18 @@ export default function CreateDeliveryPage() {
   return (
     <>
       <PageHeader
-        title="Create Delivery"
-        description="Choose stations, add delivery details and review the request before it is sent to FastAPI."
+        title={copy.createDelivery}
+        description={copy.deliveryDescription}
       />
 
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-semibold text-slate-900">Select Stations on Map</h2>
-            <p className="text-sm text-slate-500">Map clicks select predefined markers only and never send a navigation command.</p>
+            <h2 className="font-semibold text-slate-900">{copy.selectStations}</h2>
+            <p className="text-sm text-slate-500">{copy.mapSelectionHelp}</p>
           </div>
           <fieldset className="flex rounded-xl border border-slate-200 bg-slate-50 p-1">
-            <legend className="sr-only">Map selection mode</legend>
+            <legend className="sr-only">{copy.mapSelectionMode}</legend>
             {(["pickup", "destination"] as const).map((mode) => (
               <button
                 key={mode}
@@ -205,16 +204,16 @@ export default function CreateDeliveryPage() {
                     : "text-slate-600 hover:bg-white"
                 } disabled:cursor-not-allowed disabled:opacity-50`}
               >
-                Select {mode}
+                {mode === "pickup" ? copy.pickup : copy.destination}
               </button>
             ))}
           </fieldset>
         </div>
-        {!backendOnline && !loading && <Notice tone="error">FastAPI is offline. Station controls are disabled until it reconnects.</Notice>}
-        {emergencyStop?.latched && <Notice tone="error">New motion is disabled while Emergency Stop is latched.</Notice>}
+        {!backendOnline && !loading && <Notice tone="error">{copy.stationControlsOffline}</Notice>}
+        {emergencyStop?.latched && <Notice tone="error">{copy.motionDisabled}</Notice>}
         {!occupancyMap && backendOnline && (
           <Notice tone="warning">
-            The ROS map is unavailable. Nav2 route validation and task creation are disabled.
+            {copy.mapUnavailable}
           </Notice>
         )}
         <RobotMap
@@ -231,8 +230,8 @@ export default function CreateDeliveryPage() {
         <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-7">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Delivery Request</h2>
-              <p className="mt-1 text-sm text-slate-500">Add the recipient and instructions needed at handoff.</p>
+              <h2 className="text-lg font-semibold text-slate-900">{copy.deliveryRequest}</h2>
+              <p className="mt-1 text-sm text-slate-500">{copy.deliveryRequestHelp}</p>
             </div>
             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
               backendOnline && robot.state === "IDLE"
@@ -241,7 +240,7 @@ export default function CreateDeliveryPage() {
           </div>
 
           <div className="mt-7 grid gap-5">
-            <Field label="Pickup Station">
+            <Field label={copy.pickupStation}>
               <select value={pickup} onChange={(event) => {
                 invalidateReview(); setPickup(event.target.value); setSelectionMode("pickup");
               }} disabled={!backendOnline || stations.length === 0} className={inputClassName}>
@@ -251,7 +250,7 @@ export default function CreateDeliveryPage() {
               </select>
             </Field>
 
-            <Field label="Destination Station">
+            <Field label={copy.destinationStation}>
               <select value={destination} onChange={(event) => {
                 invalidateReview(); setDestination(event.target.value); setSelectionMode("destination");
               }} disabled={!backendOnline || stations.length === 0} className={inputClassName}>
@@ -261,41 +260,41 @@ export default function CreateDeliveryPage() {
               </select>
             </Field>
 
-            <Field label="Recipient name (optional)">
+            <Field label={copy.recipientName}>
               <input value={recipientName} onChange={(event) => {
                 invalidateReview(); setRecipientName(event.target.value);
-              }} maxLength={RECIPIENT_MAX_LENGTH} placeholder="Name of the person receiving the delivery" className={inputClassName} />
+              }} maxLength={RECIPIENT_MAX_LENGTH} placeholder={copy.recipientPlaceholder} className={inputClassName} />
               <CharacterCount current={recipientName.length} maximum={RECIPIENT_MAX_LENGTH} />
             </Field>
 
-            <Field label="Delivery note (optional)">
+            <Field label={copy.deliveryNote}>
               <textarea value={deliveryNote} onChange={(event) => {
                 invalidateReview(); setDeliveryNote(event.target.value);
-              }} maxLength={NOTE_MAX_LENGTH} rows={4} placeholder="Handling or handoff instructions" className={inputClassName} />
+              }} maxLength={NOTE_MAX_LENGTH} rows={4} placeholder={copy.notePlaceholder} className={inputClassName} />
               <CharacterCount current={deliveryNote.length} maximum={NOTE_MAX_LENGTH} />
             </Field>
 
             {user?.role === "ADMIN" ? (
-              <Field label="Priority">
+              <Field label={copy.priority}>
                 <select value={priority} onChange={(event) => {
                   invalidateReview(); setPriority(event.target.value as TaskPriority);
                 }} className={inputClassName}>
-                  <option value="NORMAL">Normal</option>
-                  <option value="HIGH">High — queued before normal tasks</option>
+                  <option value="NORMAL">{copy.normalPriority}</option>
+                  <option value="HIGH">{copy.highPriority}</option>
                 </select>
               </Field>
             ) : (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-700">Priority</p>
+                <p className="text-sm font-semibold text-slate-700">{copy.priority}</p>
                 <div className="mt-2"><PriorityBadge priority="NORMAL" /></div>
-                <p className="mt-2 text-xs text-slate-500">Only administrators can create high-priority tasks.</p>
+                <p className="mt-2 text-xs text-slate-500">{copy.priorityAdminOnly}</p>
               </div>
             )}
 
-            {pickup && destination && pickup === destination && <Notice tone="error">Pickup and destination cannot be the same station.</Notice>}
+            {pickup && destination && pickup === destination && <Notice tone="error">{copy.sameStation}</Notice>}
 
             <button type="submit" disabled={!valid || submitting || previewing} className="min-h-11 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">
-              {submitting ? "Creating task..." : previewing ? "Validating route with Nav2..." : reviewing ? "Confirm & Create Delivery" : "Review Delivery Request"}
+              {submitting ? copy.creating : previewing ? copy.validating : reviewing ? copy.confirmCreate : copy.review}
             </button>
 
             <div aria-live="polite">
@@ -305,12 +304,12 @@ export default function CreateDeliveryPage() {
                     : createdTaskId ? "border-emerald-100 bg-emerald-50 text-emerald-800"
                       : "border-blue-100 bg-blue-50 text-blue-800"
                 }`}>
-                  {createdTaskId && <p className="text-base font-bold">Task ID: {createdTaskId}</p>}
+                  {createdTaskId && <p className="text-base font-bold">{format(copy.taskId, { id: createdTaskId })}</p>}
                   <p>{message}</p>
                   {createdTaskId && (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button type="button" onClick={() => router.push("/")} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">Open Dashboard</button>
-                      <button type="button" onClick={() => router.push("/tasks")} className="rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold">Open Task Queue</button>
+                      <button type="button" onClick={() => router.push("/")} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white">{t("dashboard")}</button>
+                      <button type="button" onClick={() => router.push("/tasks")} className="rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold">{copy.openTaskQueue}</button>
                     </div>
                   )}
                 </div>
@@ -320,32 +319,31 @@ export default function CreateDeliveryPage() {
         </form>
 
         <aside className={`rounded-2xl border bg-white p-5 shadow-sm md:p-7 ${reviewing ? "border-blue-300 ring-2 ring-blue-100" : "border-slate-200"}`}>
-          <h2 className="text-lg font-semibold text-slate-900">{reviewing ? "Validated Route & Review" : "Task Preview"}</h2>
+          <h2 className="text-lg font-semibold text-slate-900">{reviewing ? copy.validatedReview : copy.taskPreview}</h2>
           <p className="mt-1 text-sm text-slate-500">{reviewing
-            ? "Confirm that these details are correct before creating the task."
-            : "Complete the request to prepare a review summary."}</p>
+            ? copy.reviewHelp : copy.previewHelp}</p>
           <div className="mt-6 space-y-4">
-            <PreviewCard title="Pickup" value={pickupStation?.name ?? "-"} />
+            <PreviewCard title={copy.pickup} value={pickupStation?.name ?? "-"} />
             <div className="flex justify-center text-2xl text-blue-500">↓</div>
-            <PreviewCard title="Destination" value={destinationStation?.name ?? "-"} />
-            <PreviewCard title="Recipient" value={recipientName.trim() || "Not specified"} />
-            <PreviewCard title="Delivery note" value={deliveryNote.trim() || "No note"} preserveWhitespace />
+            <PreviewCard title={copy.destination} value={destinationStation?.name ?? "-"} />
+            <PreviewCard title={copy.recipient} value={recipientName.trim() || copy.notSpecified} />
+            <PreviewCard title={copy.deliveryNote} value={deliveryNote.trim() || copy.noNote} preserveWhitespace />
             {routePreview && (
               <div className="grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-                <p className="font-bold">Nav2 reachable · both route segments</p>
-                <PreviewMetric label="Robot → pickup" distance={routePreview.pickupDistanceMeters} seconds={routePreview.pickupEtaSeconds} />
-                <PreviewMetric label="Pickup → destination" distance={routePreview.deliveryDistanceMeters} seconds={routePreview.destinationEtaSeconds - routePreview.pickupEtaSeconds - 10} />
-                <PreviewMetric label="Total route" distance={routePreview.totalDistanceMeters} seconds={routePreview.completionEtaSeconds} />
-                <p className="text-xs text-emerald-700">Completion estimate includes loading and unloading allowances.</p>
+                <p className="font-bold">{copy.routeReachable}</p>
+                <PreviewMetric label={copy.robotToPickup} distance={routePreview.pickupDistanceMeters} seconds={routePreview.pickupEtaSeconds} />
+                <PreviewMetric label={copy.pickupToDestination} distance={routePreview.deliveryDistanceMeters} seconds={routePreview.destinationEtaSeconds - routePreview.pickupEtaSeconds - 10} />
+                <PreviewMetric label={copy.totalRoute} distance={routePreview.totalDistanceMeters} seconds={routePreview.completionEtaSeconds} />
+                <p className="text-xs text-emerald-700">{copy.completionAllowance}</p>
               </div>
             )}
             <div className="rounded-xl border border-slate-200 p-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Priority</p>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">{copy.priority}</p>
               <PriorityBadge priority={priority} />
             </div>
           </div>
           <div className="mt-6 rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-            High priority changes only the order of queued tasks. It never interrupts an active delivery.
+            {copy.priorityQueueHelp}
           </div>
         </aside>
       </div>

@@ -23,6 +23,7 @@ const SHARED_NAVIGATION: NavigationItem[] = [
   { href: "/", label: "Dashboard", icon: "▦" },
   { href: "/delivery", label: "Create Delivery", icon: "＋" },
   { href: "/tasks", label: "My Tasks", icon: "≡" }
+  , { href: "/notifications", label: "Notifications", icon: "●" }
 ];
 
 const ADMIN_NAVIGATION: NavigationItem[] = [
@@ -31,9 +32,11 @@ const ADMIN_NAVIGATION: NavigationItem[] = [
   { href: "/tasks", label: "All Tasks", icon: "≡" },
   { href: "/stations", label: "Station Management", icon: "⌖" },
   { href: "/robots", label: "Robot & Diagnostics", icon: "◉" }
+  , { href: "/notifications", label: "Notifications", icon: "●" }
+  , { href: "/audit", label: "Audit Log", icon: "▤" }
 ];
 
-const ADMIN_ONLY_ROUTES = ["/robots", "/stations"];
+const ADMIN_ONLY_ROUTES = ["/robots", "/stations", "/audit"];
 
 export function navigationForRole(
   role: UserIdentity["role"]

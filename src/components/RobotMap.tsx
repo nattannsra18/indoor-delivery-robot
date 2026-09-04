@@ -2,6 +2,8 @@
 
 import { MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
+import { useLocale } from "@/context/LocaleContext";
+import { operationalText } from "@/lib/i18n";
 import {
   calculateMapViewport, CanvasPoint, CanvasSize, MapViewport, worldToCanvas
 } from "@/lib/mapGeometry";
@@ -21,11 +23,9 @@ type RobotMapProps = {
   routePreview?: TaskRoutePreview;
 };
 
-const PATH_STATUS_LABEL: Record<NavigationPathStatus, string> = {
-  live: "Live Nav2 path",
-  waiting: "Waiting for path",
-  unavailable: "Path unavailable",
-  stale: "Path stale"
+const PATH_STATUS_LABEL: Record<"en" | "th", Record<NavigationPathStatus, string>> = {
+  en: { live: "Live Nav2 path", waiting: "Waiting for path", unavailable: "Path unavailable", stale: "Path stale" },
+  th: { live: "เส้นทาง Nav2 ปัจจุบัน", waiting: "กำลังรอเส้นทาง", unavailable: "ไม่มีเส้นทาง", stale: "เส้นทางล้าสมัย" },
 };
 
 export default function RobotMap({
@@ -36,6 +36,8 @@ export default function RobotMap({
   onStationSelect,
   routePreview
 }: RobotMapProps) {
+  const { locale, format } = useLocale();
+  const copy = operationalText[locale];
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const occupancyCanvasRef = useRef<HTMLCanvasElement | undefined>(
@@ -163,12 +165,12 @@ export default function RobotMap({
     return (
       <div className="grid min-h-[360px] place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
         <div>
-          <p className="font-semibold text-slate-700">Waiting for ROS map</p>
+          <p className="font-semibold text-slate-700">{locale === "th" ? "กำลังรอแผนที่ ROS" : "Waiting for ROS map"}</p>
           <p className="mt-2 text-sm text-slate-500">
-            Station dropdowns remain available while the live map is missing.
+            {locale === "th" ? "ยังเลือกสถานีจากรายการได้ขณะไม่มีแผนที่ปัจจุบัน" : "Station dropdowns remain available while the live map is missing."}
           </p>
           <p className="mt-2 text-xs font-semibold text-amber-700">
-            Path unavailable
+            {PATH_STATUS_LABEL[locale].unavailable}
           </p>
         </div>
       </div>
@@ -181,25 +183,25 @@ export default function RobotMap({
         <canvas
           ref={canvasRef}
           className={`block max-w-full ${interactive ? "cursor-pointer" : ""}`}
-          aria-label="ROS occupancy grid with live Nav2 path, stations and robot pose"
+          aria-label={locale === "th" ? "แผนที่ ROS พร้อมเส้นทาง Nav2 สถานี และตำแหน่งหุ่นยนต์" : "ROS occupancy grid with live Nav2 path, stations and robot pose"}
           onClick={handleMapClick}
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
         {!routePreview && (
-          <Legend color="#0ea5e9" label={PATH_STATUS_LABEL[displayedPathStatus]} line />
+          <Legend color="#0ea5e9" label={PATH_STATUS_LABEL[locale][displayedPathStatus]} line />
         )}
-        {routePreview && <Legend color="#0891b2" label="Preview to pickup" line />}
-        {routePreview && <Legend color="#7c3aed" label="Preview to destination" line />}
-        <Legend color="#10b981" label="Station" />
-        <Legend color="#06b6d4" label="Pickup" />
-        <Legend color="#8b5cf6" label="Destination" />
-        <Legend color="#2563eb" label="Robot" />
+        {routePreview && <Legend color="#0891b2" label={copy.mapPreviewPickup} line />}
+        {routePreview && <Legend color="#7c3aed" label={copy.mapPreviewDestination} line />}
+        <Legend color="#10b981" label={copy.station} />
+        <Legend color="#06b6d4" label={locale === "th" ? "จุดรับ" : "Pickup"} />
+        <Legend color="#8b5cf6" label={locale === "th" ? "จุดหมาย" : "Destination"} />
+        <Legend color="#2563eb" label={locale === "th" ? "หุ่นยนต์" : "Robot"} />
       </div>
       {interactive && (
         <div className="border-t border-slate-200 bg-white px-4 py-3">
           <p className="mb-2 text-xs text-slate-500">
-            Select a marker on the map or use these keyboard-accessible station buttons.
+            {copy.selectStationHelp}
           </p>
           <div className="flex flex-wrap gap-2">
             {stations.map((station) => (
@@ -213,7 +215,7 @@ export default function RobotMap({
                     : station.id === selectedPickupStationId
                 }
                 className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                aria-label={`Select ${station.name} as ${selectionMode}`}
+                aria-label={format(copy.selectStation, { name: station.name, mode: selectionMode === "pickup" ? (locale === "th" ? "จุดรับ" : "pickup") : (locale === "th" ? "จุดหมาย" : "destination") })}
               >
                 {station.id} · {station.name}
               </button>
@@ -223,12 +225,12 @@ export default function RobotMap({
       )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-500">
         <span>
-          Map {occupancyMap.width}×{occupancyMap.height} · {occupancyMap.resolution.toFixed(3)} m/cell · revision {occupancyMap.revision}
+          {format(copy.mapInfo, { width: occupancyMap.width, height: occupancyMap.height, resolution: occupancyMap.resolution.toFixed(3), revision: occupancyMap.revision })}
         </span>
         <span>
           {activeTask
             ? `${activeTask.id}: ${stationName(activeTask.pickupStationId)} → ${stationName(activeTask.destinationStationId)}`
-            : `Robot x=${robot.x.toFixed(2)}, y=${robot.y.toFixed(2)}, yaw=${robot.yaw.toFixed(2)}`}
+            : format(copy.robotPose, { x: robot.x.toFixed(2), y: robot.y.toFixed(2), yaw: robot.yaw.toFixed(2) })}
         </span>
       </div>
     </div>

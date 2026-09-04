@@ -3,20 +3,10 @@
 import { useState } from "react";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useAuth } from "@/context/AuthContext";
-
-const actionLabels = {
-  WAITING_FOR_LOADING: "Confirm Package Loaded",
-  WAITING_FOR_UNLOADING: "Confirm Package Received"
-} as const;
-
-const helperText = {
-  WAITING_FOR_LOADING:
-    "Confirm after the package has been placed securely on the robot.",
-  WAITING_FOR_UNLOADING:
-    "Confirm after the receiver has removed the package from the robot."
-} as const;
+import { useLocale } from "@/context/LocaleContext";
 
 export default function WorkflowControls() {
+  const { t } = useLocale();
   const { user } = useAuth();
   const {
     activeTask,
@@ -34,25 +24,14 @@ export default function WorkflowControls() {
 
   const status = activeTask?.status;
 
-  const action =
-    status && status in actionLabels
-      ? actionLabels[
-          status as keyof typeof actionLabels
-        ]
-      : undefined;
-
-  const helper =
-    status && status in helperText
-      ? helperText[
-          status as keyof typeof helperText
-        ]
-      : undefined;
+  const action = status === "WAITING_FOR_LOADING" ? t("confirmLoaded") : status === "WAITING_FOR_UNLOADING" ? t("confirmReceived") : undefined;
+  const helper = status === "WAITING_FOR_LOADING" ? t("confirmLoadedHelp") : status === "WAITING_FOR_UNLOADING" ? t("confirmReceivedHelp") : undefined;
 
   const navigationMessage =
     status === "GOING_TO_PICKUP"
-      ? "Robot is navigating to the pickup station."
+      ? t("navigatingPickup")
       : status === "DELIVERING"
-        ? "Robot is delivering the package to its destination."
+        ? t("deliveringDestination")
         : undefined;
 
   async function run(
@@ -69,7 +48,7 @@ export default function WorkflowControls() {
       setMessage(
         err instanceof Error
           ? err.message
-          : "Action failed."
+          : t("actionFailed")
       );
     } finally {
       setBusy(false);
@@ -80,14 +59,13 @@ export default function WorkflowControls() {
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">
-          Live Delivery Workflow
+          {t("workflowLive")}
         </p>
         <h2 className="mt-1 font-semibold text-slate-900">
-          Mission Control
+          {t("missionControl")}
         </h2>
         <p className="mt-1 max-w-2xl text-sm text-slate-500">
-          Monitor autonomous navigation and confirm package
-          loading or unloading when operator action is required.
+          {t("workflowDescription")}
         </p>
       </div>
 
@@ -99,8 +77,8 @@ export default function WorkflowControls() {
               void run(
                 advanceRobotWorkflow,
                 status === "WAITING_FOR_LOADING"
-                  ? "Package loading confirmed."
-                  : "Package receipt confirmed."
+                  ? t("loadingConfirmed")
+                  : t("receiptConfirmed")
               )
             }
             disabled={
@@ -111,7 +89,7 @@ export default function WorkflowControls() {
             }
             className="min-h-11 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? "Processing..." : action}
+            {busy ? t("processing") : action}
           </button>
         )}
 
@@ -123,12 +101,11 @@ export default function WorkflowControls() {
 
         {!robot.online && (
           <span className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
-            Robot is offline — waiting for the ROS Web
-            Bridge connection.
+            {t("robotOfflineWaiting")}
           </span>
         )}
 
-        {emergencyStop?.latched && <span className="rounded-xl bg-red-100 px-4 py-3 text-sm font-bold text-red-800">Motion controls disabled while Emergency Stop is latched.</span>}
+        {emergencyStop?.latched && <span className="rounded-xl bg-red-100 px-4 py-3 text-sm font-bold text-red-800">{t("motionDisabled")}</span>}
 
         {user?.role === "ADMIN" && robot.state === "ERROR" && robot.online && (
           <button
@@ -136,13 +113,13 @@ export default function WorkflowControls() {
             onClick={() =>
               void run(
                 recoverRobot,
-                "Robot recovered to IDLE."
+                t("recoveredIdle")
               )
             }
             disabled={busy || !backendOnline}
             className="min-h-11 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? "Recovering..." : "Recover Robot"}
+            {busy ? t("recovering") : t("recoverRobot")}
           </button>
         )}
 
@@ -150,20 +127,20 @@ export default function WorkflowControls() {
           queuedTasks.length === 0 &&
           robot.state === "IDLE" && (
             <span className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-              Robot is IDLE — create a delivery to begin.
+              {t("robotIdleReady")}
             </span>
           )}
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2 text-xs">
         <span className="rounded-lg bg-slate-100 px-3 py-2 text-slate-600">
-          Queued: {queuedTasks.length}
+          {t("queuedCount")}: {queuedTasks.length}
         </span>
         <span className="rounded-lg bg-red-50 px-3 py-2 text-red-700">
-          Failed: {failedTasks.length}
+          {t("failedCount")}: {failedTasks.length}
         </span>
         <span className="rounded-lg bg-slate-100 px-3 py-2 text-slate-600">
-          Robot: {robot.state}
+          {t("robotLabel")}: {robot.state}
         </span>
       </div>
 

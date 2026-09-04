@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from app.alert_service import AlertService
 from app.auth import SESSION_COOKIE_NAME, create_session, hash_password, token_digest
 from app.database import Base, get_db
-from app.db_models import AlertORM, DeliveryTaskORM, EmergencyStopORM, RobotORM, SessionORM, StationORM, TaskEventORM, UserORM
+from app.db_models import AlertORM, AuditRecordORM, DeliveryTaskORM, EmergencyStopORM, NotificationORM, RobotORM, SessionORM, StationORM, TaskEventORM, UserORM
 from app.emergency_service import EmergencyStopService
 from app.main import app
 from app.models import AlertSeverity, DeliveryTaskCreate, UserRole, utc_now
@@ -45,7 +45,7 @@ def reset_database(monkeypatch):
     monkeypatch.delenv("ROBOT_WS_TOKEN", raising=False)
     monkeypatch.setenv("APP_ENV", "development")
     with Session() as db:
-        for model in (TaskEventORM, DeliveryTaskORM, SessionORM, AlertORM, EmergencyStopORM, UserORM, RobotORM, StationORM):
+        for model in (AuditRecordORM, NotificationORM, TaskEventORM, DeliveryTaskORM, SessionORM, AlertORM, EmergencyStopORM, UserORM, RobotORM, StationORM):
             db.execute(delete(model))
         db.commit()
         seed_database(db)

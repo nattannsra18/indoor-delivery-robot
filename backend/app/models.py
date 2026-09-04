@@ -492,6 +492,43 @@ class Alert(BaseModel):
     resolved_at: Optional[datetime] = None
 
 
+class Notification(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    event_type: str
+    title: str
+    message: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+    read_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class NotificationPage(BaseModel):
+    items: list[Notification]
+    unread_count: int
+    next_offset: Optional[int] = None
+
+
+class AuditRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    actor_id: Optional[str] = None
+    actor_type: str = "SYSTEM"
+    actor_identifier: Optional[str] = None
+    action: str
+    result: str
+    entity_type: str
+    entity_id: Optional[str] = None
+    metadata_json: str
+    created_at: datetime
+
+
+class AuditPage(BaseModel):
+    items: list[AuditRecord]
+    next_offset: Optional[int] = None
+
+
 class DeliveryTaskCreate(BaseModel):
     pickup_station_id: str
     destination_station_id: str

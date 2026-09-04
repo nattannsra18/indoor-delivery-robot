@@ -1,6 +1,7 @@
 import asyncio
 import os
 from pathlib import Path
+from typing import Callable
 
 TEST_DB = Path(__file__).resolve().parent / "phase4_test.db"
 TEST_DATABASE_URL = f"sqlite:///{TEST_DB.as_posix()}"
@@ -14,9 +15,11 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base, get_db
 from app.db_models import (
     AlertORM,
+    AuditRecordORM,
     DeliveryTaskORM,
     EmergencyStopORM,
     RobotORM,
+    NotificationORM,
     SessionORM,
     StationORM,
     TaskEventORM,
@@ -91,9 +94,11 @@ def receive_message_of_type(
     *,
     max_messages: int,
     skippable_types: set[str] | None = None,
+    skipped_message_validators: dict[str, Callable[[dict], None]] | None = None,
 ) -> dict:
     """Receive a bounded sequence, allowing only known queued messages."""
     skipped = skippable_types or set()
+    validators = skipped_message_validators or {}
     received_types: list[str | None] = []
 
     for _ in range(max_messages):
@@ -108,11 +113,26 @@ def receive_message_of_type(
                 f"unexpected {message_type!r} after "
                 f"{received_types!r}"
             )
+        validator = validators.get(message_type)
+        if validator is not None:
+            validator(message)
 
     raise AssertionError(
         f"Did not receive {expected_type!r} within "
         f"{max_messages} messages; received {received_types!r}"
     )
+
+
+def notification_identity(message: dict) -> dict[str, str | None]:
+    """Return only stable, non-content notification fields for assertions."""
+    notification = message.get("notification")
+    assert isinstance(notification, dict)
+    return {
+        "id": notification.get("id"),
+        "event_type": notification.get("event_type"),
+        "entity_type": notification.get("entity_type"),
+        "entity_id": notification.get("entity_id"),
+    }
 
 
 class StubWebSocket:
@@ -136,12 +156,15 @@ class StubWebSocket:
 
 
 def setup_function():
+    browser_connection_manager.clear()
     route_preview_coordinator.clear()
     navigation_path_store.clear_all()
     navigation_feedback_store.clear()
     map_store.clear()
     with TestingSessionLocal() as db:
         db.execute(delete(SessionORM))
+        db.execute(delete(AuditRecordORM))
+        db.execute(delete(NotificationORM))
         db.execute(delete(TaskEventORM))
         db.execute(delete(DeliveryTaskORM))
         db.execute(delete(EmergencyStopORM))
@@ -969,10 +992,71 @@ def test_navigation_result_broadcasts_dashboard_update():
             == "dashboard_connection_ack"
         )
 
+        # Consume the finite connection protocol before any domain operation.
+        # An active path is the only possible extra initial dashboard event.
+        receive_message_of_type(
+            dashboard_websocket,
+            "notification_snapshot",
+            max_messages=2,
+            skippable_types={"navigation_path"},
+        )
+        receive_message_of_type(
+            dashboard_websocket,
+            "alert_snapshot",
+            max_messages=1,
+        )
+        receive_message_of_type(
+            dashboard_websocket,
+            "emergency_stop_snapshot",
+            max_messages=1,
+        )
+
         with robot_websocket_connect() as robot_websocket:
             robot_websocket.receive_json()
 
+            # Robot connection is an intentional ADMIN operational event.
+            # Drain and validate it before task creation so it cannot be
+            # mistaken for the navigation-result notification.
+            robot_connected = notification_identity(
+                receive_message_of_type(
+                    dashboard_websocket,
+                    "notification_created",
+                    max_messages=1,
+                )
+            )
+            assert robot_connected["id"]
+            assert robot_connected["event_type"] == "robot.connected"
+            assert robot_connected["entity_type"] == "robot"
+            assert robot_connected["entity_id"] == "robot01"
+
             task = create_task("A", "C")
+
+            # With an available robot, canonical creation commits two distinct
+            # task transitions. Their IDs and semantic keys must be distinct.
+            created_identity = notification_identity(
+                receive_message_of_type(
+                    dashboard_websocket,
+                    "notification_created",
+                    max_messages=1,
+                )
+            )
+            dispatched_identity = notification_identity(
+                receive_message_of_type(
+                    dashboard_websocket,
+                    "notification_created",
+                    max_messages=1,
+                )
+            )
+            assert created_identity["id"]
+            assert created_identity["event_type"] == "task.created"
+            assert created_identity["entity_type"] == "task"
+            assert created_identity["entity_id"] == task["id"]
+            assert dispatched_identity["id"]
+            assert dispatched_identity["event_type"] == "task.dispatched"
+            assert dispatched_identity["entity_type"] == "task"
+            assert dispatched_identity["entity_id"] == task["id"]
+            assert created_identity["id"] != dispatched_identity["id"]
+
             command = robot_websocket.receive_json()
 
             robot_websocket.send_json(
@@ -993,17 +1077,35 @@ def test_navigation_result_broadcasts_dashboard_update():
                 == "navigation_result_received"
             )
 
+        transition_notification_ids: list[str | None] = []
+
+        def validate_transition_notification(message: dict) -> None:
+            identity = notification_identity(message)
+            transition_notification_ids.append(identity["id"])
+            assert identity["id"]
+            assert identity["event_type"] == "task.arrived_pickup"
+            assert identity["entity_type"] == "task"
+            assert identity["entity_id"] == task["id"]
+
+        # The result publishes one targeted transition notification and may
+        # clear the active path before the existing public workflow event. The
+        # finite budget is exactly notification + path clear + target event.
         dashboard_event = receive_message_of_type(
             dashboard_websocket,
             "workflow_updated",
-            max_messages=5,
+            max_messages=3,
             skippable_types={
-                "navigation_path",
-                "alert_snapshot",
-                "emergency_stop_snapshot",
-                # Completing navigation clears its active path first.
+                "notification_created",
                 "navigation_path_clear",
             },
+            skipped_message_validators={
+                "notification_created": validate_transition_notification,
+            },
+        )
+
+        assert transition_notification_ids
+        assert len(transition_notification_ids) == len(
+            set(transition_notification_ids)
         )
 
         assert (

@@ -15,8 +15,12 @@ import {
 } from "@/lib/roleDashboard";
 import type { ReactNode } from "react";
 import type { DeliveryTask } from "@/types";
+import { useLocale } from "@/context/LocaleContext";
+import { userDashboardText } from "@/lib/i18n";
 
 export default function UserDashboard() {
+  const { locale } = useLocale();
+  const copy = userDashboardText[locale];
   const {
     tasks,
     navigationFeedback,
@@ -39,26 +43,24 @@ export default function UserDashboard() {
   return (
     <>
       <PageHeader
-        title="My Deliveries"
-        description="Track your active delivery and review your recent delivery requests."
+        title={copy.title}
+        description={copy.description}
       />
 
       {viewState === "loading" && (
-        <StatePanel title="Loading your deliveries…" detail="Fetching your task status from FastAPI." />
+        <StatePanel title={copy.loading} detail={copy.loadingDetail} />
       )}
 
       {viewState === "empty" && (
         <StatePanel
-          title="No deliveries yet"
-          detail="Create your first delivery request to start tracking it here."
-          action={<Link href="/delivery" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Create Delivery</Link>}
+          title={copy.empty} detail={copy.emptyDetail}
+          action={<Link href="/delivery" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">{copy.createDelivery}</Link>}
         />
       )}
 
       {viewState === "error" && (
         <StatePanel
-          title="Unable to load your deliveries"
-          detail={error ?? "FastAPI is currently unavailable."}
+          title={copy.loadError} detail={error ?? copy.offline}
         />
       )}
 
@@ -67,10 +69,9 @@ export default function UserDashboard() {
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">My active delivery</p>
-                <h2 className="mt-1 font-semibold text-slate-900">Current progress</h2>
+                <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">{copy.active}</p><h2 className="mt-1 font-semibold text-slate-900">{copy.progress}</h2>
               </div>
-              <Link href="/tasks" className="text-sm font-semibold text-blue-700">View My Tasks</Link>
+              <Link href="/tasks" className="text-sm font-semibold text-blue-700">{copy.viewTasks}</Link>
             </div>
             {active ? (
               <div className="mt-5 space-y-5">
@@ -88,16 +89,15 @@ export default function UserDashboard() {
               </div>
             ) : (
               <p className="mt-5 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-                You have no delivery in progress. A queued request will appear here when assigned.
+                {copy.noActive}
               </p>
             )}
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="font-semibold text-slate-900">Pending deliveries</h2>
-            <p className="mt-1 text-sm text-slate-500">Your delivery requests waiting to be assigned.</p>
+            <h2 className="font-semibold text-slate-900">{copy.pending}</h2><p className="mt-1 text-sm text-slate-500">{copy.pendingDetail}</p>
             {pending.length === 0 ? (
-              <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">No pending deliveries.</p>
+              <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">{copy.noPending}</p>
             ) : (
               <div className="mt-4 grid gap-3">
                 {pending.map((task) => (
@@ -116,10 +116,9 @@ export default function UserDashboard() {
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="font-semibold text-slate-900">Recent deliveries</h2>
-            <p className="mt-1 text-sm text-slate-500">Your newest completed, failed and cancelled deliveries.</p>
+            <h2 className="font-semibold text-slate-900">{copy.recent}</h2><p className="mt-1 text-sm text-slate-500">{copy.recentDetail}</p>
             {recent.length === 0 ? (
-              <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">No recent deliveries.</p>
+              <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">{copy.noRecent}</p>
             ) : (
               <div className="mt-4 grid gap-3">
                 {recent.slice(0, 6).map((task) => (
@@ -143,6 +142,8 @@ function DeliverySummary({
   stationName: (stationId: string) => string;
   compact?: boolean;
 }) {
+  const { locale } = useLocale();
+  const copy = userDashboardText[locale];
   return (
     <article className={compact ? "rounded-xl border border-slate-200 p-4" : "space-y-4"}>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -154,12 +155,12 @@ function DeliverySummary({
       </div>
       <TaskMetadata task={task} />
       <div className={`grid gap-3 ${compact ? "mt-4 sm:grid-cols-2" : "sm:grid-cols-2"}`}>
-        <Route label="Pickup" value={stationName(task.pickupStationId)} />
-        <Route label="Destination" value={stationName(task.destinationStationId)} />
+        <Route label={locale === "th" ? "จุดรับ" : "Pickup"} value={stationName(task.pickupStationId)} />
+        <Route label={locale === "th" ? "จุดหมาย" : "Destination"} value={stationName(task.destinationStationId)} />
       </div>
       <div className={compact ? "mt-4" : ""}>
         <div className="mb-2 flex justify-between text-xs text-slate-500">
-          <span>Progress</span><span>{task.progress}%</span>
+          <span>{copy.progress}</span><span>{task.progress}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-slate-100">
           <div className="h-full rounded-full bg-blue-600" style={{ width: `${task.progress}%` }} />

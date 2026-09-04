@@ -15,12 +15,15 @@ from .navigation_feedback_store import navigation_feedback_store
 from .repository import DeliveryRepository
 from .service import ACTIVE_STATUSES, PROGRESS
 from .config import security_settings
+from .audit_service import AuditService
+from .notification_service import NotificationService
 
 
 class EmergencyStopService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.repo = DeliveryRepository(db)
+        self.pending_notification_ids: list[str] = []
 
     def _load_state(
         self,
@@ -50,8 +53,7 @@ class EmergencyStopService:
         if state is None and create:
             state = EmergencyStopORM(robot_id=robot_id, state=EmergencyStopState.NORMAL, latched=False)
             self.db.add(state)
-            self.db.commit()
-            self.db.refresh(state)
+            self.db.flush()
         assert state is not None
         self._expire_pending(state)
         return state
@@ -65,7 +67,7 @@ class EmergencyStopService:
         state = self._load_state(robot_id)
         return bool(state is not None and state.latched)
 
-    def activate(self, robot_id: str) -> tuple[EmergencyStopORM, dict, bool]:
+    def activate(self, robot_id: str, actor_id: str | None = None) -> tuple[EmergencyStopORM, dict, bool]:
         state = self.get(robot_id)
         if state.latched:
             return state, self.command(state, "emergency_stop"), False
@@ -96,16 +98,20 @@ class EmergencyStopService:
         robot.state = RobotState.ERROR if robot.online else RobotState.OFFLINE
         navigation_path_store.clear(robot_id)
         navigation_feedback_store.clear_robot(robot_id)
-        self.db.commit()
-        self.db.refresh(state)
-        AlertService(self.db).upsert(
+        AuditService(self.db).log(actor_id, "emergency.activate_requested", "robot", robot_id, {"robot_id": robot_id})
+        self.pending_notification_ids.extend(item.id for item in NotificationService(self.db).create_for_admins("emergency.activate_requested", "Emergency stop requested", f"Emergency stop requested for {robot_id}.", f"emergency:{robot_id}:activate:{state.pending_command_id}", "robot", robot_id))
+        alerts = AlertService(self.db)
+        alerts.upsert(
             f"emergency-stop:{robot_id}", AlertSeverity.CRITICAL,
             "Emergency stop activated", "Software Emergency Stop is latched; motion is inhibited.",
-            "EMERGENCY_STOP", robot_id,
+            "EMERGENCY_STOP", robot_id, commit=False,
         )
+        self.pending_notification_ids.extend(alerts.pending_notification_ids)
+        self.db.commit()
+        self.db.refresh(state)
         return state, self.command(state, "emergency_stop"), True
 
-    def request_reset(self, robot_id: str) -> tuple[EmergencyStopORM, dict]:
+    def request_reset(self, robot_id: str, actor_id: str | None = None) -> tuple[EmergencyStopORM, dict]:
         state = self.get(robot_id)
         if not state.latched:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Emergency Stop is not latched")
@@ -115,6 +121,8 @@ class EmergencyStopService:
             state.command_deadline = utc_now() + timedelta(seconds=security_settings().emergency_command_timeout_seconds)
             state.failure_detail = None
             state.updated_at = utc_now()
+            AuditService(self.db).log(actor_id, "emergency.reset_requested", "robot", robot_id, {"robot_id": robot_id})
+            self.pending_notification_ids.extend(item.id for item in NotificationService(self.db).create_for_admins("emergency.reset_requested", "Emergency stop reset requested", f"Emergency stop reset requested for {robot_id}.", f"emergency:{robot_id}:reset:{state.pending_command_id}", "robot", robot_id))
             self.db.commit()
             self.db.refresh(state)
         return state, self.command(state, "emergency_stop_reset")
@@ -136,19 +144,43 @@ class EmergencyStopService:
         state.command_deadline = None
         state.pending_command_id = None
         state.updated_at = utc_now()
+        outcome_action: str
         if not accepted:
             state.state = EmergencyStopState.FAILED
             state.failure_detail = detail or "Robot rejected Emergency Stop command"
-            self._failure_alert(state, state.failure_detail)
+            self._failure_alert(state, state.failure_detail, commit=False)
+            outcome_action = "emergency.command_failed"
         elif command == "emergency_stop":
             state.state = EmergencyStopState.STOPPED
             state.failure_detail = None
+            outcome_action = "emergency.activate_succeeded"
         else:
             state.state = EmergencyStopState.NORMAL
             state.latched = False
             state.failure_detail = None
             state.activated_at = None
-            AlertService(self.db).resolve_key(f"emergency-stop:{robot_id}")
+            alerts = AlertService(self.db)
+            alerts.resolve_key(f"emergency-stop:{robot_id}", commit=False)
+            self.pending_notification_ids.extend(alerts.pending_notification_ids)
+            outcome_action = "emergency.reset_succeeded"
+        AuditService(self.db).log(
+            None,
+            outcome_action,
+            "robot",
+            robot_id,
+            {"robot_id": robot_id},
+        )
+        self.pending_notification_ids.extend(
+            item.id
+            for item in NotificationService(self.db).create_for_admins(
+                outcome_action,
+                "Emergency command completed" if accepted else "Emergency command failed",
+                f"Emergency command for {robot_id} {'completed' if accepted else 'failed'}.",
+                f"emergency:{robot_id}:{command_id}:{outcome_action}",
+                "robot",
+                robot_id,
+            )
+        )
         self.db.commit()
         self.db.refresh(state)
         return state, True
@@ -160,8 +192,15 @@ class EmergencyStopService:
             state.failure_detail = detail
             state.command_deadline = None
             state.updated_at = utc_now()
+            self._failure_alert(state, detail, commit=False)
+            AuditService(self.db).log(
+                None,
+                "emergency.command_failed",
+                "robot",
+                robot_id,
+                {"robot_id": robot_id},
+            )
             self.db.commit()
-            self._failure_alert(state, detail)
         return state
 
     def reconnect_command(self, robot_id: str) -> dict | None:
@@ -187,11 +226,27 @@ class EmergencyStopService:
             state.state = EmergencyStopState.FAILED
             state.failure_detail = "Emergency Stop command acknowledgement timed out"
             state.command_deadline = None
+            self._failure_alert(state, state.failure_detail, commit=False)
+            AuditService(self.db).log(
+                None,
+                "emergency.command_failed",
+                "robot",
+                state.robot_id,
+                {"robot_id": state.robot_id},
+            )
             self.db.commit()
-            self._failure_alert(state, state.failure_detail)
 
-    def _failure_alert(self, state: EmergencyStopORM, detail: str) -> None:
-        AlertService(self.db).upsert(
+    def _failure_alert(
+        self,
+        state: EmergencyStopORM,
+        detail: str,
+        *,
+        commit: bool = True,
+    ) -> None:
+        alerts = AlertService(self.db)
+        alerts.upsert(
             f"emergency-command-failure:{state.robot_id}", AlertSeverity.CRITICAL,
             "Emergency Stop command failed", detail, "EMERGENCY_STOP", state.robot_id,
+            commit=commit,
         )
+        self.pending_notification_ids.extend(alerts.pending_notification_ids)

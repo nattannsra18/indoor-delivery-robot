@@ -28,15 +28,18 @@ test("ADMIN navigation exposes operational and system destinations", () => {
     "Create Delivery",
     "All Tasks",
     "Station Management",
-    "Robot & Diagnostics"
+    "Robot & Diagnostics",
+    "Notifications",
+    "Audit Log"
   ]);
 });
 
 test("USER navigation excludes admin and system destinations", () => {
   const paths = navigationForRole("USER").map((item) => item.href);
-  assert.deepEqual(paths, ["/", "/delivery", "/tasks"]);
+  assert.deepEqual(paths, ["/", "/delivery", "/tasks", "/notifications"]);
   assert.equal(paths.includes("/robots"), false);
   assert.equal(paths.includes("/stations"), false);
+  assert.equal(paths.includes("/audit"), false);
 });
 
 test("USER dashboard does not request admin-only emergency state", () => {

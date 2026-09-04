@@ -236,6 +236,17 @@ def test_navigation_result_clears_stored_path(monkeypatch):
         "detail": "arrived",
     }
     _, events = run_robot([path_message(command), result], monkeypatch)
+    workflow_events = [
+        event for event in events
+        if event["type"] == "workflow_updated"
+    ]
+    assert len(workflow_events) == 1
+    assert workflow_events[0]["reason"] == "navigation_result"
+    assert workflow_events[0]["task_id"] == command["task_id"]
+    assert workflow_events[0]["robot_id"] == "robot01"
+    assert workflow_events[0]["stage"] == "pickup"
+    assert workflow_events[0]["navigation_status"] == "succeeded"
+    assert workflow_events[0]["task_status"] == "WAITING_FOR_LOADING"
     assert any(
         event["type"] == "navigation_path_clear"
         and event["reason"] == "navigation_result"
@@ -300,6 +311,7 @@ def test_browser_cannot_inject_navigation_path():
         asyncio.run(dashboard_websocket(websocket, db))
     assert [message["type"] for message in websocket.sent] == [
         "dashboard_connection_ack",
+        "notification_snapshot",
         "alert_snapshot",
         "emergency_stop_snapshot",
         "error",

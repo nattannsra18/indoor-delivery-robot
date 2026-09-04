@@ -10,13 +10,14 @@ import NavigationMetrics from "@/components/NavigationMetrics";
 import EmergencyStopControl from "@/components/EmergencyStopControl";
 import UserDashboard from "@/components/UserDashboard";
 import { useAuth } from "@/context/AuthContext";
-import {
-  formatTaskTimestamp,
-  taskStatusCounts
-} from "@/lib/roleDashboard";
+import { useLocale } from "@/context/LocaleContext";
+import { dashboardText, formatDate } from "@/lib/i18n";
+import { taskStatusCounts } from "@/lib/roleDashboard";
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { locale, format } = useLocale();
+  const copy = dashboardText[locale];
   const {
     occupancyMap,
     navigationFeedback,
@@ -34,40 +35,40 @@ export default function DashboardPage() {
   return (
     <>
       <PageHeader
-        title="Dashboard"
-        description="Validated delivery queue, retry and recovery controls, and persistent task history."
+        title={copy.title}
+        description={copy.description}
       />
 
       <EmergencyStopControl />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Robot"
+          label={copy.robot}
           value={robot.online ? "ONLINE" : "OFFLINE"}
           note={robot.name}
           accent="emerald"
         />
         <MetricCard
-          label="Battery"
+          label={copy.battery}
           value={`${robot.battery}%`}
-          note="ROS telemetry via FastAPI"
+          note={copy.telemetry}
           accent="blue"
         />
         <MetricCard
-          label="Robot State"
+          label={copy.robotState}
           value={robot.state.replaceAll("_", " ")}
-          note="Loaded from backend"
+          note={copy.loadedBackend}
           accent="amber"
         />
         <MetricCard
-          label="Active Tasks"
+          label={copy.activeTasks}
           value={String(counts.active)}
-          note={activeTask ? `${activeTask.id} active` : "No active task"}
+          note={activeTask ? format(copy.active, { id: activeTask.id }) : copy.noActive}
           accent="violet"
         />
-        <MetricCard label="Queued" value={String(counts.queued)} note="Waiting for dispatch" accent="amber" />
-        <MetricCard label="Failed" value={String(counts.failed)} note="Requires attention" accent="amber" />
-        <MetricCard label="Completed" value={String(counts.completed)} note="Persisted deliveries" accent="emerald" />
+        <MetricCard label={copy.queued} value={String(counts.queued)} note={copy.waitingDispatch} accent="amber" />
+        <MetricCard label={copy.failed} value={String(counts.failed)} note={copy.requiresAttention} accent="amber" />
+        <MetricCard label={copy.completed} value={String(counts.completed)} note={copy.persisted} accent="emerald" />
       </div>
 
       <div className="mt-6">
@@ -83,22 +84,22 @@ export default function DashboardPage() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="font-semibold text-slate-900">
-                Live Robot Map
+                {copy.liveMap}
               </h2>
               <p className="text-sm text-slate-500">
-                ROS OccupancyGrid, real Nav2 global path and live AMCL pose
+                {copy.liveMapHelp}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <ConnectionBadge
                 active={backendOnline}
-                activeLabel="FastAPI Connected"
-                inactiveLabel="Backend Offline"
+                activeLabel={copy.connected}
+                inactiveLabel={copy.backendOffline}
               />
               <ConnectionBadge
                 active={Boolean(occupancyMap)}
-                activeLabel="ROS Map Available"
-                inactiveLabel="Waiting for Map"
+                activeLabel={copy.mapAvailable}
+                inactiveLabel={copy.waitingMap}
               />
             </div>
           </div>
@@ -107,7 +108,7 @@ export default function DashboardPage() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="font-semibold text-slate-900">
-            Current Delivery
+            {copy.currentDelivery}
           </h2>
           {activeTask ? (
             <div className="mt-5 space-y-5">
@@ -119,11 +120,11 @@ export default function DashboardPage() {
               </div>
 
               <RouteRow
-                label="Pickup"
+                label={copy.pickup}
                 value={stationName(activeTask.pickupStationId)}
               />
               <RouteRow
-                label="Destination"
+                label={copy.destination}
                 value={stationName(
                   activeTask.destinationStationId
                 )}
@@ -132,7 +133,7 @@ export default function DashboardPage() {
               <div>
                 <div className="mb-2 flex justify-between text-sm">
                   <span className="text-slate-500">
-                    Mission progress
+                    {copy.progress}
                   </span>
                   <span className="font-semibold text-slate-900">
                     {activeTask.progress}%
@@ -152,12 +153,11 @@ export default function DashboardPage() {
                 status={activeTask.status}
               />
 
-              <MissionMessage status={activeTask.status} />
+              <MissionMessage status={activeTask.status} copy={copy} />
             </div>
           ) : (
             <div className="mt-5 rounded-xl bg-slate-50 p-5 text-sm leading-6 text-slate-600">
-              Robot is IDLE. Create a delivery request; FastAPI
-              will assign it automatically.
+              {copy.idleHelp}
             </div>
           )}
         </section>
@@ -166,11 +166,10 @@ export default function DashboardPage() {
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div>
           <h2 className="font-semibold text-slate-900">
-            Recent Tasks
+            {copy.recentTasks}
           </h2>
           <p className="text-sm text-slate-500">
-            Workflow changes arrive through WebSocket; AMCL data
-            refreshes every 2 seconds and the ROS map every 5 seconds.
+            {copy.recentHelp}
           </p>
         </div>
 
@@ -178,11 +177,11 @@ export default function DashboardPage() {
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
               <tr>
-                <th className="px-3 py-3">Task</th>
-                <th className="px-3 py-3">Pickup</th>
-                <th className="px-3 py-3">Destination</th>
-                <th className="px-3 py-3">Status</th>
-                <th className="px-3 py-3">Created</th>
+                <th className="px-3 py-3">{copy.task}</th>
+                <th className="px-3 py-3">{copy.pickup}</th>
+                <th className="px-3 py-3">{copy.destination}</th>
+                <th className="px-3 py-3">{copy.status}</th>
+                <th className="px-3 py-3">{copy.created}</th>
               </tr>
             </thead>
             <tbody>
@@ -204,7 +203,7 @@ export default function DashboardPage() {
                     <StatusBadge status={task.status} />
                   </td>
                   <td className="px-3 py-4 text-slate-500">
-                    {formatTaskTimestamp(task.createdAt)}
+                    {formatDate(task.createdAt, locale)}
                   </td>
                 </tr>
               ))}
@@ -287,7 +286,7 @@ function RouteRow({
   );
 }
 
-function MissionMessage({ status }: { status: string }) {
+function MissionMessage({ status, copy }: { status: string; copy: Record<string, string> }) {
   const content: Record<
     string,
     {
@@ -297,27 +296,19 @@ function MissionMessage({ status }: { status: string }) {
     }
   > = {
     GOING_TO_PICKUP: {
-      title: "Going to pickup station",
-      description:
-        "Nav2 is navigating the robot to the pickup goal.",
+      title: copy.goingTitle, description: copy.goingHelp,
       style: "border-cyan-100 bg-cyan-50 text-cyan-800"
     },
     WAITING_FOR_LOADING: {
-      title: "Waiting for package loading",
-      description:
-        "Load the package, then confirm loading to dispatch the destination goal.",
+      title: copy.loadingTitle, description: copy.loadingHelp,
       style: "border-amber-100 bg-amber-50 text-amber-800"
     },
     DELIVERING: {
-      title: "Delivering package",
-      description:
-        "Nav2 is navigating the robot to the destination station.",
+      title: copy.deliveringTitle, description: copy.deliveringHelp,
       style: "border-blue-100 bg-blue-50 text-blue-800"
     },
     WAITING_FOR_UNLOADING: {
-      title: "Waiting for receiver confirmation",
-      description:
-        "Unload the package, then confirm receipt to complete the task.",
+      title: copy.unloadingTitle, description: copy.unloadingHelp,
       style: "border-violet-100 bg-violet-50 text-violet-800"
     }
   };

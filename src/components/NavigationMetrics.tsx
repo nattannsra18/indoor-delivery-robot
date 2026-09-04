@@ -2,6 +2,8 @@ import {
   NavigationFeedback,
   TaskStatus
 } from "@/types";
+import { useLocale } from "@/context/LocaleContext";
+import { operationalText } from "@/lib/i18n";
 
 type NavigationMetricsProps = {
   feedback?: NavigationFeedback;
@@ -19,6 +21,8 @@ export default function NavigationMetrics({
   taskId,
   status
 }: NavigationMetricsProps) {
+  const { locale, format } = useLocale();
+  const copy = operationalText[locale];
   if (!NAVIGATING_STATUSES.includes(status)) {
     return null;
   }
@@ -32,10 +36,10 @@ export default function NavigationMetrics({
     return (
       <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
         <p className="text-sm font-semibold text-blue-900">
-          Live navigation
+          {copy.liveNavigation}
         </p>
         <p className="mt-1 text-sm text-blue-700">
-          Waiting for Nav2 feedback...
+          {copy.waitingFeedback}
         </p>
       </div>
     );
@@ -53,30 +57,29 @@ export default function NavigationMetrics({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm font-semibold text-blue-950">
-            Live navigation
+            {copy.liveNavigation}
           </p>
           <p className="mt-0.5 text-xs text-blue-700">
             {currentFeedback.stage === "pickup"
-              ? "Pickup route"
-              : "Destination route"}
+              ? copy.pickupRoute : copy.destinationRoute}
           </p>
         </div>
 
         <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
-          Updated {updatedAt}
+          {format(copy.updated, { time: updatedAt })}
         </span>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <NavigationMetric
-          label="Distance remaining"
+          label={copy.distance}
           value={
             `${currentFeedback.distanceRemaining.toFixed(2)} m`
           }
         />
 
         <NavigationMetric
-          label="Estimated arrival"
+          label={copy.estimatedArrival}
           value={formatDuration(
             currentFeedback
               .estimatedTimeRemainingSeconds
@@ -84,21 +87,21 @@ export default function NavigationMetrics({
         />
 
         <NavigationMetric
-          label="Navigation time"
+          label={copy.navigationTime}
           value={formatDuration(
             currentFeedback.navigationTimeSeconds
           )}
         />
 
         <NavigationMetric
-          label="Recoveries"
+          label={copy.recoveries}
           value={String(
             currentFeedback.numberOfRecoveries
           )}
         />
 
         <NavigationMetric
-          label="Linear speed"
+          label={copy.linearSpeed}
           value={
             currentFeedback.linearVelocity
               === undefined
@@ -112,7 +115,7 @@ export default function NavigationMetrics({
         />
 
         <NavigationMetric
-          label="Angular velocity"
+          label={copy.angularVelocity}
           value={
             currentFeedback.angularVelocity
               === undefined

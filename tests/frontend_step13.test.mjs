@@ -41,7 +41,7 @@ test("delivery review validates with Nav2 before task creation", () => {
   assert.match(pageSource, /await previewTaskRoute/);
   assert.match(pageSource, /previewId:\s*routePreview\.previewId/);
   assert.match(pageSource, /routePreviewIsFresh/);
-  assert.match(pageSource, /Nav2 reachable/);
+  assert.match(pageSource, /copy\.routeReachable/);
 });
 
 
@@ -52,6 +52,6 @@ test("map renders separate pickup and destination preview paths", () => {
   );
   assert.match(mapSource, /routePreview\.pickupPath/);
   assert.match(mapSource, /routePreview\.deliveryPath/);
-  assert.match(mapSource, /Preview to pickup/);
-  assert.match(mapSource, /Preview to destination/);
+  assert.match(mapSource, /copy\.mapPreviewPickup/);
+  assert.match(mapSource, /copy\.mapPreviewDestination/);
 });
