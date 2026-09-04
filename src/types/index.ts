@@ -25,6 +25,31 @@ export interface TaskCreateInput {
   priority: TaskPriority;
   recipientName?: string;
   deliveryNote?: string;
+  previewId: string;
+}
+
+export interface TaskRoutePreviewInput {
+  pickupStationId: string;
+  destinationStationId: string;
+  priority: TaskPriority;
+}
+
+export interface TaskRoutePreview {
+  previewId: string;
+  robotId: string;
+  status: "AVAILABLE";
+  frameId: string;
+  mapRevision: number;
+  pickupPath: NavigationPathPose[];
+  deliveryPath: NavigationPathPose[];
+  pickupDistanceMeters: number;
+  deliveryDistanceMeters: number;
+  totalDistanceMeters: number;
+  pickupEtaSeconds: number;
+  destinationEtaSeconds: number;
+  completionEtaSeconds: number;
+  generatedAt: string;
+  expiresAt: string;
 }
 
 export interface Station {

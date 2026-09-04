@@ -6,7 +6,9 @@ import {
   calculateMapViewport, CanvasPoint, CanvasSize, MapViewport, worldToCanvas
 } from "@/lib/mapGeometry";
 import { framesAreCompatible } from "@/lib/navigationPath";
-import { NavigationPathStatus, OccupancyGridMap, Station } from "@/types";
+import {
+  NavigationPathStatus, OccupancyGridMap, Station, TaskRoutePreview
+} from "@/types";
 
 export type StationSelectionMode = "pickup" | "destination";
 
@@ -16,6 +18,7 @@ type RobotMapProps = {
   selectedDestinationStationId?: string;
   selectionMode?: StationSelectionMode;
   onStationSelect?: (station: Station) => void;
+  routePreview?: TaskRoutePreview;
 };
 
 const PATH_STATUS_LABEL: Record<NavigationPathStatus, string> = {
@@ -30,7 +33,8 @@ export default function RobotMap({
   selectedPickupStationId,
   selectedDestinationStationId,
   selectionMode = "pickup",
-  onStationSelect
+  onStationSelect,
+  routePreview
 }: RobotMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -98,9 +102,18 @@ export default function RobotMap({
     context.fillRect(0, 0, canvasSize.width, canvasSize.height);
     const viewport = calculateMapViewport(occupancyMap, canvasSize);
     drawOccupancyGrid(context, mapCanvas, viewport);
-    drawNavigationPath(
-      context, occupancyMap, viewport, renderablePath?.poses ?? []
-    );
+    if (routePreview && framesAreCompatible(occupancyMap.frameId, routePreview.frameId)) {
+      drawNavigationPath(
+        context, occupancyMap, viewport, routePreview.pickupPath, "#0891b2"
+      );
+      drawNavigationPath(
+        context, occupancyMap, viewport, routePreview.deliveryPath, "#7c3aed"
+      );
+    } else {
+      drawNavigationPath(
+        context, occupancyMap, viewport, renderablePath?.poses ?? [], "#0ea5e9"
+      );
+    }
     stations.forEach((station) => drawStation(
       context, occupancyMap, viewport, station,
       {
@@ -121,7 +134,7 @@ export default function RobotMap({
   }, [
     canvasSize, interactive, occupancyMap, renderablePath, robot,
     selectedDestinationStationId, selectedPickupStationId,
-    selectionMode, stations
+    routePreview, selectionMode, stations
   ]);
 
   function handleMapClick(event: MouseEvent<HTMLCanvasElement>) {
@@ -173,7 +186,11 @@ export default function RobotMap({
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
-        <Legend color="#0ea5e9" label={PATH_STATUS_LABEL[displayedPathStatus]} line />
+        {!routePreview && (
+          <Legend color="#0ea5e9" label={PATH_STATUS_LABEL[displayedPathStatus]} line />
+        )}
+        {routePreview && <Legend color="#0891b2" label="Preview to pickup" line />}
+        {routePreview && <Legend color="#7c3aed" label="Preview to destination" line />}
         <Legend color="#10b981" label="Station" />
         <Legend color="#06b6d4" label="Pickup" />
         <Legend color="#8b5cf6" label="Destination" />
@@ -269,7 +286,8 @@ function drawNavigationPath(
   context: CanvasRenderingContext2D,
   map: OccupancyGridMap,
   viewport: MapViewport,
-  poses: Array<{ x: number; y: number }>
+  poses: Array<{ x: number; y: number }>,
+  color: string
 ) {
   const points = poses.map((pose) =>
     worldToCanvas(map, viewport, pose.x, pose.y, false)
@@ -279,8 +297,8 @@ function drawNavigationPath(
   context.beginPath();
   context.rect(viewport.x, viewport.y, viewport.width, viewport.height);
   context.clip();
-  context.strokeStyle = "rgba(14, 165, 233, 0.95)";
-  context.fillStyle = "#0ea5e9";
+  context.strokeStyle = color;
+  context.fillStyle = color;
   context.lineWidth = 4;
   context.lineJoin = "round";
   context.lineCap = "round";

@@ -370,6 +370,29 @@ class NavigationPathClearMessage(BaseModel):
     task_id: str = Field(min_length=1, max_length=100)
     stage: NavigationStage
 
+
+class RoutePreviewResultMessage(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        allow_inf_nan=False,
+        strict=True,
+    )
+
+    type: Literal["route_preview_result"]
+    request_id: str = Field(min_length=1, max_length=100)
+    status: Literal["available", "unreachable", "unavailable"]
+    frame_id: Optional[str] = Field(default=None, max_length=100)
+    pickup_path: list[NavigationPathPose] = Field(
+        default_factory=list,
+        max_length=MAX_NAVIGATION_PATH_POSES,
+    )
+    delivery_path: list[NavigationPathPose] = Field(
+        default_factory=list,
+        max_length=MAX_NAVIGATION_PATH_POSES,
+    )
+    detail: Optional[str] = Field(default=None, max_length=500)
+
+
 class OccupancyGridPayload(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -418,6 +441,7 @@ class MapMessage(BaseModel):
 class MapSnapshot(OccupancyGridPayload):
     revision: int = Field(ge=1)
     received_at: datetime
+
 
 class DeliveryTask(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -474,6 +498,7 @@ class DeliveryTaskCreate(BaseModel):
     priority: TaskPriority = TaskPriority.NORMAL
     recipient_name: Optional[str] = Field(default=None, max_length=100)
     delivery_note: Optional[str] = Field(default=None, max_length=500)
+    preview_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
 
     @field_validator("recipient_name", "delivery_note", mode="before")
     @classmethod
@@ -490,6 +515,36 @@ class DeliveryTaskCreate(BaseModel):
         if self.pickup_station_id == self.destination_station_id:
             raise ValueError("pickup_station_id and destination_station_id must be different")
         return self
+
+
+class TaskRoutePreviewRequest(BaseModel):
+    pickup_station_id: str
+    destination_station_id: str
+    priority: TaskPriority = TaskPriority.NORMAL
+
+    @model_validator(mode="after")
+    def validate_stations(self):
+        if self.pickup_station_id == self.destination_station_id:
+            raise ValueError("pickup_station_id and destination_station_id must be different")
+        return self
+
+
+class TaskRoutePreview(BaseModel):
+    preview_id: str
+    robot_id: str
+    status: Literal["AVAILABLE"]
+    frame_id: str
+    map_revision: int = Field(ge=1)
+    pickup_path: list[NavigationPathPose]
+    delivery_path: list[NavigationPathPose]
+    pickup_distance_meters: float = Field(ge=0.0)
+    delivery_distance_meters: float = Field(ge=0.0)
+    total_distance_meters: float = Field(ge=0.0)
+    pickup_eta_seconds: float = Field(ge=0.0)
+    destination_eta_seconds: float = Field(ge=0.0)
+    completion_eta_seconds: float = Field(ge=0.0)
+    generated_at: datetime
+    expires_at: datetime
 
 
 class TaskEventRequest(BaseModel):

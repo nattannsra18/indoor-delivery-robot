@@ -36,6 +36,8 @@ import {
   Station,
   TaskEstimate,
   TaskCreateInput,
+  TaskRoutePreview,
+  TaskRoutePreviewInput,
   TaskStatus
 } from "@/types";
 
@@ -105,6 +107,7 @@ type ApiDeliveryContextValue = {
   emergencyStop?: EmergencyStop;
   taskEstimates: TaskEstimate[];
   createTask: (input: TaskCreateInput) => Promise<DeliveryTask>;
+  previewTaskRoute: (input: TaskRoutePreviewInput) => Promise<TaskRoutePreview>;
   addStation: (
     station: Omit<Station, "id">
   ) => Promise<Station>;
@@ -675,6 +678,21 @@ export function ApiDeliveryProvider({
     [refreshAll]
   );
 
+  const previewTaskRoute = useCallback(
+    async (input: TaskRoutePreviewInput) => {
+      try {
+        return await api.previewTaskRoute(input);
+      } catch (err) {
+        const message = err instanceof Error
+          ? err.message
+          : "Unable to preview route";
+        setError(message);
+        throw err;
+      }
+    },
+    []
+  );
+
   const addStation = useCallback(
     async (station: Omit<Station, "id">) => {
       try {
@@ -778,6 +796,7 @@ export function ApiDeliveryProvider({
       emergencyStop,
       taskEstimates,
       createTask,
+      previewTaskRoute,
       addStation,
       removeStation,
       advanceRobotWorkflow,
@@ -805,6 +824,7 @@ export function ApiDeliveryProvider({
       emergencyStop,
       taskEstimates,
       createTask,
+      previewTaskRoute,
       addStation,
       removeStation,
       advanceRobotWorkflow,

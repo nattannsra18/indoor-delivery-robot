@@ -9,6 +9,8 @@ import type {
   TaskStatus,
   TaskEstimate,
   TaskCreateInput,
+  TaskRoutePreview,
+  TaskRoutePreviewInput,
   UserIdentity
 } from "@/types";
 
@@ -86,6 +88,24 @@ type ApiTaskEstimate = {
   generated_at: string;
   availability: TaskEstimate["availability"];
   completed_at: string | null;
+};
+
+type ApiTaskRoutePreview = {
+  preview_id: string;
+  robot_id: string;
+  status: "AVAILABLE";
+  frame_id: string;
+  map_revision: number;
+  pickup_path: Array<{ x: number; y: number; yaw?: number }>;
+  delivery_path: Array<{ x: number; y: number; yaw?: number }>;
+  pickup_distance_meters: number;
+  delivery_distance_meters: number;
+  total_distance_meters: number;
+  pickup_eta_seconds: number;
+  destination_eta_seconds: number;
+  completion_eta_seconds: number;
+  generated_at: string;
+  expires_at: string;
 };
 
 type ApiOverview = {
@@ -301,10 +321,41 @@ export async function createTask(
       destination_station_id: input.destinationStationId,
       priority: input.priority,
       recipient_name: input.recipientName?.trim() || null,
-      delivery_note: input.deliveryNote?.trim() || null
+      delivery_note: input.deliveryNote?.trim() || null,
+      preview_id: input.previewId
     })
   });
   return toTask(task);
+}
+
+export async function previewTaskRoute(
+  input: TaskRoutePreviewInput
+): Promise<TaskRoutePreview> {
+  const preview = await request<ApiTaskRoutePreview>("/api/tasks/preview", {
+    method: "POST",
+    body: JSON.stringify({
+      pickup_station_id: input.pickupStationId,
+      destination_station_id: input.destinationStationId,
+      priority: input.priority
+    })
+  });
+  return {
+    previewId: preview.preview_id,
+    robotId: preview.robot_id,
+    status: preview.status,
+    frameId: preview.frame_id,
+    mapRevision: preview.map_revision,
+    pickupPath: preview.pickup_path,
+    deliveryPath: preview.delivery_path,
+    pickupDistanceMeters: preview.pickup_distance_meters,
+    deliveryDistanceMeters: preview.delivery_distance_meters,
+    totalDistanceMeters: preview.total_distance_meters,
+    pickupEtaSeconds: preview.pickup_eta_seconds,
+    destinationEtaSeconds: preview.destination_eta_seconds,
+    completionEtaSeconds: preview.completion_eta_seconds,
+    generatedAt: preview.generated_at,
+    expiresAt: preview.expires_at
+  };
 }
 
 export async function applyTaskEvent(

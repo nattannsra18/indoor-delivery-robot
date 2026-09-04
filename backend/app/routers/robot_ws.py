@@ -24,6 +24,7 @@ from ..models import (
     NavigationPathClearMessage,
     NavigationPathMessage,
     NavigationResultMessage,
+    RoutePreviewResultMessage,
     RobotTelemetry,
     TaskEvent,
 )
@@ -40,6 +41,7 @@ from ..navigation_feedback_store import (
     LatestNavigationEstimate,
     navigation_feedback_store,
 )
+from ..route_preview import route_preview_coordinator
 
 router = APIRouter(tags=["robot-websocket"])
 
@@ -530,6 +532,32 @@ async def robot_websocket(
                     },
                     owner_id=service.get_task(navigation_path.task_id).owner_id,
                 )
+            elif message_type == "route_preview_result":
+                try:
+                    preview_result = RoutePreviewResultMessage.model_validate(
+                        message
+                    )
+                except ValidationError as error:
+                    details = "; ".join(
+                        f"{'.'.join(map(str, item['loc']))}: {item['msg']}"
+                        for item in error.errors(include_url=False)
+                    )
+                    await send_error(
+                        websocket,
+                        "INVALID_ROUTE_PREVIEW_RESULT",
+                        details,
+                    )
+                    continue
+
+                if not route_preview_coordinator.resolve(
+                    robot_id,
+                    preview_result,
+                ):
+                    await send_error(
+                        websocket,
+                        "UNKNOWN_ROUTE_PREVIEW",
+                        "request_id is not pending for this robot",
+                    )
             elif message_type == "navigation_path_clear":
                 try:
                     path_clear = (
@@ -1084,6 +1112,7 @@ async def robot_websocket(
                         "Supported message types are "
                         "'heartbeat', 'diagnostics', "
                         "'telemetry', 'map', "
+                        "'route_preview_result', "
                         "'navigation_path', "
                         "'navigation_path_clear', "
                         "'navigation_feedback', "
@@ -1099,6 +1128,10 @@ async def robot_websocket(
             websocket,
         )
         if disconnected:
+            route_preview_coordinator.fail_robot(
+                robot_id,
+                "ROS Bridge disconnected during route preview",
+            )
             navigation_feedback_store.clear_robot(robot_id)
             await broadcast_path_clear(
                 robot_id,
@@ -1120,6 +1153,10 @@ async def robot_websocket(
             websocket,
         )
         if disconnected:
+            route_preview_coordinator.fail_robot(
+                robot_id,
+                "ROS Bridge disconnected during route preview",
+            )
             navigation_feedback_store.clear_robot(robot_id)
             await broadcast_path_clear(
                 robot_id,

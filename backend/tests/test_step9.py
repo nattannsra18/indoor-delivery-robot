@@ -16,11 +16,14 @@ from app.db_models import AlertORM, DeliveryTaskORM, EmergencyStopORM, SessionOR
 from app.emergency_service import EmergencyStopService
 from app.main import app
 from app.models import AlertSeverity, DeliveryTaskCreate, UserRole, utc_now
+from app.models import OccupancyGridPayload, TaskPriority
 from app.routers.dashboard_ws import dashboard_websocket
 from app.routers.robot_ws import robot_websocket
 from app.seed import seed_database
 from app.service import DeliveryService
 from app.websocket_manager import robot_connection_manager
+from app.map_store import map_store
+from app.route_preview import route_preview_coordinator
 
 DB_PATH = Path(__file__).parent / "step9_test.db"
 engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
@@ -51,9 +54,30 @@ def reset_database(monkeypatch):
         ])
         db.commit()
     robot_connection_manager._connections.clear()
+    route_preview_coordinator.clear()
+    map_store.clear()
+    map_store.update(OccupancyGridPayload(
+        frame_id="map", resolution=1.0, width=1, height=1,
+        origin_x=0.0, origin_y=0.0, origin_yaw=0.0, data=[0],
+    ))
     yield
     app.dependency_overrides.pop(get_db, None)
     robot_connection_manager._connections.clear()
+    route_preview_coordinator.clear()
+    map_store.clear()
+
+
+def task_preview_id(owner_id, pickup, destination, priority=TaskPriority.NORMAL):
+    snapshot = map_store.get()
+    assert snapshot is not None
+    return route_preview_coordinator.issue_validation(
+        owner_id=owner_id,
+        robot_id="robot01",
+        pickup_station_id=pickup,
+        destination_station_id=destination,
+        priority=priority,
+        map_revision=snapshot.revision,
+    )
 
 
 def login(client: TestClient, username="admin", password="admin-pass"):
@@ -99,7 +123,11 @@ def test_rbac_task_ownership_and_legacy_ownerless_safety():
     alice = TestClient(app); login(alice, "alice", "alice-pass")
     bob = TestClient(app); login(bob, "bob", "bob-pass")
     admin = TestClient(app); login(admin)
-    created = alice.post("/api/tasks", json={"pickup_station_id": "A", "destination_station_id": "B"})
+    created = alice.post("/api/tasks", json={
+        "pickup_station_id": "A",
+        "destination_station_id": "B",
+        "preview_id": task_preview_id("alice", "A", "B"),
+    })
     assert created.status_code == 201
     assert created.json()["owner_id"] == "alice"
     task_id = created.json()["id"]
@@ -185,7 +213,11 @@ class ConnectedRobot:
 
 def test_emergency_stop_latches_terminates_task_clears_dispatch_and_requires_matching_ack():
     admin = TestClient(app); login(admin)
-    created = admin.post("/api/tasks", json={"pickup_station_id": "A", "destination_station_id": "C"}).json()
+    created = admin.post("/api/tasks", json={
+        "pickup_station_id": "A",
+        "destination_station_id": "C",
+        "preview_id": task_preview_id("admin", "A", "C"),
+    }).json()
     robot = ConnectedRobot(); robot_connection_manager._connections["robot01"] = robot
     stopped = admin.post("/api/robots/robot01/emergency-stop")
     assert stopped.status_code == 200 and stopped.json()["latched"] is True

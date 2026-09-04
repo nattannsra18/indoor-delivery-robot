@@ -14,11 +14,12 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base, get_db
 from app.db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM, SessionORM, UserORM
 from app.auth import hash_password
-from app.models import UserRole
+from app.models import OccupancyGridPayload, TaskPriority, UserRole
 from app.main import app
 from app.routers.robot_ws import robot_websocket
 from app.seed import seed_database
 from app.map_store import map_store
+from app.route_preview import route_preview_coordinator
 from app.browser_websocket_manager import (
     browser_connection_manager,
 )
@@ -71,6 +72,8 @@ class StubWebSocket:
 
 
 def setup_function():
+    route_preview_coordinator.clear()
+    map_store.clear()
     with TestingSessionLocal() as db:
         db.execute(delete(SessionORM))
         db.execute(delete(TaskEventORM))
@@ -85,12 +88,30 @@ def setup_function():
             db.commit()
     response = client.post("/api/auth/login", json={"username": "test-admin", "password": "test-password"})
     assert response.status_code == 200
+    map_store.update(OccupancyGridPayload(
+        frame_id="map", resolution=1.0, width=1, height=1,
+        origin_x=0.0, origin_y=0.0, origin_yaw=0.0, data=[0],
+    ))
 
 
 def create_task(pickup="A", destination="C"):
+    snapshot = map_store.get()
+    assert snapshot is not None
+    preview_id = route_preview_coordinator.issue_validation(
+        owner_id="test-admin-id",
+        robot_id="robot01",
+        pickup_station_id=pickup,
+        destination_station_id=destination,
+        priority=TaskPriority.NORMAL,
+        map_revision=snapshot.revision,
+    )
     response = client.post(
         "/api/tasks",
-        json={"pickup_station_id": pickup, "destination_station_id": destination},
+        json={
+            "pickup_station_id": pickup,
+            "destination_station_id": destination,
+            "preview_id": preview_id,
+        },
     )
     assert response.status_code == 201
     return response.json()

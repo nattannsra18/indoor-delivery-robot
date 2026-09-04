@@ -24,6 +24,7 @@ from app.models import (
     TaskPriority,
     TaskStatus,
     UserRole,
+    OccupancyGridPayload,
     utc_now,
 )
 from app.queue_estimate_service import QueueEstimateService
@@ -32,6 +33,8 @@ from app.routers.tasks import list_tasks as list_visible_tasks
 from app.schema import apply_compatibility_migrations
 from app.seed import seed_database
 from app.service import DeliveryService
+from app.map_store import map_store
+from app.route_preview import route_preview_coordinator
 
 
 engine = create_engine(
@@ -45,6 +48,8 @@ Base.metadata.create_all(engine)
 
 @pytest.fixture(autouse=True)
 def reset_database():
+    route_preview_coordinator.clear()
+    map_store.clear()
     with Session() as db:
         for model in (
             TaskEventORM,
@@ -77,6 +82,13 @@ def reset_database():
             ),
         ])
         db.commit()
+    map_store.update(OccupancyGridPayload(
+        frame_id="map", resolution=1.0, width=1, height=1,
+        origin_x=0.0, origin_y=0.0, origin_yaw=0.0, data=[0],
+    ))
+    yield
+    route_preview_coordinator.clear()
+    map_store.clear()
 
 
 def payload(
@@ -160,6 +172,16 @@ def test_user_cannot_create_high_but_admin_can_and_metadata_round_trips():
         assert denied.value.status_code == 403
         assert service.list_tasks(owner_id="alice") == []
 
+        snapshot = map_store.get()
+        assert snapshot is not None
+        request.preview_id = route_preview_coordinator.issue_validation(
+            owner_id="admin",
+            robot_id="robot01",
+            pickup_station_id="A",
+            destination_station_id="B",
+            priority=TaskPriority.HIGH,
+            map_revision=snapshot.revision,
+        )
         created = create_task_endpoint(request, BackgroundTasks(), service, admin)
         assert created.priority == TaskPriority.HIGH
         assert created.recipient_name == "Grace Hopper"

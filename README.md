@@ -73,6 +73,24 @@ the four managed services before removing the session; it does not use broad
 `backend/.env`, and injected into FastAPI and the ROS Bridge without being
 printed.
 
+## Route validation before task creation
+
+The delivery review requests two paths from Nav2's `ComputePathToPose` action:
+the current robot pose to pickup, then pickup to destination. Planning does not
+send a `NavigateToPose` goal and therefore does not move the robot. FastAPI
+calculates distance and ETA from the returned paths and issues a short-lived,
+one-use `preview_id` bound to the authenticated user, selected stations,
+priority, robot, and current map revision. `POST /api/tasks` rejects missing,
+expired, reused, or mismatched previews.
+
+The ROS workspace must be rebuilt after pulling a bridge update:
+
+```bash
+cd ~/amr-navigation-vision-diagnostics
+source /opt/ros/jazzy/setup.bash
+colcon build --symlink-install
+```
+
 ## Run PostgreSQL
 
 From project root:

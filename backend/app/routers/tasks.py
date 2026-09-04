@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -23,13 +25,27 @@ from ..models import (
     TaskHistoryEntry,
     TaskEstimate,
     TaskPriority,
+    TaskRoutePreview,
+    TaskRoutePreviewRequest,
     TaskStatus,
+    utc_now,
 )
 from ..service import DeliveryService
 from ..auth import require_user
 from ..db_models import DeliveryTaskORM, UserORM
 from ..models import UserRole
 from ..queue_estimate_service import QueueEstimateService
+from ..map_store import map_store
+from ..route_preview import (
+    PREVIEW_LOADING_SECONDS,
+    PREVIEW_NOMINAL_SPEED_METERS_PER_SECOND,
+    PREVIEW_UNLOADING_SECONDS,
+    PREVIEW_VALIDITY_SECONDS,
+    RoutePreviewUnavailableError,
+    path_distance,
+    route_preview_coordinator,
+)
+from ..websocket_manager import robot_connection_manager
 
 router = APIRouter(
     prefix="/api/tasks",
@@ -42,6 +58,14 @@ OPERATOR_EVENTS = frozenset(
         TaskEvent.CONFIRM_RECEIVED,
     }
 )
+
+
+def authorize_priority(user: UserORM, priority: TaskPriority) -> None:
+    if user.role != UserRole.ADMIN and priority == TaskPriority.HIGH:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can create HIGH priority tasks",
+        )
 
 
 @router.get("/estimates", response_model=list[TaskEstimate])
@@ -98,6 +122,126 @@ def get_task_history(
 
 
 @router.post(
+    "/preview",
+    response_model=TaskRoutePreview,
+)
+async def preview_task_route(
+    payload: TaskRoutePreviewRequest,
+    service: DeliveryService = Depends(get_service),
+    user: UserORM = Depends(require_user),
+):
+    authorize_priority(user, payload.priority)
+    pickup = service.get_station(payload.pickup_station_id)
+    destination = service.get_station(payload.destination_station_id)
+    robot = service.get_robot("robot01")
+    snapshot = map_store.get()
+
+    if snapshot is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ROS map is unavailable",
+        )
+    if not robot.online or not robot_connection_manager.is_connected(robot.id):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Robot or ROS Bridge is offline",
+        )
+
+    def pose(x: float, y: float, yaw: float) -> dict[str, float | str]:
+        return {
+            "frame_id": snapshot.frame_id,
+            "x": float(x),
+            "y": float(y),
+            "yaw": float(yaw),
+        }
+    try:
+        result = await route_preview_coordinator.request(
+            robot.id,
+            {
+                "start": pose(robot.x, robot.y, robot.yaw),
+                "pickup": pose(pickup.x, pickup.y, pickup.yaw),
+                "destination": pose(
+                    destination.x,
+                    destination.y,
+                    destination.yaw,
+                ),
+            },
+        )
+    except TimeoutError as error:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Nav2 route preview timed out",
+        ) from error
+    except RoutePreviewUnavailableError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(error),
+        ) from error
+
+    if result.status == "unavailable":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=result.detail or "Nav2 planner is unavailable",
+        )
+    if (
+        result.status != "available"
+        or not result.frame_id
+        or not result.pickup_path
+        or not result.delivery_path
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=result.detail or "Pickup or destination is unreachable",
+        )
+    if result.frame_id.lstrip("/") != snapshot.frame_id.lstrip("/"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Nav2 preview frame does not match the active ROS map",
+        )
+    latest_snapshot = map_store.get()
+    if latest_snapshot is None or latest_snapshot.revision != snapshot.revision:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="ROS map changed during route validation; preview again",
+        )
+
+    pickup_distance = path_distance(result.pickup_path)
+    delivery_distance = path_distance(result.delivery_path)
+    pickup_eta = pickup_distance / PREVIEW_NOMINAL_SPEED_METERS_PER_SECOND
+    destination_eta = (
+        pickup_eta
+        + PREVIEW_LOADING_SECONDS
+        + delivery_distance / PREVIEW_NOMINAL_SPEED_METERS_PER_SECOND
+    )
+    generated_at = utc_now()
+    preview_id = route_preview_coordinator.issue_validation(
+        owner_id=user.id,
+        robot_id=robot.id,
+        pickup_station_id=payload.pickup_station_id,
+        destination_station_id=payload.destination_station_id,
+        priority=payload.priority,
+        map_revision=snapshot.revision,
+    )
+    return TaskRoutePreview(
+        preview_id=preview_id,
+        robot_id=robot.id,
+        status="AVAILABLE",
+        frame_id=result.frame_id,
+        map_revision=snapshot.revision,
+        pickup_path=result.pickup_path,
+        delivery_path=result.delivery_path,
+        pickup_distance_meters=pickup_distance,
+        delivery_distance_meters=delivery_distance,
+        total_distance_meters=pickup_distance + delivery_distance,
+        pickup_eta_seconds=pickup_eta,
+        destination_eta_seconds=destination_eta,
+        completion_eta_seconds=destination_eta + PREVIEW_UNLOADING_SECONDS,
+        generated_at=generated_at,
+        expires_at=generated_at + timedelta(seconds=PREVIEW_VALIDITY_SECONDS),
+    )
+
+
+@router.post(
     "",
     response_model=DeliveryTask,
     status_code=status.HTTP_201_CREATED,
@@ -108,10 +252,20 @@ def create_task(
     service: DeliveryService = Depends(get_service),
     user: UserORM = Depends(require_user),
 ):
-    if user.role != UserRole.ADMIN and payload.priority == TaskPriority.HIGH:
+    authorize_priority(user, payload.priority)
+    snapshot = map_store.get()
+    if snapshot is None or not route_preview_coordinator.consume_validation(
+        payload.preview_id,
+        owner_id=user.id,
+        robot_id="robot01",
+        pickup_station_id=payload.pickup_station_id,
+        destination_station_id=payload.destination_station_id,
+        priority=payload.priority,
+        map_revision=snapshot.revision if snapshot is not None else -1,
+    ):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can create HIGH priority tasks",
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A fresh successful route preview is required",
         )
     task = service.create_task(payload, owner_id=user.id)
 

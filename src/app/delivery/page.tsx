@@ -8,7 +8,11 @@ import { PriorityBadge } from "@/components/TaskMetadata";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useAuth } from "@/context/AuthContext";
 import { allowedPriority, taskCreationAction } from "@/lib/taskCreation";
-import { Station, TaskPriority } from "@/types";
+import {
+  formatPreviewDuration,
+  routePreviewIsFresh
+} from "@/lib/routePreview";
+import { Station, TaskPriority, TaskRoutePreview } from "@/types";
 
 const RECIPIENT_MAX_LENGTH = 100;
 const NOTE_MAX_LENGTH = 500;
@@ -18,7 +22,8 @@ export default function CreateDeliveryPage() {
   const router = useRouter();
   const { user } = useAuth();
   const {
-    stations, createTask, robot, backendOnline, loading, occupancyMap, emergencyStop
+    stations, createTask, previewTaskRoute, robot, backendOnline, loading,
+    occupancyMap, emergencyStop
   } = useDeliveryApi();
   const [pickup, setPickup] = useState("");
   const [destination, setDestination] = useState("");
@@ -29,7 +34,9 @@ export default function CreateDeliveryPage() {
   const [createdTaskId, setCreatedTaskId] = useState<string>();
   const [isError, setIsError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [routePreview, setRoutePreview] = useState<TaskRoutePreview>();
   const [selectionMode, setSelectionMode] = useState<StationSelectionMode>("pickup");
 
   useEffect(() => {
@@ -42,8 +49,22 @@ export default function CreateDeliveryPage() {
     if (user?.role !== "ADMIN") setPriority("NORMAL");
   }, [user?.role]);
 
+  useEffect(() => {
+    if (
+      routePreview
+      && occupancyMap
+      && routePreview.mapRevision !== occupancyMap.revision
+    ) {
+      setRoutePreview(undefined);
+      setReviewing(false);
+      setIsError(true);
+      setMessage("The ROS map changed. Run route validation again.");
+    }
+  }, [occupancyMap, routePreview]);
+
   const valid = Boolean(
     pickup && destination && pickup !== destination && backendOnline
+    && occupancyMap
     && !emergencyStop?.latched
     && recipientName.length <= RECIPIENT_MAX_LENGTH
     && deliveryNote.length <= NOTE_MAX_LENGTH
@@ -59,6 +80,7 @@ export default function CreateDeliveryPage() {
 
   function invalidateReview() {
     setReviewing(false);
+    setRoutePreview(undefined);
     setCreatedTaskId(undefined);
     setMessage("");
   }
@@ -80,7 +102,11 @@ export default function CreateDeliveryPage() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const action = taskCreationAction(valid, reviewing, submitting);
+    const action = taskCreationAction(
+      valid,
+      reviewing,
+      submitting || previewing
+    );
     if (action === "invalid") {
       setIsError(true);
       setMessage(backendOnline
@@ -89,9 +115,34 @@ export default function CreateDeliveryPage() {
       return;
     }
     if (action === "review") {
-      setReviewing(true);
+      setPreviewing(true);
       setIsError(false);
-      setMessage("Review the request summary, then confirm to create the task.");
+      setMessage("Asking Nav2 to validate both route segments...");
+      try {
+        const preview = await previewTaskRoute({
+          pickupStationId: pickup,
+          destinationStationId: destination,
+          priority: allowedPriority(user?.role, priority)
+        });
+        setRoutePreview(preview);
+        setReviewing(true);
+        setMessage("Nav2 validated both routes. Review the summary, then confirm.");
+      } catch (err) {
+        setRoutePreview(undefined);
+        setReviewing(false);
+        setIsError(true);
+        setMessage(err instanceof Error ? err.message : "Unable to validate route.");
+      } finally {
+        setPreviewing(false);
+      }
+      return;
+    }
+
+    if (!routePreview || !routePreviewIsFresh(routePreview.expiresAt)) {
+      setRoutePreview(undefined);
+      setReviewing(false);
+      setIsError(true);
+      setMessage("The route preview expired. Run Review Delivery Request again.");
       return;
     }
 
@@ -104,7 +155,8 @@ export default function CreateDeliveryPage() {
         destinationStationId: destination,
         priority: allowedPriority(user?.role, priority),
         recipientName,
-        deliveryNote
+        deliveryNote,
+        previewId: routePreview.previewId
       });
       setCreatedTaskId(created.id);
       setReviewing(false);
@@ -114,8 +166,12 @@ export default function CreateDeliveryPage() {
           : "The task was added to the priority queue."
       }`);
     } catch (err) {
+      setRoutePreview(undefined);
+      setReviewing(false);
       setIsError(true);
-      setMessage(err instanceof Error ? err.message : "Unable to create delivery task.");
+      setMessage(`${
+        err instanceof Error ? err.message : "Unable to create delivery task."
+      } Run route validation again before retrying.`);
     } finally {
       setSubmitting(false);
     }
@@ -156,13 +212,18 @@ export default function CreateDeliveryPage() {
         </div>
         {!backendOnline && !loading && <Notice tone="error">FastAPI is offline. Station controls are disabled until it reconnects.</Notice>}
         {emergencyStop?.latched && <Notice tone="error">New motion is disabled while Emergency Stop is latched.</Notice>}
-        {!occupancyMap && backendOnline && <Notice tone="warning">The ROS map is unavailable. Use the station dropdowns below.</Notice>}
+        {!occupancyMap && backendOnline && (
+          <Notice tone="warning">
+            The ROS map is unavailable. Nav2 route validation and task creation are disabled.
+          </Notice>
+        )}
         <RobotMap
           interactive={backendOnline && stations.length > 0}
           selectedPickupStationId={pickup}
           selectedDestinationStationId={destination}
           selectionMode={selectionMode}
           onStationSelect={selectStation}
+          routePreview={routePreview}
         />
       </section>
 
@@ -233,8 +294,8 @@ export default function CreateDeliveryPage() {
 
             {pickup && destination && pickup === destination && <Notice tone="error">Pickup and destination cannot be the same station.</Notice>}
 
-            <button type="submit" disabled={!valid || submitting} className="min-h-11 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">
-              {submitting ? "Creating task..." : reviewing ? "Confirm & Create Delivery" : "Review Delivery Request"}
+            <button type="submit" disabled={!valid || submitting || previewing} className="min-h-11 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">
+              {submitting ? "Creating task..." : previewing ? "Validating route with Nav2..." : reviewing ? "Confirm & Create Delivery" : "Review Delivery Request"}
             </button>
 
             <div aria-live="polite">
@@ -259,7 +320,7 @@ export default function CreateDeliveryPage() {
         </form>
 
         <aside className={`rounded-2xl border bg-white p-5 shadow-sm md:p-7 ${reviewing ? "border-blue-300 ring-2 ring-blue-100" : "border-slate-200"}`}>
-          <h2 className="text-lg font-semibold text-slate-900">{reviewing ? "Review Summary" : "Task Preview"}</h2>
+          <h2 className="text-lg font-semibold text-slate-900">{reviewing ? "Validated Route & Review" : "Task Preview"}</h2>
           <p className="mt-1 text-sm text-slate-500">{reviewing
             ? "Confirm that these details are correct before creating the task."
             : "Complete the request to prepare a review summary."}</p>
@@ -269,6 +330,15 @@ export default function CreateDeliveryPage() {
             <PreviewCard title="Destination" value={destinationStation?.name ?? "-"} />
             <PreviewCard title="Recipient" value={recipientName.trim() || "Not specified"} />
             <PreviewCard title="Delivery note" value={deliveryNote.trim() || "No note"} preserveWhitespace />
+            {routePreview && (
+              <div className="grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                <p className="font-bold">Nav2 reachable · both route segments</p>
+                <PreviewMetric label="Robot → pickup" distance={routePreview.pickupDistanceMeters} seconds={routePreview.pickupEtaSeconds} />
+                <PreviewMetric label="Pickup → destination" distance={routePreview.deliveryDistanceMeters} seconds={routePreview.destinationEtaSeconds - routePreview.pickupEtaSeconds - 10} />
+                <PreviewMetric label="Total route" distance={routePreview.totalDistanceMeters} seconds={routePreview.completionEtaSeconds} />
+                <p className="text-xs text-emerald-700">Completion estimate includes loading and unloading allowances.</p>
+              </div>
+            )}
             <div className="rounded-xl border border-slate-200 p-4">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Priority</p>
               <PriorityBadge priority={priority} />
@@ -296,6 +366,17 @@ function PreviewCard({ title, value, preserveWhitespace = false }: { title: stri
     <div className="rounded-xl border border-slate-200 p-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</p>
       <p className={`mt-1 break-words font-semibold text-slate-900 ${preserveWhitespace ? "whitespace-pre-wrap" : ""}`}>{value}</p>
+    </div>
+  );
+}
+
+function PreviewMetric({ label, distance, seconds }: {
+  label: string; distance: number; seconds: number;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span>{label}</span>
+      <span className="font-semibold">{distance.toFixed(1)} m · {formatPreviewDuration(seconds)}</span>
     </div>
   );
 }
