@@ -53,17 +53,22 @@ app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 
-def robot_websocket_connect():
+def robot_auth_headers() -> dict[str, str]:
     settings = security_settings()
-    headers = {}
     if settings.robot_ws_auth_required:
         assert settings.robot_ws_token is not None
-        headers["authorization"] = (
-            f"Bearer {settings.robot_ws_token}"
-        )
+        return {
+            "authorization": (
+                f"Bearer {settings.robot_ws_token}"
+            )
+        }
+    return {}
+
+
+def robot_websocket_connect():
     return client.websocket_connect(
         "/ws/robots/robot01",
-        headers=headers,
+        headers=robot_auth_headers(),
     )
 
 
@@ -72,6 +77,7 @@ class StubWebSocket:
         self.messages = iter(messages)
         self.sent: list[dict] = []
         self.accepted = False
+        self.headers = robot_auth_headers()
 
     async def accept(self) -> None:
         self.accepted = True
