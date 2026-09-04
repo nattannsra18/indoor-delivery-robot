@@ -41,3 +41,8 @@ test("service logs use stable tmux window metadata", () => {
   assert.match(source, /find_service_window/);
   assert.match(source, /capture-pane[^\n]+window_target/);
 });
+
+test("ROS setup files are sourced without nounset failures", () => {
+  const sourceRos = source.match(/source_ros\(\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.match(sourceRos, /set \+u[\s\S]*setup\.bash[\s\S]*set -u/);
+});

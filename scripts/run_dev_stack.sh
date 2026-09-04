@@ -46,10 +46,14 @@ run_frontend() {
 }
 
 source_ros() {
+  # ROS environment hooks may read optional variables before defining them.
+  # Temporarily disable nounset while sourcing the generated setup files.
+  set +u
   # shellcheck disable=SC1091
   source /opt/ros/jazzy/setup.bash
   # shellcheck disable=SC1091
   source "${ROS_WORKSPACE}/install/setup.bash"
+  set -u
 }
 
 run_gazebo() {
