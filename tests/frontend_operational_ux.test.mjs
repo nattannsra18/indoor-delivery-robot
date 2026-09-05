@@ -12,7 +12,10 @@ test("admin account approval is available only through the protected user route"
   assert.match(page, /approveAccount/);
   assert.match(api, /\/api\/auth\/pending-accounts/);
   assert.match(api, /\/api\/auth\/accounts\/\$\{userId\}\/approve/);
-  assert.match(roles, /ADMIN_ONLY_ROUTES = \["\/stations", "\/users", "\/audit"\]/);
+  assert.match(
+    roles,
+    /ADMIN_ONLY_ROUTES = \["\/maps", "\/stations", "\/users", "\/audit"\]/
+  );
 });
 
 test("signup and reset consume one backend password policy", () => {

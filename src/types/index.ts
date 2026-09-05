@@ -73,6 +73,59 @@ export interface MapMetadata {
   updatedAt: string;
 }
 
+export interface RobotMapRecord {
+  id: string;
+  name: string;
+  yamlFile: string;
+  imageFile?: string;
+  resolution?: number;
+  sizeBytes: number;
+  modifiedAt?: string;
+  available: boolean;
+  active: boolean;
+  issue?: string;
+  building?: string;
+  floor?: string;
+  areaDescription?: string;
+}
+
+export interface RobotMapCatalog {
+  robotId: string;
+  source: "ROS_FILESYSTEM";
+  activeMapId?: string;
+  generatedAt: string;
+  receivedAt: string;
+  robotOnline: boolean;
+  maps: RobotMapRecord[];
+}
+
+export type MapSwitchStatus = "PENDING" | "SUCCEEDED" | "FAILED";
+
+export interface MapSwitchOperation {
+  commandId: string;
+  robotId: string;
+  mapId: string;
+  status: MapSwitchStatus;
+  detail?: string;
+  requestedAt: string;
+  completedAt?: string;
+  deadline: string;
+}
+
+export type MapCatalogAction = "UPDATE_METADATA" | "RENAME" | "DELETE";
+
+export interface MapCatalogOperation extends MapSwitchOperation {
+  action: MapCatalogAction;
+  resultMapId?: string;
+}
+
+export interface RobotMapDetails {
+  name: string;
+  building?: string;
+  floor?: string;
+  areaDescription?: string;
+}
+
 export interface Robot {
   id: string;
   name: string;

@@ -4,6 +4,10 @@ import type {
   DeliveryTaskPage,
   EmergencyStop,
   MapMetadata,
+  MapSwitchOperation,
+  MapCatalogOperation,
+  RobotMapDetails,
+  RobotMapCatalog,
   OccupancyGridMap,
   Robot,
   Station,
@@ -380,6 +384,163 @@ export async function updateMapMetadata(
       area_description: metadata.areaDescription ?? null,
     }),
   }));
+}
+
+type ApiRobotMapCatalog = {
+  robot_id: string;
+  source: "ROS_FILESYSTEM";
+  active_map_id: string | null;
+  generated_at: string;
+  received_at: string;
+  robot_online: boolean;
+  maps: Array<{
+    id: string;
+    name: string;
+    yaml_file: string;
+    image_file: string | null;
+    resolution: number | null;
+    size_bytes: number;
+    modified_at: string | null;
+    available: boolean;
+    active: boolean;
+    issue: string | null;
+    building: string | null;
+    floor: string | null;
+    area_description: string | null;
+  }>;
+};
+
+export async function getMapCatalog(robotId = "robot01"): Promise<RobotMapCatalog> {
+  const catalog = await request<ApiRobotMapCatalog>(`/api/map/catalog?robot_id=${encodeURIComponent(robotId)}`);
+  return {
+    robotId: catalog.robot_id,
+    source: catalog.source,
+    activeMapId: catalog.active_map_id ?? undefined,
+    generatedAt: catalog.generated_at,
+    receivedAt: catalog.received_at,
+    robotOnline: catalog.robot_online,
+    maps: catalog.maps.map((map) => ({
+      id: map.id,
+      name: map.name,
+      yamlFile: map.yaml_file,
+      imageFile: map.image_file ?? undefined,
+      resolution: map.resolution ?? undefined,
+      sizeBytes: map.size_bytes,
+      modifiedAt: map.modified_at ?? undefined,
+      available: map.available,
+      active: map.active,
+      issue: map.issue ?? undefined,
+      building: map.building ?? undefined,
+      floor: map.floor ?? undefined,
+      areaDescription: map.area_description ?? undefined,
+    })),
+  };
+}
+
+export async function refreshMapCatalog(robotId = "robot01"): Promise<void> {
+  await request(`/api/map/catalog/refresh?robot_id=${encodeURIComponent(robotId)}`, { method: "POST" });
+}
+
+type ApiMapSwitchOperation = {
+  command_id: string;
+  robot_id: string;
+  map_id: string;
+  status: "PENDING" | "SUCCEEDED" | "FAILED";
+  detail: string | null;
+  requested_at: string;
+  completed_at: string | null;
+  deadline: string;
+};
+
+function toMapSwitchOperation(value: ApiMapSwitchOperation): MapSwitchOperation {
+  return {
+    commandId: value.command_id,
+    robotId: value.robot_id,
+    mapId: value.map_id,
+    status: value.status,
+    detail: value.detail ?? undefined,
+    requestedAt: value.requested_at,
+    completedAt: value.completed_at ?? undefined,
+    deadline: value.deadline,
+  };
+}
+
+export async function activateRobotMap(
+  mapId: string,
+  robotId = "robot01"
+): Promise<MapSwitchOperation> {
+  const operation = await request<ApiMapSwitchOperation>(
+    `/api/map/catalog/${encodeURIComponent(mapId)}/activate?robot_id=${encodeURIComponent(robotId)}`,
+    { method: "POST" }
+  );
+  return toMapSwitchOperation(operation);
+}
+
+export async function getMapOperation(
+  commandId: string
+): Promise<MapSwitchOperation> {
+  return toMapSwitchOperation(await request<ApiMapSwitchOperation>(
+    `/api/map/operations/${encodeURIComponent(commandId)}`
+  ));
+}
+
+type ApiMapCatalogOperation = ApiMapSwitchOperation & {
+  action: "UPDATE_METADATA" | "RENAME" | "DELETE";
+  result_map_id: string | null;
+};
+
+function toMapCatalogOperation(value: ApiMapCatalogOperation): MapCatalogOperation {
+  return {
+    ...toMapSwitchOperation(value),
+    action: value.action,
+    resultMapId: value.result_map_id ?? undefined,
+  };
+}
+
+export async function getMapCatalogOperation(commandId: string): Promise<MapCatalogOperation> {
+  return toMapCatalogOperation(await request<ApiMapCatalogOperation>(
+    `/api/map/catalog-operations/${encodeURIComponent(commandId)}`
+  ));
+}
+
+export async function updateRobotMapDetails(
+  mapId: string,
+  details: RobotMapDetails,
+  robotId = "robot01"
+): Promise<MapCatalogOperation> {
+  return toMapCatalogOperation(await request<ApiMapCatalogOperation>(
+    `/api/map/catalog/${encodeURIComponent(mapId)}/metadata?robot_id=${encodeURIComponent(robotId)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        name: details.name,
+        building: details.building ?? null,
+        floor: details.floor ?? null,
+        area_description: details.areaDescription ?? null,
+      }),
+    }
+  ));
+}
+
+export async function renameRobotMap(
+  mapId: string,
+  newMapId: string,
+  robotId = "robot01"
+): Promise<MapCatalogOperation> {
+  return toMapCatalogOperation(await request<ApiMapCatalogOperation>(
+    `/api/map/catalog/${encodeURIComponent(mapId)}/rename?robot_id=${encodeURIComponent(robotId)}`,
+    { method: "POST", body: JSON.stringify({ new_map_id: newMapId }) }
+  ));
+}
+
+export async function deleteRobotMap(
+  mapId: string,
+  robotId = "robot01"
+): Promise<MapCatalogOperation> {
+  return toMapCatalogOperation(await request<ApiMapCatalogOperation>(
+    `/api/map/catalog/${encodeURIComponent(mapId)}?robot_id=${encodeURIComponent(robotId)}`,
+    { method: "DELETE" }
+  ));
 }
 export async function getTasks(): Promise<DeliveryTask[]> {
   const tasks = await request<ApiDeliveryTask[]>("/api/tasks");

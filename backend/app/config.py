@@ -19,6 +19,7 @@ class SecuritySettings:
     robot_ws_token: str | None
     robot_ws_auth_required: bool
     emergency_command_timeout_seconds: int
+    map_command_timeout_seconds: int
     password_min_length: int
 
 
@@ -36,6 +37,9 @@ def security_settings() -> SecuritySettings:
         robot_ws_auth_required=required,
         emergency_command_timeout_seconds=max(
             1, int(os.getenv("EMERGENCY_COMMAND_TIMEOUT_SECONDS", "10"))
+        ),
+        map_command_timeout_seconds=max(
+            2, int(os.getenv("MAP_COMMAND_TIMEOUT_SECONDS", "10"))
         ),
         password_min_length=max(8, int(os.getenv("PASSWORD_MIN_LENGTH", "8"))),
     )

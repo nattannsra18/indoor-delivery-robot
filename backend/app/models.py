@@ -570,6 +570,122 @@ class MapSnapshot(OccupancyGridPayload):
     received_at: datetime
 
 
+class RobotMapRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_.-]+$")
+    name: str = Field(min_length=1, max_length=160)
+    yaml_file: str = Field(min_length=1, max_length=255)
+    image_file: Optional[str] = Field(default=None, max_length=255)
+    resolution: Optional[float] = Field(default=None, gt=0.0, le=10.0)
+    size_bytes: int = Field(default=0, ge=0)
+    modified_at: Optional[datetime] = None
+    available: bool
+    active: bool
+    issue: Optional[str] = Field(default=None, max_length=300)
+    building: Optional[str] = Field(default=None, max_length=120)
+    floor: Optional[str] = Field(default=None, max_length=80)
+    area_description: Optional[str] = Field(default=None, max_length=240)
+
+
+class RobotMapCatalogPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    robot_id: str = Field(min_length=1, max_length=100)
+    source: Literal["ROS_FILESYSTEM"] = "ROS_FILESYSTEM"
+    active_map_id: Optional[str] = Field(default=None, max_length=120)
+    generated_at: datetime
+    maps: list[RobotMapRecord] = Field(max_length=500)
+
+
+class RobotMapCatalogMessage(RobotMapCatalogPayload):
+    type: Literal["map_catalog"]
+
+
+class RobotMapCatalog(RobotMapCatalogPayload):
+    received_at: datetime
+    robot_online: bool
+
+
+class MapSwitchStatus(str, Enum):
+    PENDING = "PENDING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+
+class MapSwitchOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: str = Field(min_length=1, max_length=100)
+    robot_id: str = Field(min_length=1, max_length=100)
+    map_id: str = Field(min_length=1, max_length=120)
+    status: MapSwitchStatus
+    detail: Optional[str] = Field(default=None, max_length=300)
+    requested_at: datetime
+    completed_at: Optional[datetime] = None
+    deadline: datetime
+
+
+class RobotMapSwitchResultMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["map_switch_result"]
+    command_id: str = Field(min_length=1, max_length=100)
+    robot_id: str = Field(min_length=1, max_length=100)
+    map_id: str = Field(min_length=1, max_length=120)
+    accepted: bool
+    detail: Optional[str] = Field(default=None, max_length=300)
+
+
+class RobotMapDetailsUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    building: Optional[str] = Field(default=None, max_length=120)
+    floor: Optional[str] = Field(default=None, max_length=80)
+    area_description: Optional[str] = Field(default=None, max_length=240)
+
+
+class RobotMapRenameRequest(BaseModel):
+    new_map_id: str = Field(
+        min_length=1,
+        max_length=120,
+        pattern=r"^[A-Za-z0-9_.-]+$",
+    )
+
+
+class MapCatalogAction(str, Enum):
+    UPDATE_METADATA = "UPDATE_METADATA"
+    RENAME = "RENAME"
+    DELETE = "DELETE"
+
+
+class MapCatalogOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: str = Field(min_length=1, max_length=100)
+    robot_id: str = Field(min_length=1, max_length=100)
+    map_id: str = Field(min_length=1, max_length=120)
+    action: MapCatalogAction
+    status: MapSwitchStatus
+    result_map_id: Optional[str] = Field(default=None, max_length=120)
+    detail: Optional[str] = Field(default=None, max_length=300)
+    requested_at: datetime
+    completed_at: Optional[datetime] = None
+    deadline: datetime
+
+
+class RobotMapCatalogOperationResultMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["map_catalog_operation_result"]
+    command_id: str = Field(min_length=1, max_length=100)
+    robot_id: str = Field(min_length=1, max_length=100)
+    map_id: str = Field(min_length=1, max_length=120)
+    action: MapCatalogAction
+    accepted: bool
+    result_map_id: Optional[str] = Field(default=None, max_length=120)
+    detail: Optional[str] = Field(default=None, max_length=300)
+
+
 class DeliveryTask(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -319,6 +319,9 @@ class DeliveryService:
     def active_task(self) -> DeliveryTaskORM | None:
         return self.repo.active_task(ACTIVE_STATUSES)
 
+    def active_task_for_robot(self, robot_id: str) -> DeliveryTaskORM | None:
+        return self.repo.active_task_for_robot(robot_id, ACTIVE_STATUSES)
+
     def build_navigation_command(
         self,
         task: DeliveryTaskORM,

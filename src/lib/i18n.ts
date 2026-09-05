@@ -164,14 +164,40 @@ const navigationLabels: Record<Locale, Record<string, string>> = {
   en: {
     "/delivery": "Create Delivery",
     "/stations": "Station Management",
+    "/maps": "Map Management",
     "/users": "Account Requests",
   },
   th: {
     "/delivery": "สร้างงานจัดส่ง",
     "/stations": "จัดการสถานี",
+    "/maps": "จัดการแผนที่",
     "/users": "คำขอสร้างบัญชี",
   },
 };
+
+export const mapManagementText = {
+  en: {
+    title: "Map Management", description: "Maps reported directly by the Robot Agent and ROS filesystem.", refresh: "Refresh from robot", refreshing: "Requesting…", activeMap: "Active map", robotSync: "Robot sync", connected: "Connected", offline: "Offline", source: "Source of truth", rosFilesystem: "Robot / ROS filesystem", readyMaps: "Ready maps", livePreview: "Active map preview", livePreviewHelp: "The occupancy grid currently published on the ROS /map topic.", inventory: "Map inventory", inventoryHelp: "Availability is validated from each YAML file and its referenced image on the robot.", active: "Active", ready: "Ready", unavailable: "Unavailable", resolution: "Resolution", files: "Files", size: "Size", updated: "Robot file updated", received: "Catalog received", empty: "The Robot Agent did not report any map files.", loadFailed: "Unable to load the robot map catalog.", refreshAccepted: "Refresh requested. Waiting for the Robot Agent catalog.", readOnlyPhase: "Map changes are sent to the Robot Agent and applied only after Nav2 confirms the new map.", waitingCatalog: "Waiting for the Robot Agent to report its map catalog.", noActive: "No active map reported", switchMap: "Make active", switching: "Switching…", confirmTitle: "Switch active map?", confirmBody: "Navigation must remain idle while Nav2 loads this map. The current robot position will need localization on the new map.", cancel: "Cancel", confirmSwitch: "Switch map", switchSucceeded: "Nav2 confirmed the new active map.", switchFailed: "The map could not be activated.", idleRequired: "Map switching is available only while the robot is online and idle.", closeDialog: "Close map switch confirmation",
+  },
+  th: {
+    title: "จัดการแผนที่", description: "รายการแผนที่ที่รายงานโดยตรงจาก Robot Agent และระบบไฟล์ฝั่ง ROS", refresh: "รีเฟรชจากหุ่นยนต์", refreshing: "กำลังส่งคำขอ…", activeMap: "แผนที่ที่ใช้งาน", robotSync: "การเชื่อมต่อหุ่นยนต์", connected: "เชื่อมต่อแล้ว", offline: "ออฟไลน์", source: "แหล่งข้อมูลหลัก", rosFilesystem: "ระบบไฟล์ Robot / ROS", readyMaps: "แผนที่พร้อมใช้", livePreview: "ตัวอย่างแผนที่ที่ใช้งาน", livePreviewHelp: "Occupancy grid ที่กำลังเผยแพร่บน ROS topic /map", inventory: "รายการแผนที่", inventoryHelp: "ตรวจสอบความพร้อมจากไฟล์ YAML และไฟล์ภาพที่อ้างอิงอยู่บนหุ่นยนต์", active: "กำลังใช้งาน", ready: "พร้อมใช้", unavailable: "ไม่พร้อมใช้", resolution: "ความละเอียด", files: "ไฟล์", size: "ขนาด", updated: "แก้ไขไฟล์บนหุ่นยนต์", received: "ได้รับรายการเมื่อ", empty: "Robot Agent ไม่ได้รายงานไฟล์แผนที่", loadFailed: "ไม่สามารถโหลดรายการแผนที่จากหุ่นยนต์ได้", refreshAccepted: "ส่งคำขอรีเฟรชแล้ว กำลังรอรายการจาก Robot Agent", readOnlyPhase: "การเปลี่ยนแผนที่จะส่งไปยัง Robot Agent และมีผลเมื่อ Nav2 ยืนยันว่าโหลดแผนที่ใหม่สำเร็จแล้วเท่านั้น", waitingCatalog: "กำลังรอ Robot Agent รายงานรายการแผนที่", noActive: "ยังไม่มีแผนที่ที่ใช้งาน", switchMap: "ตั้งเป็นแผนที่หลัก", switching: "กำลังเปลี่ยน…", confirmTitle: "เปลี่ยนแผนที่ที่ใช้งานหรือไม่", confirmBody: "หุ่นยนต์ต้องหยุดนิ่งระหว่างที่ Nav2 โหลดแผนที่ และต้องระบุตำแหน่งหุ่นยนต์ใหม่บนแผนที่นี้", cancel: "ยกเลิก", confirmSwitch: "เปลี่ยนแผนที่", switchSucceeded: "Nav2 ยืนยันแผนที่ที่ใช้งานใหม่แล้ว", switchFailed: "ไม่สามารถเปิดใช้งานแผนที่ได้", idleRequired: "เปลี่ยนแผนที่ได้เมื่อหุ่นยนต์ออนไลน์และไม่มีภารกิจเท่านั้น", closeDialog: "ปิดหน้าต่างยืนยันการเปลี่ยนแผนที่",
+  },
+} as const;
+
+export const mapManagementActionsText = {
+  en: {
+    name: "Map name",
+    cancel: "Cancel",
+    sourcePolicy: "Map files remain on the robot. Changes are validated and acknowledged by the Robot Agent.",
+    sync: "Sync map list", syncing: "Syncing…", syncSucceeded: "Map list synced with the Robot Agent.", building: "Building", floor: "Floor", area: "Area details", noDetails: "Location details not configured", editDetails: "Edit details", renameMap: "Rename ID", deleteMap: "Delete", save: "Save details", metadataTitle: "Edit map details", renameTitle: "Rename map ID", deleteTitle: "Delete map?", deleteBody: "This removes the map YAML and its metadata from the robot. An unshared image file is removed too. This cannot be undone.", mapId: "New map ID", mapIdHelp: "Use letters, numbers, dots, underscores or hyphens.", metadataSucceeded: "Map details saved on the robot.", renameSucceeded: "Map renamed on the robot.", deleteSucceeded: "Map deleted from the robot.", operationFailed: "The Robot Agent could not apply this change.", activeProtected: "Active maps cannot be renamed or deleted.", closeDialog: "Close map management dialog",
+  },
+  th: {
+    name: "ชื่อแผนที่",
+    cancel: "ยกเลิก",
+    sourcePolicy: "ไฟล์แผนที่ยังอยู่บนหุ่นยนต์ การเปลี่ยนแปลงจะผ่านการตรวจสอบและยืนยันโดย Robot Agent",
+    sync: "ซิงก์รายการแผนที่", syncing: "กำลังซิงก์…", syncSucceeded: "ซิงก์รายการแผนที่กับ Robot Agent แล้ว", building: "อาคาร", floor: "ชั้น", area: "รายละเอียดพื้นที่", noDetails: "ยังไม่ได้กำหนดรายละเอียดสถานที่", editDetails: "แก้ไขรายละเอียด", renameMap: "เปลี่ยน Map ID", deleteMap: "ลบ", save: "บันทึกรายละเอียด", metadataTitle: "แก้ไขรายละเอียดแผนที่", renameTitle: "เปลี่ยน Map ID", deleteTitle: "ลบแผนที่หรือไม่", deleteBody: "ระบบจะลบ YAML และ metadata ออกจากหุ่นยนต์ รวมถึงไฟล์ภาพที่ไม่มีแผนที่อื่นใช้งาน การดำเนินการนี้ย้อนกลับไม่ได้", mapId: "Map ID ใหม่", mapIdHelp: "ใช้ตัวอักษร ตัวเลข จุด ขีดล่าง หรือขีดกลาง", metadataSucceeded: "บันทึกรายละเอียดบนหุ่นยนต์แล้ว", renameSucceeded: "เปลี่ยนชื่อแผนที่บนหุ่นยนต์แล้ว", deleteSucceeded: "ลบแผนที่ออกจากหุ่นยนต์แล้ว", operationFailed: "Robot Agent ไม่สามารถดำเนินการเปลี่ยนแปลงนี้ได้", activeProtected: "ไม่สามารถเปลี่ยนชื่อหรือลบแผนที่ที่กำลังใช้งาน", closeDialog: "ปิดหน้าต่างจัดการแผนที่",
+  },
+} as const;
 
 export function navigationLabel(pathname: string, fallback: string, locale: Locale) {
   if (pathname === "/tasks") {
@@ -196,8 +222,8 @@ const auditActionLabels: Record<Locale, Record<string, string>> = {
   th: { "auth.login":"เข้าสู่ระบบ","auth.logout":"ออกจากระบบ","task.created":"สร้างงานแล้ว","task.dispatched":"มอบหมายงานแล้ว","task.cancel":"ยกเลิกงานแล้ว","task.retry":"ลองงานใหม่แล้ว","task.confirm_loaded":"ยืนยันการโหลดแล้ว","task.confirm_received":"ยืนยันการรับแล้ว","task.arrived_pickup":"ถึงจุดรับแล้ว","task.arrived_destination":"ถึงจุดหมายแล้ว","task.navigation_failed":"การนำทางล้มเหลว","alert.created":"สร้างการแจ้งเตือนแล้ว","alert.reopened":"เปิดการแจ้งเตือนใหม่แล้ว","alert.acknowledged":"รับทราบการแจ้งเตือนแล้ว","alert.resolved":"แก้ไขการแจ้งเตือนแล้ว","emergency.activate_requested":"ขอหยุดฉุกเฉินแล้ว","emergency.reset_requested":"ขอรีเซ็ตฉุกเฉินแล้ว","emergency.activate_succeeded":"เปิดใช้หยุดฉุกเฉินแล้ว","emergency.reset_succeeded":"รีเซ็ตหยุดฉุกเฉินแล้ว","emergency.command_failed":"คำสั่งฉุกเฉินล้มเหลว","robot.connected":"หุ่นยนต์เชื่อมต่อแล้ว","robot.disconnected":"หุ่นยนต์ตัดการเชื่อมต่อแล้ว","robot.offline":"หุ่นยนต์ออฟไลน์","robot.online":"หุ่นยนต์ออนไลน์","robot.recovered":"กู้คืนหุ่นยนต์แล้ว","station.created":"สร้างสถานีแล้ว","station.deleted":"ลบสถานีแล้ว" },
 };
 const additionalAuditActionLabels: Record<Locale, Record<string, string>> = {
-  en: { "auth.signup": "Account requested", "auth.account_approved": "Account approved", "auth.password_reset": "Password reset", "station.updated": "Station updated", "map.metadata_updated": "Map information updated" },
-  th: { "auth.signup": "ขอสร้างบัญชี", "auth.account_approved": "อนุมัติบัญชี", "auth.password_reset": "รีเซ็ตรหัสผ่าน", "station.updated": "แก้ไขสถานีแล้ว", "map.metadata_updated": "แก้ไขข้อมูลแผนที่แล้ว" },
+  en: { "auth.signup": "Account requested", "auth.account_approved": "Account approved", "auth.password_reset": "Password reset", "station.updated": "Station updated", "map.metadata_updated": "Map information updated", "map.switch_requested": "Map switch requested", "map.switch_succeeded": "Map switch completed", "map.switch_failed": "Map switch failed", "map.update_metadata_requested": "Map details update requested", "map.update_metadata_succeeded": "Map details updated", "map.update_metadata_failed": "Map details update failed", "map.rename_requested": "Map rename requested", "map.rename_succeeded": "Map renamed", "map.rename_failed": "Map rename failed", "map.delete_requested": "Map deletion requested", "map.delete_succeeded": "Map deleted", "map.delete_failed": "Map deletion failed" },
+  th: { "auth.signup": "ขอสร้างบัญชี", "auth.account_approved": "อนุมัติบัญชี", "auth.password_reset": "รีเซ็ตรหัสผ่าน", "station.updated": "แก้ไขสถานีแล้ว", "map.metadata_updated": "แก้ไขข้อมูลแผนที่แล้ว", "map.switch_requested": "ส่งคำขอเปลี่ยนแผนที่", "map.switch_succeeded": "เปลี่ยนแผนที่สำเร็จ", "map.switch_failed": "เปลี่ยนแผนที่ไม่สำเร็จ", "map.update_metadata_requested": "ส่งคำขอแก้ไขรายละเอียดแผนที่", "map.update_metadata_succeeded": "แก้ไขรายละเอียดแผนที่แล้ว", "map.update_metadata_failed": "แก้ไขรายละเอียดแผนที่ไม่สำเร็จ", "map.rename_requested": "ส่งคำขอเปลี่ยน Map ID", "map.rename_succeeded": "เปลี่ยน Map ID แล้ว", "map.rename_failed": "เปลี่ยน Map ID ไม่สำเร็จ", "map.delete_requested": "ส่งคำขอลบแผนที่", "map.delete_succeeded": "ลบแผนที่แล้ว", "map.delete_failed": "ลบแผนที่ไม่สำเร็จ" },
 };
 export const supportedAuditActions = Object.freeze([
   ...Object.keys(auditActionLabels.en),
