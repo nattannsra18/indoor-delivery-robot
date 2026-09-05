@@ -27,11 +27,15 @@ from app.db_models import (
 )
 from app.auth import hash_password
 from app.config import security_settings
-from app.models import OccupancyGridPayload, TaskPriority, UserRole
+from app.models import OccupancyGridPayload, TaskPriority, TaskStatus, UserRole, utc_now
 from app.main import app
 from app.routers.robot_ws import robot_websocket
 from app.seed import seed_database
 from app.map_store import map_store
+from app.map_catalog_store import map_catalog_store
+from app.map_switch_store import map_switch_store
+from app.map_catalog_operation_store import map_catalog_operation_store
+from app.mapping_store import mapping_store
 from app.navigation_feedback_store import (
     navigation_feedback_store,
 )
@@ -161,6 +165,10 @@ def setup_function():
     navigation_path_store.clear_all()
     navigation_feedback_store.clear()
     map_store.clear()
+    map_catalog_store.clear()
+    map_switch_store.clear()
+    map_catalog_operation_store.clear()
+    mapping_store.clear()
     with TestingSessionLocal() as db:
         db.execute(delete(SessionORM))
         db.execute(delete(AuditRecordORM))
@@ -809,6 +817,7 @@ def test_robot_websocket_persists_telemetry():
                     "y": 1.8,
                     "yaw": 0.75,
                     "battery": 76,
+                    "battery_source": "SENSOR",
                     "frame_id": "map",
                     "timestamp": (
                         "2026-08-31T13:45:00+07:00"
@@ -823,6 +832,7 @@ def test_robot_websocket_persists_telemetry():
         assert response["accepted"] is True
         assert response["data"]["x"] == 2.8
         assert response["data"]["battery"] == 76
+        assert response["data"]["battery_source"] == "SENSOR"
 
     robot = client.get(
         "/api/robots/robot01"
@@ -833,6 +843,8 @@ def test_robot_websocket_persists_telemetry():
     assert robot.json()["y"] == 1.8
     assert robot.json()["yaw"] == 0.75
     assert robot.json()["battery"] == 76
+    assert robot.json()["battery_source"] == "SENSOR"
+    assert robot.json()["last_seen"] != "Just now"
 
 
 def test_robot_websocket_rejects_invalid_telemetry():
@@ -1197,6 +1209,294 @@ def test_robot_map_updates_api_snapshot():
     assert snapshot["revision"] == 1
 
     map_store.clear()
+
+
+def test_robot_map_catalog_is_exposed_to_admin():
+    missing = client.get("/api/map/catalog")
+    assert missing.status_code == 503
+
+    with robot_websocket_connect() as websocket:
+        websocket.receive_json()
+        websocket.send_json({
+            "type": "map_catalog",
+            "robot_id": "robot01",
+            "source": "ROS_FILESYSTEM",
+            "active_map_id": "warehouse_map",
+            "generated_at": "2026-09-05T10:00:00+00:00",
+            "maps": [{
+                "id": "warehouse_map",
+                "name": "Warehouse Map",
+                "yaml_file": "warehouse_map.yaml",
+                "image_file": "warehouse_map.pgm",
+                "resolution": 0.05,
+                "size_bytes": 1024,
+                "modified_at": "2026-09-05T09:00:00+00:00",
+                "available": True,
+                "active": True,
+                "issue": None,
+            }],
+        })
+        receipt = websocket.receive_json()
+        assert receipt["type"] == "map_catalog_ack"
+        assert receipt["map_count"] == 1
+
+        response = client.get("/api/map/catalog")
+        assert response.status_code == 200
+        catalog = response.json()
+        assert catalog["source"] == "ROS_FILESYSTEM"
+        assert catalog["active_map_id"] == "warehouse_map"
+        assert catalog["robot_online"] is True
+        assert catalog["maps"][0]["available"] is True
+
+
+def test_admin_mapping_session_is_robot_acknowledged_and_teleop_is_scoped():
+    with robot_websocket_connect() as websocket:
+        assert websocket.receive_json()["type"] == "connection_ack"
+
+        response = client.post("/api/mapping/start", json={"robot_id": "robot01"})
+        assert response.status_code == 202
+        assert response.json()["phase"] == "STARTING"
+        command = websocket.receive_json()
+        assert command["type"] == "mapping_command"
+        assert command["action"] == "START"
+
+        websocket.send_json({
+            "type": "mapping_status",
+            "robot_id": "robot01",
+            "session_id": command["session_id"],
+            "command_id": command["command_id"],
+            "phase": "MAPPING",
+            "accepted": True,
+            "detail": "SLAM Toolbox is active",
+            "started_at": response.json()["started_at"],
+            "saved_map_id": None,
+            "map_revision": 3,
+        })
+        assert websocket.receive_json()["type"] == "mapping_status_ack"
+        assert client.get("/api/mapping/status").json()["phase"] == "MAPPING"
+
+        teleop = client.post(
+            "/api/mapping/teleop",
+            json={"linear_x": 0.16, "angular_z": 0.0},
+        )
+        assert teleop.status_code == 202
+        drive = websocket.receive_json()
+        assert drive["type"] == "mapping_teleop"
+        assert drive["session_id"] == command["session_id"]
+
+        stop = client.post("/api/mapping/stop")
+        assert stop.status_code == 202
+        assert stop.json()["phase"] == "STOPPING"
+        assert websocket.receive_json()["action"] == "STOP"
+
+
+def test_mapping_rejects_motion_outside_active_session():
+    response = client.post(
+        "/api/mapping/teleop",
+        json={"linear_x": 0.1, "angular_z": 0.0},
+    )
+    assert response.status_code == 409
+
+
+def test_mapping_start_rejects_queued_delivery():
+    with TestingSessionLocal() as db:
+        db.add(DeliveryTaskORM(
+            id="TASK-MAP-BLOCK",
+            pickup_station_id="A",
+            destination_station_id="B",
+            status=TaskStatus.QUEUED,
+            progress=0,
+            priority=TaskPriority.NORMAL,
+            created_at=utc_now(),
+        ))
+        db.commit()
+    with robot_websocket_connect() as websocket:
+        assert websocket.receive_json()["type"] == "connection_ack"
+        response = client.post("/api/mapping/start", json={"robot_id": "robot01"})
+        assert response.status_code == 409
+
+
+def test_admin_map_switch_requires_and_applies_matching_robot_ack():
+    with robot_websocket_connect() as websocket:
+        websocket.receive_json()
+        websocket.send_json({
+            "type": "map_catalog",
+            "robot_id": "robot01",
+            "source": "ROS_FILESYSTEM",
+            "active_map_id": "warehouse_map",
+            "generated_at": "2026-09-05T10:00:00+00:00",
+            "maps": [
+                {
+                    "id": map_id,
+                    "name": name,
+                    "yaml_file": f"{map_id}.yaml",
+                    "image_file": f"{map_id}.pgm",
+                    "resolution": 0.05,
+                    "size_bytes": 1024,
+                    "modified_at": "2026-09-05T09:00:00+00:00",
+                    "available": True,
+                    "active": map_id == "warehouse_map",
+                    "issue": None,
+                }
+                for map_id, name in (
+                    ("warehouse_map", "Warehouse Map"),
+                    ("second_floor", "Second Floor"),
+                )
+            ],
+        })
+        assert websocket.receive_json()["type"] == "map_catalog_ack"
+
+        response = client.post("/api/map/catalog/second_floor/activate")
+        assert response.status_code == 202
+        pending = response.json()
+        assert pending["status"] == "PENDING"
+
+        command = websocket.receive_json()
+        assert command == {
+            "type": "map_command",
+            "command": "switch_map",
+            "command_id": pending["command_id"],
+            "robot_id": "robot01",
+            "map_id": "second_floor",
+        }
+        websocket.send_json({
+            "type": "map_switch_result",
+            "command_id": command["command_id"],
+            "robot_id": "robot01",
+            "map_id": "warehouse_map",
+            "accepted": True,
+            "detail": "mismatched result",
+        })
+        mismatched = websocket.receive_json()
+        assert mismatched["type"] == "map_switch_result_ack"
+        assert mismatched["accepted"] is False
+        assert client.get(
+            f"/api/map/operations/{pending['command_id']}"
+        ).json()["status"] == "PENDING"
+
+        websocket.send_json({
+            "type": "map_switch_result",
+            "command_id": command["command_id"],
+            "robot_id": "robot01",
+            "map_id": "second_floor",
+            "accepted": True,
+            "detail": "Nav2 map server loaded the map",
+        })
+        receipt = websocket.receive_json()
+        assert receipt["type"] == "map_switch_result_ack"
+        assert receipt["accepted"] is True
+
+        operation = client.get(
+            f"/api/map/operations/{pending['command_id']}"
+        ).json()
+        assert operation["status"] == "SUCCEEDED"
+        catalog = client.get("/api/map/catalog").json()
+        assert catalog["active_map_id"] == "second_floor"
+        assert next(
+            item for item in catalog["maps"] if item["id"] == "second_floor"
+        )["active"] is True
+
+    with TestingSessionLocal() as db:
+        actions = {
+            item.action
+            for item in db.query(AuditRecordORM).filter(
+                AuditRecordORM.entity_id == "second_floor"
+            )
+        }
+        assert {"map.switch_requested", "map.switch_succeeded"} <= actions
+
+
+def test_admin_map_metadata_is_applied_only_after_matching_robot_ack():
+    with robot_websocket_connect() as websocket:
+        websocket.receive_json()
+        websocket.send_json({
+            "type": "map_catalog",
+            "robot_id": "robot01",
+            "source": "ROS_FILESYSTEM",
+            "active_map_id": "warehouse_map",
+            "generated_at": "2026-09-05T10:00:00+00:00",
+            "maps": [{
+                "id": "warehouse_map",
+                "name": "Warehouse Map",
+                "yaml_file": "warehouse_map.yaml",
+                "image_file": "warehouse_map.pgm",
+                "resolution": 0.05,
+                "size_bytes": 1024,
+                "modified_at": "2026-09-05T09:00:00+00:00",
+                "available": True,
+                "active": True,
+                "issue": None,
+            }],
+        })
+        assert websocket.receive_json()["type"] == "map_catalog_ack"
+
+        response = client.put(
+            "/api/map/catalog/warehouse_map/metadata",
+            json={
+                "name": "Main Building",
+                "building": "Building A",
+                "floor": "2",
+                "area_description": "Engineering wing",
+            },
+        )
+        assert response.status_code == 202
+        pending = response.json()
+        command = websocket.receive_json()
+        assert command["type"] == "map_catalog_command"
+        assert command["action"] == "UPDATE_METADATA"
+        assert command["metadata"]["building"] == "Building A"
+
+        websocket.send_json({
+            "type": "map_catalog_operation_result",
+            "command_id": command["command_id"],
+            "robot_id": "robot01",
+            "map_id": "warehouse_map",
+            "action": "UPDATE_METADATA",
+            "accepted": True,
+            "result_map_id": "warehouse_map",
+            "detail": "Map metadata updated",
+        })
+        receipt = websocket.receive_json()
+        assert receipt["type"] == "map_catalog_operation_result_ack"
+        assert receipt["accepted"] is True
+        operation = client.get(
+            f"/api/map/catalog-operations/{pending['command_id']}"
+        ).json()
+        assert operation["status"] == "SUCCEEDED"
+        assert operation["action"] == "UPDATE_METADATA"
+
+
+def test_active_map_cannot_be_renamed_or_deleted():
+    with robot_websocket_connect() as websocket:
+        websocket.receive_json()
+        websocket.send_json({
+            "type": "map_catalog",
+            "robot_id": "robot01",
+            "source": "ROS_FILESYSTEM",
+            "active_map_id": "warehouse_map",
+            "generated_at": "2026-09-05T10:00:00+00:00",
+            "maps": [{
+                "id": "warehouse_map",
+                "name": "Warehouse Map",
+                "yaml_file": "warehouse_map.yaml",
+                "image_file": "warehouse_map.pgm",
+                "resolution": 0.05,
+                "size_bytes": 1024,
+                "modified_at": None,
+                "available": True,
+                "active": True,
+                "issue": None,
+            }],
+        })
+        assert websocket.receive_json()["type"] == "map_catalog_ack"
+        assert client.post(
+            "/api/map/catalog/warehouse_map/rename",
+            json={"new_map_id": "renamed"},
+        ).status_code == 409
+        assert client.delete(
+            "/api/map/catalog/warehouse_map"
+        ).status_code == 409
+
 
 def test_navigation_feedback_broadcasts_dashboard_update(
     monkeypatch,

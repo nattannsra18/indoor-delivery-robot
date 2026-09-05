@@ -18,6 +18,7 @@ export type TaskStatus =
   | "CANCELLED";
 
 export type TaskPriority = "NORMAL" | "HIGH";
+export type BatterySource = "SENSOR" | "SIMULATED" | "UNAVAILABLE";
 
 export interface TaskCreateInput {
   pickupStationId: string;
@@ -72,11 +73,82 @@ export interface MapMetadata {
   updatedAt: string;
 }
 
+export interface RobotMapRecord {
+  id: string;
+  name: string;
+  yamlFile: string;
+  imageFile?: string;
+  resolution?: number;
+  sizeBytes: number;
+  modifiedAt?: string;
+  available: boolean;
+  active: boolean;
+  issue?: string;
+  building?: string;
+  floor?: string;
+  areaDescription?: string;
+}
+
+export interface RobotMapCatalog {
+  robotId: string;
+  source: "ROS_FILESYSTEM";
+  activeMapId?: string;
+  generatedAt: string;
+  receivedAt: string;
+  robotOnline: boolean;
+  maps: RobotMapRecord[];
+}
+
+export type MapSwitchStatus = "PENDING" | "SUCCEEDED" | "FAILED";
+
+export interface MapSwitchOperation {
+  commandId: string;
+  robotId: string;
+  mapId: string;
+  status: MapSwitchStatus;
+  detail?: string;
+  requestedAt: string;
+  completedAt?: string;
+  deadline: string;
+}
+
+export type MapCatalogAction = "UPDATE_METADATA" | "RENAME" | "DELETE";
+
+export interface MapCatalogOperation extends MapSwitchOperation {
+  action: MapCatalogAction;
+  resultMapId?: string;
+}
+
+export interface RobotMapDetails {
+  name: string;
+  building?: string;
+  floor?: string;
+  areaDescription?: string;
+}
+
+export type MappingPhase = "IDLE" | "STARTING" | "MAPPING" | "STOPPING" | "REVIEW" | "SAVING" | "RESTORING" | "FAILED";
+
+export interface MappingSession {
+  robotId: string;
+  sessionId?: string;
+  phase: MappingPhase;
+  detail?: string;
+  startedAt?: string;
+  updatedAt: string;
+  savedMapId?: string;
+  mapRevision?: number;
+}
+
+export interface MappingMapDetails extends RobotMapDetails {
+  mapId: string;
+}
+
 export interface Robot {
   id: string;
   name: string;
   online: boolean;
   battery: number;
+  batterySource: BatterySource;
   state: RobotState;
   x: number;
   y: number;
@@ -173,9 +245,19 @@ export interface DeliveryTask {
   completedAt?: string;
   progress: number;
   ownerId?: string;
+  ownerUsername?: string;
   priority: TaskPriority;
   recipientName?: string;
   deliveryNote?: string;
+  pickupDistanceMeters?: number;
+  deliveryDistanceMeters?: number;
+}
+
+export interface DeliveryTaskPage {
+  items: DeliveryTask[];
+  total: number;
+  offset: number;
+  limit: number;
 }
 
 export interface TaskEstimate {
@@ -194,6 +276,19 @@ export interface UserIdentity {
   id: string;
   username: string;
   role: "ADMIN" | "USER";
+}
+
+export interface PendingAccount {
+  id: string;
+  email: string;
+  username: string;
+  createdAt: string;
+}
+
+export interface PasswordPolicy {
+  minimumLength: number;
+  requireLetter: boolean;
+  requireNumber: boolean;
 }
 
 export interface Alert {
@@ -220,6 +315,9 @@ export interface Notification {
   message: string;
   entityType?: string;
   entityId?: string;
+  category: "DELIVERY" | "ACTION_REQUIRED" | "CRITICAL" | "SYSTEM";
+  severity: "INFO" | "WARNING" | "CRITICAL";
+  actionRequired: boolean;
   readAt?: string;
   createdAt: string;
 }
@@ -227,6 +325,7 @@ export interface Notification {
 export interface NotificationPage {
   items: Notification[];
   unreadCount: number;
+  unreadByCategory: Partial<Record<Notification["category"], number>>;
   nextOffset?: number;
 }
 

@@ -44,6 +44,19 @@ class RobotState(str, Enum):
     OFFLINE = "OFFLINE"
 
 
+class BatterySource(str, Enum):
+    SENSOR = "SENSOR"
+    SIMULATED = "SIMULATED"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+class NotificationCategory(str, Enum):
+    DELIVERY = "DELIVERY"
+    ACTION_REQUIRED = "ACTION_REQUIRED"
+    CRITICAL = "CRITICAL"
+    SYSTEM = "SYSTEM"
+
+
 class TaskEvent(str, Enum):
     ARRIVED_PICKUP = "ARRIVED_PICKUP"
     CONFIRM_LOADED = "CONFIRM_LOADED"
@@ -120,6 +133,20 @@ class SignupRequest(BaseModel):
     def normalize_username(cls, value: str) -> str:
         return value.strip()
 
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        from .config import security_settings
+
+        minimum = security_settings().password_min_length
+        if len(value) < minimum:
+            raise ValueError(f"Password must contain at least {minimum} characters")
+        if not any(character.isalpha() for character in value):
+            raise ValueError("Password must contain at least one letter")
+        if not any(character.isdigit() for character in value):
+            raise ValueError("Password must contain at least one number")
+        return value
+
 
 class SignupResult(BaseModel):
     status: Literal["PENDING_APPROVAL"]
@@ -134,6 +161,12 @@ class PendingAccount(BaseModel):
     created_at: datetime
 
 
+class PasswordPolicy(BaseModel):
+    minimum_length: int = Field(ge=8)
+    require_letter: bool = True
+    require_number: bool = True
+
+
 class ForgotPasswordRequest(BaseModel):
     email: str = Field(min_length=3, max_length=320)
 
@@ -146,6 +179,11 @@ class ForgotPasswordResult(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str = Field(min_length=32, max_length=500)
     password: str = Field(min_length=1, max_length=1024)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return SignupRequest.validate_password(value)
 
 
 class GoogleAuthConfiguration(BaseModel):
@@ -203,6 +241,7 @@ class Robot(BaseModel):
     name: str
     online: bool
     battery: int = Field(ge=0, le=100)
+    battery_source: BatterySource = BatterySource.UNAVAILABLE
     state: RobotState
     x: float
     y: float
@@ -232,6 +271,7 @@ class RobotTelemetry(BaseModel):
     y: float
     yaw: float
     battery: int = Field(ge=0, le=100)
+    battery_source: BatterySource = BatterySource.SIMULATED
     frame_id: str = Field(
         default="map",
         min_length=1,
@@ -530,6 +570,184 @@ class MapSnapshot(OccupancyGridPayload):
     received_at: datetime
 
 
+class RobotMapRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_.-]+$")
+    name: str = Field(min_length=1, max_length=160)
+    yaml_file: str = Field(min_length=1, max_length=255)
+    image_file: Optional[str] = Field(default=None, max_length=255)
+    resolution: Optional[float] = Field(default=None, gt=0.0, le=10.0)
+    size_bytes: int = Field(default=0, ge=0)
+    modified_at: Optional[datetime] = None
+    available: bool
+    active: bool
+    issue: Optional[str] = Field(default=None, max_length=300)
+    building: Optional[str] = Field(default=None, max_length=120)
+    floor: Optional[str] = Field(default=None, max_length=80)
+    area_description: Optional[str] = Field(default=None, max_length=240)
+
+
+class RobotMapCatalogPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    robot_id: str = Field(min_length=1, max_length=100)
+    source: Literal["ROS_FILESYSTEM"] = "ROS_FILESYSTEM"
+    active_map_id: Optional[str] = Field(default=None, max_length=120)
+    generated_at: datetime
+    maps: list[RobotMapRecord] = Field(max_length=500)
+
+
+class RobotMapCatalogMessage(RobotMapCatalogPayload):
+    type: Literal["map_catalog"]
+
+
+class RobotMapCatalog(RobotMapCatalogPayload):
+    received_at: datetime
+    robot_online: bool
+
+
+class MapSwitchStatus(str, Enum):
+    PENDING = "PENDING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+
+class MapSwitchOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: str = Field(min_length=1, max_length=100)
+    robot_id: str = Field(min_length=1, max_length=100)
+    map_id: str = Field(min_length=1, max_length=120)
+    status: MapSwitchStatus
+    detail: Optional[str] = Field(default=None, max_length=300)
+    requested_at: datetime
+    completed_at: Optional[datetime] = None
+    deadline: datetime
+
+
+class RobotMapSwitchResultMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["map_switch_result"]
+    command_id: str = Field(min_length=1, max_length=100)
+    robot_id: str = Field(min_length=1, max_length=100)
+    map_id: str = Field(min_length=1, max_length=120)
+    accepted: bool
+    detail: Optional[str] = Field(default=None, max_length=300)
+
+
+class RobotMapDetailsUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    building: Optional[str] = Field(default=None, max_length=120)
+    floor: Optional[str] = Field(default=None, max_length=80)
+    area_description: Optional[str] = Field(default=None, max_length=240)
+
+
+class RobotMapRenameRequest(BaseModel):
+    new_map_id: str = Field(
+        min_length=1,
+        max_length=120,
+        pattern=r"^[A-Za-z0-9_.-]+$",
+    )
+
+
+class MapCatalogAction(str, Enum):
+    UPDATE_METADATA = "UPDATE_METADATA"
+    RENAME = "RENAME"
+    DELETE = "DELETE"
+
+
+class MapCatalogOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: str = Field(min_length=1, max_length=100)
+    robot_id: str = Field(min_length=1, max_length=100)
+    map_id: str = Field(min_length=1, max_length=120)
+    action: MapCatalogAction
+    status: MapSwitchStatus
+    result_map_id: Optional[str] = Field(default=None, max_length=120)
+    detail: Optional[str] = Field(default=None, max_length=300)
+    requested_at: datetime
+    completed_at: Optional[datetime] = None
+    deadline: datetime
+
+
+class RobotMapCatalogOperationResultMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["map_catalog_operation_result"]
+    command_id: str = Field(min_length=1, max_length=100)
+    robot_id: str = Field(min_length=1, max_length=100)
+    map_id: str = Field(min_length=1, max_length=120)
+    action: MapCatalogAction
+    accepted: bool
+    result_map_id: Optional[str] = Field(default=None, max_length=120)
+    detail: Optional[str] = Field(default=None, max_length=300)
+
+
+class MappingPhase(str, Enum):
+    IDLE = "IDLE"
+    STARTING = "STARTING"
+    MAPPING = "MAPPING"
+    STOPPING = "STOPPING"
+    REVIEW = "REVIEW"
+    SAVING = "SAVING"
+    RESTORING = "RESTORING"
+    FAILED = "FAILED"
+
+
+class MappingSession(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    robot_id: str = Field(min_length=1, max_length=100)
+    session_id: Optional[str] = Field(default=None, max_length=100)
+    phase: MappingPhase
+    detail: Optional[str] = Field(default=None, max_length=500)
+    started_at: Optional[datetime] = None
+    updated_at: datetime
+    saved_map_id: Optional[str] = Field(default=None, max_length=120)
+    map_revision: Optional[int] = Field(default=None, ge=0)
+
+
+class MappingStartRequest(BaseModel):
+    robot_id: str = Field(default="robot01", min_length=1, max_length=100)
+
+
+class MappingSaveRequest(BaseModel):
+    map_id: str = Field(
+        min_length=1,
+        max_length=120,
+        pattern=r"^[A-Za-z0-9_.-]+$",
+    )
+    name: str = Field(min_length=1, max_length=160)
+    building: Optional[str] = Field(default=None, max_length=120)
+    floor: Optional[str] = Field(default=None, max_length=80)
+    area_description: Optional[str] = Field(default=None, max_length=240)
+
+
+class MappingTeleopRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    linear_x: float = Field(ge=-0.22, le=0.22)
+    angular_z: float = Field(ge=-1.0, le=1.0)
+
+
+class RobotMappingStatusMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["mapping_status"]
+    robot_id: str = Field(min_length=1, max_length=100)
+    session_id: Optional[str] = Field(default=None, max_length=100)
+    command_id: Optional[str] = Field(default=None, max_length=100)
+    phase: MappingPhase
+    accepted: bool = True
+    detail: Optional[str] = Field(default=None, max_length=500)
+    started_at: Optional[datetime] = None
+    saved_map_id: Optional[str] = Field(default=None, max_length=120)
+    map_revision: Optional[int] = Field(default=None, ge=0)
+
+
 class DeliveryTask(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -543,11 +761,19 @@ class DeliveryTask(BaseModel):
     completed_at: Optional[datetime] = None
     progress: int = Field(ge=0, le=100)
     owner_id: Optional[str] = None
+    owner_username: Optional[str] = None
     priority: TaskPriority = TaskPriority.NORMAL
     recipient_name: Optional[str] = None
     delivery_note: Optional[str] = None
     pickup_distance_meters: Optional[float] = Field(default=None, ge=0.0)
     delivery_distance_meters: Optional[float] = Field(default=None, ge=0.0)
+
+
+class DeliveryTaskPage(BaseModel):
+    items: list[DeliveryTask]
+    total: int = Field(ge=0)
+    offset: int = Field(ge=0)
+    limit: int = Field(ge=1, le=100)
 
 
 class TaskEstimate(BaseModel):
@@ -590,6 +816,9 @@ class Notification(BaseModel):
     message: str
     entity_type: Optional[str] = None
     entity_id: Optional[str] = None
+    category: NotificationCategory
+    severity: AlertSeverity
+    action_required: bool
     read_at: Optional[datetime] = None
     created_at: datetime
 
@@ -597,7 +826,12 @@ class Notification(BaseModel):
 class NotificationPage(BaseModel):
     items: list[Notification]
     unread_count: int
+    unread_by_category: dict[NotificationCategory, int] = Field(default_factory=dict)
     next_offset: Optional[int] = None
+
+
+class NotificationReadRequest(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=100)
 
 
 class AuditRecord(BaseModel):

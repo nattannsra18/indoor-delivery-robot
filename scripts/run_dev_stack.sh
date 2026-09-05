@@ -101,6 +101,8 @@ run_bridge() {
     --ros-args \
     -p server_url:=ws://127.0.0.1:8000 \
     -p robot_id:=robot01 \
+    -p maps_directory:="${ROS_WORKSPACE}/src/amr_simulation/maps" \
+    -p active_map_id:=warehouse_map \
     -p diagnostics_topic:=/diagnostics \
     -p path_topic:=/plan \
     -p path_max_poses:=500 \

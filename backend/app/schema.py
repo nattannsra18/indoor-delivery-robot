@@ -10,6 +10,76 @@ def apply_compatibility_migrations(engine: Engine) -> None:
     for name in ("notifications", "audit_records", "password_reset_tokens"):
         Base.metadata.tables[name].create(bind=engine, checkfirst=True)
     inspector = inspect(engine)
+    if "notifications" in inspector.get_table_names():
+        notification_columns = {
+            column["name"] for column in inspector.get_columns("notifications")
+        }
+        with engine.begin() as connection:
+            if "category" not in notification_columns:
+                connection.execute(text(
+                    "ALTER TABLE notifications ADD COLUMN category "
+                    "VARCHAR(20) NOT NULL DEFAULT 'DELIVERY'"
+                ))
+            if "severity" not in notification_columns:
+                connection.execute(text(
+                    "ALTER TABLE notifications ADD COLUMN severity "
+                    "VARCHAR(10) NOT NULL DEFAULT 'INFO'"
+                ))
+            if "action_required" not in notification_columns:
+                connection.execute(text(
+                    "ALTER TABLE notifications ADD COLUMN action_required "
+                    "BOOLEAN NOT NULL DEFAULT false"
+                ))
+            connection.execute(text("""
+                UPDATE notifications SET
+                    category = CASE
+                        WHEN event_type IN (
+                            'task.navigation_failed', 'emergency.activate_requested',
+                            'emergency.activate_succeeded', 'emergency.command_failed',
+                            'robot.disconnected'
+                        ) THEN 'CRITICAL'
+                        WHEN event_type IN ('task.arrived_pickup', 'task.arrived_destination')
+                            THEN 'ACTION_REQUIRED'
+                        WHEN event_type LIKE 'alert.%' AND event_type != 'alert.resolved'
+                            THEN 'ACTION_REQUIRED'
+                        WHEN event_type LIKE 'robot.%' OR event_type LIKE 'emergency.%'
+                            OR event_type = 'alert.resolved' THEN 'SYSTEM'
+                        ELSE 'DELIVERY'
+                    END,
+                    action_required = CASE
+                        WHEN event_type IN (
+                            'task.navigation_failed', 'task.arrived_pickup',
+                            'task.arrived_destination', 'emergency.activate_requested',
+                            'emergency.activate_succeeded', 'emergency.command_failed',
+                            'robot.disconnected'
+                        ) OR (event_type LIKE 'alert.%' AND event_type != 'alert.resolved')
+                        THEN true ELSE false END
+            """))
+            connection.execute(text("""
+                UPDATE notifications SET severity = CASE
+                    WHEN category = 'CRITICAL' THEN 'CRITICAL'
+                    WHEN category = 'ACTION_REQUIRED' THEN 'WARNING'
+                    ELSE 'INFO' END
+            """))
+            if "alerts" in inspector.get_table_names():
+                connection.execute(text("""
+                    UPDATE notifications SET severity = COALESCE(
+                        (SELECT alerts.severity FROM alerts WHERE alerts.id = notifications.entity_id),
+                        severity
+                    ) WHERE entity_type = 'alert'
+                """))
+            connection.execute(text("""
+                UPDATE notifications SET category = 'CRITICAL', action_required = true
+                WHERE entity_type = 'alert' AND severity = 'CRITICAL'
+            """))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_notifications_category ON notifications (category)"
+            ))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_notifications_action_required ON notifications (action_required)"
+            ))
+
+    inspector = inspect(engine)
     if "users" in inspector.get_table_names():
         user_columns = {column["name"] for column in inspector.get_columns("users")}
         with engine.begin() as connection:
@@ -61,6 +131,18 @@ def apply_compatibility_migrations(engine: Engine) -> None:
                         ELSE instructions END
                     WHERE id IN ('A', 'B', 'C', 'D')
                 """))
+
+    inspector = inspect(engine)
+    if "robots" in inspector.get_table_names():
+        robot_columns = {
+            column["name"] for column in inspector.get_columns("robots")
+        }
+        if "battery_source" not in robot_columns:
+            with engine.begin() as connection:
+                connection.execute(text(
+                    "ALTER TABLE robots ADD COLUMN battery_source "
+                    "VARCHAR(20) NOT NULL DEFAULT 'UNAVAILABLE'"
+                ))
 
     if "delivery_tasks" not in inspector.get_table_names():
         return

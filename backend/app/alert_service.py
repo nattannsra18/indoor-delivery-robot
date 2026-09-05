@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .db_models import AlertORM
-from .models import AlertSeverity, utc_now
+from .models import AlertSeverity, NotificationCategory, utc_now
 from .audit_service import AuditService
 from .notification_service import NotificationService
 
@@ -68,7 +68,8 @@ class AlertService:
                 alert.acknowledged_by_user_id = None
         AuditService(self.db).log(actor_id, f"alert.{event}", "alert", alert.id, {"alert_id": alert.id, "robot_id": robot_id or ""})
         if event in {"created", "reopened"}:
-            self.pending_notification_ids.extend(item.id for item in NotificationService(self.db).create_for_admins("alert." + event, alert.title, alert.message, f"alert:{alert.id}:{event}", "alert", alert.id))
+            category = NotificationCategory.CRITICAL if severity == AlertSeverity.CRITICAL else NotificationCategory.ACTION_REQUIRED
+            self.pending_notification_ids.extend(item.id for item in NotificationService(self.db).create_for_admins("alert." + event, alert.title, alert.message, f"alert:{alert.id}:{event}", "alert", alert.id, category=category, severity=severity, action_required=True))
         if commit:
             self.db.commit()
             self.db.refresh(alert)

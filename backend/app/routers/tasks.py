@@ -19,6 +19,7 @@ from ..dependencies import get_service
 from ..models import (
     DeliveryTask,
     DeliveryTaskCreate,
+    DeliveryTaskPage,
     EventSource,
     TaskEvent,
     TaskEventRequest,
@@ -36,6 +37,7 @@ from ..db_models import DeliveryTaskORM, UserORM
 from ..models import UserRole
 from ..queue_estimate_service import QueueEstimateService
 from ..map_store import map_store
+from ..mapping_store import mapping_store
 from ..route_preview import (
     PREVIEW_LOADING_SECONDS,
     PREVIEW_NOMINAL_SPEED_METERS_PER_SECOND,
@@ -92,8 +94,30 @@ def list_tasks(
     ),
     service: DeliveryService = Depends(get_service),
     user: UserORM = Depends(require_user),
+    limit: int = 100,
 ):
-    return service.list_tasks(task_status, None if user.role == UserRole.ADMIN else user.id)
+    return service.list_tasks(
+        task_status, None if user.role == UserRole.ADMIN else user.id
+    )[:limit]
+
+
+@router.get("/page", response_model=DeliveryTaskPage)
+def list_tasks_page(
+    task_status: TaskStatus | None = Query(default=None, alias="status"),
+    query: str | None = Query(default=None, max_length=100),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    service: DeliveryService = Depends(get_service),
+    user: UserORM = Depends(require_user),
+):
+    items, total = service.list_tasks_page(
+        task_status,
+        None if user.role == UserRole.ADMIN else user.id,
+        query,
+        offset,
+        limit,
+    )
+    return {"items": items, "total": total, "offset": offset, "limit": limit}
 
 
 @router.get(
@@ -133,6 +157,11 @@ async def preview_task_route(
     user: UserORM = Depends(require_user),
 ):
     authorize_priority(user, payload.priority)
+    if mapping_store.is_active("robot01"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Route preview is unavailable while the robot is mapping",
+        )
     pickup = service.get_station(payload.pickup_station_id)
     destination = service.get_station(payload.destination_station_id)
     robot = service.get_robot("robot01")
@@ -260,6 +289,11 @@ async def create_task(
     user: UserORM = Depends(require_user),
 ):
     authorize_priority(user, payload.priority)
+    if mapping_store.is_active("robot01"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Delivery creation is unavailable while the robot is mapping",
+        )
     snapshot = map_store.get()
     validation = None
     if snapshot is not None:

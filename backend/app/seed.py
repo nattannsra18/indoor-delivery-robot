@@ -59,13 +59,14 @@ def seed_database(db: Session) -> None:
                 id="robot01",
                 name="SCUTTLE-01",
                 online=True,
-                battery=82,
+                battery=100,
+                battery_source="SIMULATED",
                 state=RobotState.IDLE,
                 x=1.2,
                 y=3.7,
                 yaw=0.0,
                 current_task_id=None,
-                last_seen="Just now",
+                last_seen=utc_now().isoformat(),
             )
         )
 
