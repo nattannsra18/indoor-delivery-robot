@@ -44,6 +44,19 @@ class RobotState(str, Enum):
     OFFLINE = "OFFLINE"
 
 
+class BatterySource(str, Enum):
+    SENSOR = "SENSOR"
+    SIMULATED = "SIMULATED"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+class NotificationCategory(str, Enum):
+    DELIVERY = "DELIVERY"
+    ACTION_REQUIRED = "ACTION_REQUIRED"
+    CRITICAL = "CRITICAL"
+    SYSTEM = "SYSTEM"
+
+
 class TaskEvent(str, Enum):
     ARRIVED_PICKUP = "ARRIVED_PICKUP"
     CONFIRM_LOADED = "CONFIRM_LOADED"
@@ -120,6 +133,20 @@ class SignupRequest(BaseModel):
     def normalize_username(cls, value: str) -> str:
         return value.strip()
 
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        from .config import security_settings
+
+        minimum = security_settings().password_min_length
+        if len(value) < minimum:
+            raise ValueError(f"Password must contain at least {minimum} characters")
+        if not any(character.isalpha() for character in value):
+            raise ValueError("Password must contain at least one letter")
+        if not any(character.isdigit() for character in value):
+            raise ValueError("Password must contain at least one number")
+        return value
+
 
 class SignupResult(BaseModel):
     status: Literal["PENDING_APPROVAL"]
@@ -134,6 +161,12 @@ class PendingAccount(BaseModel):
     created_at: datetime
 
 
+class PasswordPolicy(BaseModel):
+    minimum_length: int = Field(ge=8)
+    require_letter: bool = True
+    require_number: bool = True
+
+
 class ForgotPasswordRequest(BaseModel):
     email: str = Field(min_length=3, max_length=320)
 
@@ -146,6 +179,11 @@ class ForgotPasswordResult(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str = Field(min_length=32, max_length=500)
     password: str = Field(min_length=1, max_length=1024)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return SignupRequest.validate_password(value)
 
 
 class GoogleAuthConfiguration(BaseModel):
@@ -203,6 +241,7 @@ class Robot(BaseModel):
     name: str
     online: bool
     battery: int = Field(ge=0, le=100)
+    battery_source: BatterySource = BatterySource.UNAVAILABLE
     state: RobotState
     x: float
     y: float
@@ -232,6 +271,7 @@ class RobotTelemetry(BaseModel):
     y: float
     yaw: float
     battery: int = Field(ge=0, le=100)
+    battery_source: BatterySource = BatterySource.SIMULATED
     frame_id: str = Field(
         default="map",
         min_length=1,
@@ -543,11 +583,19 @@ class DeliveryTask(BaseModel):
     completed_at: Optional[datetime] = None
     progress: int = Field(ge=0, le=100)
     owner_id: Optional[str] = None
+    owner_username: Optional[str] = None
     priority: TaskPriority = TaskPriority.NORMAL
     recipient_name: Optional[str] = None
     delivery_note: Optional[str] = None
     pickup_distance_meters: Optional[float] = Field(default=None, ge=0.0)
     delivery_distance_meters: Optional[float] = Field(default=None, ge=0.0)
+
+
+class DeliveryTaskPage(BaseModel):
+    items: list[DeliveryTask]
+    total: int = Field(ge=0)
+    offset: int = Field(ge=0)
+    limit: int = Field(ge=1, le=100)
 
 
 class TaskEstimate(BaseModel):
@@ -590,6 +638,9 @@ class Notification(BaseModel):
     message: str
     entity_type: Optional[str] = None
     entity_id: Optional[str] = None
+    category: NotificationCategory
+    severity: AlertSeverity
+    action_required: bool
     read_at: Optional[datetime] = None
     created_at: datetime
 
@@ -597,7 +648,12 @@ class Notification(BaseModel):
 class NotificationPage(BaseModel):
     items: list[Notification]
     unread_count: int
+    unread_by_category: dict[NotificationCategory, int] = Field(default_factory=dict)
     next_offset: Optional[int] = None
+
+
+class NotificationReadRequest(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=100)
 
 
 class AuditRecord(BaseModel):

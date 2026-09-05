@@ -809,6 +809,7 @@ def test_robot_websocket_persists_telemetry():
                     "y": 1.8,
                     "yaw": 0.75,
                     "battery": 76,
+                    "battery_source": "SENSOR",
                     "frame_id": "map",
                     "timestamp": (
                         "2026-08-31T13:45:00+07:00"
@@ -823,6 +824,7 @@ def test_robot_websocket_persists_telemetry():
         assert response["accepted"] is True
         assert response["data"]["x"] == 2.8
         assert response["data"]["battery"] == 76
+        assert response["data"]["battery_source"] == "SENSOR"
 
     robot = client.get(
         "/api/robots/robot01"
@@ -833,6 +835,8 @@ def test_robot_websocket_persists_telemetry():
     assert robot.json()["y"] == 1.8
     assert robot.json()["yaw"] == 0.75
     assert robot.json()["battery"] == 76
+    assert robot.json()["battery_source"] == "SENSOR"
+    assert robot.json()["last_seen"] != "Just now"
 
 
 def test_robot_websocket_rejects_invalid_telemetry():

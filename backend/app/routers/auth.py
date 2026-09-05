@@ -39,6 +39,7 @@ from ..models import (
     GoogleAuthConfiguration,
     LoginRequest,
     PendingAccount,
+    PasswordPolicy,
     ResetPasswordRequest,
     SignupRequest,
     SignupResult,
@@ -49,6 +50,15 @@ from ..models import (
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 GOOGLE_STATE_COOKIE = "idr_google_oauth_state"
+
+
+@router.get("/password-policy", response_model=PasswordPolicy)
+def get_password_policy():
+    return PasswordPolicy(
+        minimum_length=security_settings().password_min_length,
+        require_letter=True,
+        require_number=True,
+    )
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -113,6 +123,32 @@ def _send_reset_email(recipient: str, token: str) -> None:
         password = os.getenv("SMTP_PASSWORD", "")
         if username:
             smtp.login(username, password)
+        smtp.send_message(message)
+
+
+def _send_approval_email(recipient: str, username: str) -> None:
+    host = os.getenv("SMTP_HOST", "").strip()
+    sender = os.getenv("SMTP_FROM_EMAIL", "").strip()
+    if not host or not sender:
+        return
+    port = int(os.getenv("SMTP_PORT", "587"))
+    login_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/") + "/login"
+    message = EmailMessage()
+    message["Subject"] = "Your Delivery Robot account is approved"
+    message["From"] = sender
+    message["To"] = recipient
+    message.set_content(
+        f"Hello {username},\n\n"
+        "Your Delivery Robot account has been approved.\n\n"
+        f"Sign in: {login_url}\n"
+    )
+    with smtplib.SMTP(host, port, timeout=10) as smtp:
+        if os.getenv("SMTP_USE_TLS", "true").strip().lower() in {"1", "true", "yes", "on"}:
+            smtp.starttls(context=ssl.create_default_context())
+        smtp_username = os.getenv("SMTP_USERNAME", "").strip()
+        password = os.getenv("SMTP_PASSWORD", "")
+        if smtp_username:
+            smtp.login(smtp_username, password)
         smtp.send_message(message)
 
 
@@ -191,15 +227,20 @@ def pending_accounts(
 @router.post("/accounts/{user_id}/approve", response_model=UserIdentity)
 def approve_account(
     user_id: str,
+    background_tasks: BackgroundTasks,
     admin: UserORM = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     user = db.get(UserORM, user_id)
     if user is None or user.role != UserRole.USER:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    if user.active:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Account is already approved")
     user.active = True
     AuditService(db).log(admin.id, "auth.account_approved", "user", user.id)
     db.commit()
+    if user.email and _smtp_configured():
+        background_tasks.add_task(_send_approval_email, user.email, user.username)
     return user
 
 

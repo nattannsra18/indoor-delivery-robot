@@ -19,6 +19,7 @@ from ..dependencies import get_service
 from ..models import (
     DeliveryTask,
     DeliveryTaskCreate,
+    DeliveryTaskPage,
     EventSource,
     TaskEvent,
     TaskEventRequest,
@@ -92,8 +93,30 @@ def list_tasks(
     ),
     service: DeliveryService = Depends(get_service),
     user: UserORM = Depends(require_user),
+    limit: int = 100,
 ):
-    return service.list_tasks(task_status, None if user.role == UserRole.ADMIN else user.id)
+    return service.list_tasks(
+        task_status, None if user.role == UserRole.ADMIN else user.id
+    )[:limit]
+
+
+@router.get("/page", response_model=DeliveryTaskPage)
+def list_tasks_page(
+    task_status: TaskStatus | None = Query(default=None, alias="status"),
+    query: str | None = Query(default=None, max_length=100),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    service: DeliveryService = Depends(get_service),
+    user: UserORM = Depends(require_user),
+):
+    items, total = service.list_tasks_page(
+        task_status,
+        None if user.role == UserRole.ADMIN else user.id,
+        query,
+        offset,
+        limit,
+    )
+    return {"items": items, "total": total, "offset": offset, "limit": limit}
 
 
 @router.get(

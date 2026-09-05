@@ -36,7 +36,7 @@ from app.db_models import (
 )
 from app.emergency_service import EmergencyStopService
 from app.models import AlertSeverity, DeliveryTaskCreate, ForgotPasswordRequest, LoginRequest, ResetPasswordRequest, SignupRequest, UserRole, utc_now
-from app.routers.auth import approve_account, forgot_password, login, pending_accounts, reset_password, signup
+from app.routers.auth import approve_account, forgot_password, get_password_policy, login, pending_accounts, reset_password, signup
 from app.routers.dashboard_ws import dashboard_websocket
 from app.routers.tasks import authorize_task, list_tasks as list_visible_tasks
 from app.seed import seed_database
@@ -126,7 +126,9 @@ def test_password_hashing_verification_and_generic_login_failure(monkeypatch):
         assert authenticate(db, "admin", "bad") is None
 
 
-def test_login_accepts_email_and_new_signup_waits_for_approval():
+def test_login_accepts_email_and_new_signup_waits_for_approval(monkeypatch):
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("SMTP_FROM_EMAIL", raising=False)
     with Session() as db:
         alice = db.get(UserORM, "alice")
         alice.email = "alice@example.com"
@@ -145,7 +147,7 @@ def test_login_accepts_email_and_new_signup_waits_for_approval():
             SignupRequest(
                 email="new.user@example.com",
                 username="new.user",
-                password="1",
+                password="secure123",
             ),
             db,
         )
@@ -156,8 +158,43 @@ def test_login_accepts_email_and_new_signup_waits_for_approval():
         assert pending.active is False
         admin = db.get(UserORM, "admin")
         assert [account.id for account in pending_accounts(admin, db)] == [pending.id]
-        approved = approve_account(pending.id, admin, db)
+        background_tasks = BackgroundTasks()
+        approved = approve_account(pending.id, background_tasks, admin, db)
         assert approved.active is True
+        assert len(background_tasks.tasks) == 0
+
+
+def test_account_approval_schedules_email_when_smtp_is_configured(monkeypatch):
+    monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("SMTP_FROM_EMAIL", "robot@example.com")
+    with Session() as db:
+        pending = UserORM(
+            id="pending-email", username="pending-email", email="pending@example.com",
+            password_hash=hash_password("secure123", iterations=1000),
+            role=UserRole.USER, active=False,
+        )
+        db.add(pending); db.commit()
+        background_tasks = BackgroundTasks()
+        admin = db.get(UserORM, "admin")
+        approve_account(pending.id, background_tasks, admin, db)
+        assert len(background_tasks.tasks) == 1
+        assert background_tasks.tasks[0].func.__name__ == "_send_approval_email"
+        with pytest.raises(HTTPException) as duplicate:
+            approve_account(pending.id, BackgroundTasks(), admin, db)
+        assert duplicate.value.status_code == 409
+
+
+def test_password_policy_is_shared_by_signup_and_reset(monkeypatch):
+    monkeypatch.setenv("PASSWORD_MIN_LENGTH", "9")
+    policy = get_password_policy()
+    assert policy.minimum_length == 9
+    assert policy.require_letter is True
+    assert policy.require_number is True
+    with pytest.raises(ValueError):
+        SignupRequest(email="valid@example.com", username="valid-user", password="short1")
+    with pytest.raises(ValueError):
+        ResetPasswordRequest(token="x" * 32, password="onlyletters")
+    assert SignupRequest(email="valid@example.com", username="valid-user", password="secure123").password == "secure123"
 
 
 def test_password_reset_token_is_one_time_and_revokes_sessions():
@@ -175,14 +212,14 @@ def test_password_reset_token_is_one_time_and_revokes_sessions():
         )
         db.commit()
         result = reset_password(
-            ResetPasswordRequest(token=raw_token, password="2"),
+            ResetPasswordRequest(token=raw_token, password="updated2"),
             db,
         )
         assert result.status_code == 204
-        assert verify_password("2", alice.password_hash)
+        assert verify_password("updated2", alice.password_hash)
         assert resolve_session(db, session_token) is None
         repeated = reset_password(
-            ResetPasswordRequest(token=raw_token, password="3"),
+            ResetPasswordRequest(token=raw_token, password="another3"),
             db,
         )
         assert repeated.status_code == 400
@@ -277,6 +314,13 @@ def test_role_task_listing_uses_server_enforced_ownership():
         }
         assert alice_ids == {alice_task.id}
         assert {alice_task.id, bob_task.id, legacy_task.id} <= admin_ids
+
+        alice_page, alice_total = service.list_tasks_page(None, alice.id, alice_task.id, 0, 20)
+        assert [item.id for item in alice_page] == [alice_task.id]
+        assert alice_total == 1
+        bob_search, bob_total = service.list_tasks_page(None, None, "bob", 0, 1)
+        assert [item.id for item in bob_search] == [bob_task.id]
+        assert bob_total == 1
 
 
 def test_browser_websocket_admin_only_broadcast_filtering():

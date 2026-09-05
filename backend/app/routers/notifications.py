@@ -3,12 +3,17 @@ from sqlalchemy.orm import Session
 from ..auth import require_user
 from ..database import get_db
 from ..db_models import UserORM
-from ..models import Notification, NotificationPage
+from ..models import Notification, NotificationCategory, NotificationPage, NotificationReadRequest
 from ..notification_service import NotificationService
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 @router.get("", response_model=NotificationPage)
-def list_notifications(offset: int = Query(0, ge=0), limit: int = Query(30, ge=1, le=100), db: Session = Depends(get_db), user: UserORM = Depends(require_user)):
-    items, unread, next_offset = NotificationService(db).list(user.id, offset, limit); return {"items": items, "unread_count": unread, "next_offset": next_offset}
+def list_notifications(offset: int = Query(0, ge=0), limit: int = Query(30, ge=1, le=100), category: NotificationCategory | None = Query(None), unread_only: bool = Query(False), db: Session = Depends(get_db), user: UserORM = Depends(require_user)):
+    service = NotificationService(db)
+    items, unread, next_offset = service.list(user.id, offset, limit, category=category, unread_only=unread_only)
+    return {"items": items, "unread_count": unread, "unread_by_category": service.unread_by_category(user.id), "next_offset": next_offset}
+@router.post("/read-many", response_model=list[Notification])
+def read_many(payload: NotificationReadRequest, db: Session = Depends(get_db), user: UserORM = Depends(require_user)):
+    return NotificationService(db).mark_many_read(user.id, payload.ids)
 @router.post("/{notification_id}/read", response_model=Notification)
 def read_notification(notification_id: str, db: Session = Depends(get_db), user: UserORM = Depends(require_user)):
     item = NotificationService(db).mark_read(user.id, notification_id)

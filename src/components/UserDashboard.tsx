@@ -15,6 +15,7 @@ import {
   formatTaskTimestamp
 } from "@/lib/roleDashboard";
 import { userDashboardText } from "@/lib/i18n";
+import { displayedTaskProgress } from "@/lib/taskProgress";
 import type { DeliveryTask, RobotState, TaskEstimate } from "@/types";
 
 export default function UserDashboard() {
@@ -22,7 +23,7 @@ export default function UserDashboard() {
   const { user } = useAuth();
   const copy = userDashboardText[locale];
   const {
-    tasks, navigationFeedback, stationName, loading, backendOnline, error,
+    tasks, stationName, loading, backendOnline, error,
     taskEstimates, globalQueuedCount, robotAvailableSeconds, robot, occupancyMap
   } = useDeliveryApi();
   const estimateByTaskId = new Map(
@@ -218,9 +219,11 @@ function RecentDeliveryRow({ task, stationName }: { task: DeliveryTask; stationN
 
 function Progress({ task, compact = false }: { task: DeliveryTask; compact?: boolean }) {
   const { locale } = useLocale();
+  const { navigationFeedback } = useDeliveryApi();
   const copy = userDashboardText[locale];
   if (!ACTIVE_TASK_STATUSES.includes(task.status)) return null;
-  return <div>{!compact && <div className="mb-2 flex justify-between text-xs text-slate-500"><span>{copy.progress}</span><span>{task.progress}%</span></div>}<div className={`${compact ? "h-1.5" : "h-2"} overflow-hidden rounded-full bg-slate-100`}><div className="h-full rounded-full bg-blue-600 transition-[width] duration-700 ease-out" style={{ width: `${task.progress}%` }} /></div></div>;
+  const progress = displayedTaskProgress(task, navigationFeedback);
+  return <div>{!compact && <div className="mb-2 flex justify-between text-xs text-slate-500"><span>{copy.progress}</span><span>{progress}%</span></div>}<div className={`${compact ? "h-1.5" : "h-2"} overflow-hidden rounded-full bg-slate-100`}><div className="h-full rounded-full bg-blue-600 transition-[width] duration-700 ease-out" style={{ width: `${progress}%` }} /></div></div>;
 }
 
 function StatePanel({ title, detail }: { title: string; detail: string }) {

@@ -6,7 +6,7 @@ from app.audit_service import AuditService
 from app.auth import hash_password
 from app.database import Base
 from app.db_models import AuditRecordORM, NotificationORM, RobotORM, UserORM
-from app.models import EmergencyStopState, RobotState, UserRole
+from app.models import EmergencyStopState, NotificationCategory, RobotState, UserRole
 from app.notification_service import NotificationService
 from app.schema import apply_compatibility_migrations
 from app.browser_websocket_manager import BrowserConnectionManager
@@ -45,6 +45,31 @@ def test_notification_deduplicates_and_ownership_queries_are_scoped():
     assert notifications.mark_read("alice", first.id).read_at is not None
     notifications.mark_all_read("alice")
     assert db.scalar(select(NotificationORM).where(NotificationORM.recipient_id == "bob", NotificationORM.read_at.is_(None))) is not None
+
+
+def test_notification_semantics_filtering_counts_and_bulk_read_are_backend_authoritative():
+    db = session(); notifications = NotificationService(db)
+    delivery = notifications.create("alice", "task.created", "Created", "Created", "delivery")
+    action = notifications.create("alice", "task.arrived_pickup", "Arrived", "Load package", "action")
+    critical = notifications.create("alice", "task.navigation_failed", "Failed", "Inspect robot", "critical")
+    foreign = notifications.create("bob", "task.navigation_failed", "Failed", "Inspect robot", "foreign")
+    db.commit()
+
+    assert delivery.category == NotificationCategory.DELIVERY
+    assert action.category == NotificationCategory.ACTION_REQUIRED and action.action_required is True
+    assert critical.category == NotificationCategory.CRITICAL and critical.action_required is True
+    action_items, unread, _ = notifications.list("alice", 0, 20, category=NotificationCategory.ACTION_REQUIRED)
+    assert [item.id for item in action_items] == [action.id]
+    assert unread == 3
+    assert notifications.unread_by_category("alice") == {
+        NotificationCategory.ACTION_REQUIRED: 1,
+        NotificationCategory.CRITICAL: 1,
+        NotificationCategory.DELIVERY: 1,
+    }
+
+    updated = notifications.mark_many_read("alice", [action.id, critical.id, foreign.id])
+    assert {item.id for item in updated} == {action.id, critical.id}
+    assert db.get(NotificationORM, foreign.id).read_at is None
 
 
 def test_audit_metadata_is_allowlisted_and_append_only():

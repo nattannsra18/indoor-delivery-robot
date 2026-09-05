@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import AuthShell, { PasswordField } from "@/components/AuthShell";
 import { useLocale } from "@/context/LocaleContext";
-import { ApiError, signup } from "@/lib/api";
+import { ApiError, getPasswordPolicy, signup } from "@/lib/api";
 import { authText } from "@/lib/i18n";
+import { DEFAULT_PASSWORD_POLICY, passwordPolicyError } from "@/lib/passwordPolicy";
 
 const inputClass="min-h-12 rounded-xl border border-slate-300 px-4 font-normal outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100";
 
@@ -20,12 +21,17 @@ export default function SignupPage() {
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [complete,setComplete]=useState(false);
+  const [passwordPolicy,setPasswordPolicy]=useState(DEFAULT_PASSWORD_POLICY);
+
+  useEffect(() => { getPasswordPolicy().then(setPasswordPolicy).catch(() => {}); }, []);
 
   async function submit(event:FormEvent) {
     event.preventDefault();
     setError("");
     if(email.trim().toLocaleLowerCase()!==confirmEmail.trim().toLocaleLowerCase()){setError(copy.emailsMismatch);return;}
     if(password!==confirmPassword){setError(copy.passwordsMismatch);return;}
+    const policyError=passwordPolicyError(password,passwordPolicy,{length:copy.passwordLength,letter:copy.passwordLetter,number:copy.passwordNumber});
+    if(policyError){setError(policyError);return;}
     setBusy(true);
     try { await signup({email,username,password}); setComplete(true); }
     catch(caught){setError(caught instanceof ApiError&&caught.status===409?copy.duplicateAccount:copy.requestFailed);}
@@ -46,7 +52,8 @@ export default function SignupPage() {
       <label className="grid gap-2 text-sm font-semibold text-slate-800">{copy.email}<input type="email" autoComplete="email" value={email} onChange={(event)=>setEmail(event.target.value)} required className={inputClass}/></label>
       <label className="grid gap-2 text-sm font-semibold text-slate-800">{copy.confirmEmail}<input type="email" autoComplete="email" value={confirmEmail} onChange={(event)=>setConfirmEmail(event.target.value)} required className={inputClass}/></label>
       <label className="grid gap-2 text-sm font-semibold text-slate-800">{copy.username}<input autoComplete="username" pattern="[A-Za-z0-9_.-]+" minLength={3} value={username} onChange={(event)=>setUsername(event.target.value)} required className={inputClass}/><span className="text-xs font-normal text-slate-400">{copy.usernameHint}</span></label>
-      <PasswordField label={copy.password} value={password} onChange={setPassword} autoComplete="new-password"/>
+      <PasswordField label={copy.password} value={password} onChange={setPassword} autoComplete="new-password" minLength={passwordPolicy.minimumLength}/>
+      <p className="-mt-2 text-xs leading-5 text-slate-500">{copy.passwordHint.replace("{count}",String(passwordPolicy.minimumLength))}</p>
       <PasswordField label={copy.confirmPassword} value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password"/>
       {error&&<p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p>}
       <button disabled={busy} className="mt-1 min-h-12 rounded-xl bg-blue-600 px-4 font-semibold text-white shadow-lg shadow-blue-200 hover:bg-blue-700 disabled:opacity-50">{busy?copy.submitting:copy.submitRequest}</button>

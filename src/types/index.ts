@@ -18,6 +18,7 @@ export type TaskStatus =
   | "CANCELLED";
 
 export type TaskPriority = "NORMAL" | "HIGH";
+export type BatterySource = "SENSOR" | "SIMULATED" | "UNAVAILABLE";
 
 export interface TaskCreateInput {
   pickupStationId: string;
@@ -77,6 +78,7 @@ export interface Robot {
   name: string;
   online: boolean;
   battery: number;
+  batterySource: BatterySource;
   state: RobotState;
   x: number;
   y: number;
@@ -173,9 +175,19 @@ export interface DeliveryTask {
   completedAt?: string;
   progress: number;
   ownerId?: string;
+  ownerUsername?: string;
   priority: TaskPriority;
   recipientName?: string;
   deliveryNote?: string;
+  pickupDistanceMeters?: number;
+  deliveryDistanceMeters?: number;
+}
+
+export interface DeliveryTaskPage {
+  items: DeliveryTask[];
+  total: number;
+  offset: number;
+  limit: number;
 }
 
 export interface TaskEstimate {
@@ -194,6 +206,19 @@ export interface UserIdentity {
   id: string;
   username: string;
   role: "ADMIN" | "USER";
+}
+
+export interface PendingAccount {
+  id: string;
+  email: string;
+  username: string;
+  createdAt: string;
+}
+
+export interface PasswordPolicy {
+  minimumLength: number;
+  requireLetter: boolean;
+  requireNumber: boolean;
 }
 
 export interface Alert {
@@ -220,6 +245,9 @@ export interface Notification {
   message: string;
   entityType?: string;
   entityId?: string;
+  category: "DELIVERY" | "ACTION_REQUIRED" | "CRITICAL" | "SYSTEM";
+  severity: "INFO" | "WARNING" | "CRITICAL";
+  actionRequired: boolean;
   readAt?: string;
   createdAt: string;
 }
@@ -227,6 +255,7 @@ export interface Notification {
 export interface NotificationPage {
   items: Notification[];
   unreadCount: number;
+  unreadByCategory: Partial<Record<Notification["category"], number>>;
   nextOffset?: number;
 }
 

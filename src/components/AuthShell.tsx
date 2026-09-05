@@ -71,7 +71,7 @@ function EyeIcon({visible}:{visible:boolean}) {
     : <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 3 18 18"/><path d="M10.6 6.2A11.7 11.7 0 0 1 12 6c6.5 0 10 6 10 6a18 18 0 0 1-2.1 2.8M6.6 6.6C3.6 8.4 2 12 2 12s3.5 6 10 6c1.8 0 3.3-.5 4.6-1.2M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>;
 }
 
-export function PasswordField({label,value,onChange,autoComplete="current-password",placeholder}:{label:string;value:string;onChange:(value:string)=>void;autoComplete?:string;placeholder?:string}) {
+export function PasswordField({label,value,onChange,autoComplete="current-password",placeholder,minLength}:{label:string;value:string;onChange:(value:string)=>void;autoComplete?:string;placeholder?:string;minLength?:number}) {
   const {locale}=useLocale();
   const copy=authText[locale];
   const [visible,setVisible]=React.useState(false);
@@ -79,7 +79,7 @@ export function PasswordField({label,value,onChange,autoComplete="current-passwo
     {label&&<span>{label}</span>}
     <span className="relative">
       <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-4 grid place-items-center text-slate-400"><svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-      <input type={visible?"text":"password"} autoComplete={autoComplete} value={value} onChange={(event)=>onChange(event.target.value)} placeholder={placeholder} required className="min-h-14 w-full rounded-xl border border-slate-300 bg-white px-12 pr-14 font-normal outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+      <input type={visible?"text":"password"} autoComplete={autoComplete} value={value} onChange={(event)=>onChange(event.target.value)} placeholder={placeholder} minLength={minLength} required className="min-h-14 w-full rounded-xl border border-slate-300 bg-white px-12 pr-14 font-normal outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
       <button type="button" onClick={()=>setVisible((current)=>!current)} className="absolute inset-y-1 right-1 grid w-11 place-items-center rounded-lg text-slate-500 transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200" aria-label={visible?copy.hidePassword:copy.showPassword} title={visible?copy.hidePassword:copy.showPassword}><EyeIcon visible={visible}/></button>
     </span>
   </label>;

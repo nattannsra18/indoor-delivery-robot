@@ -61,6 +61,7 @@ const EMPTY_ROBOT: Robot = {
   name: "SCUTTLE-01",
   online: false,
   battery: 0,
+  batterySource: "UNAVAILABLE",
   state: "OFFLINE",
   x: 0,
   y: 0,

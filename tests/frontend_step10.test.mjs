@@ -28,7 +28,7 @@ test("ADMIN navigation exposes operational and system destinations", () => {
     "Create Delivery",
     "All Tasks",
     "Station Management",
-    "Robot & Diagnostics",
+    "Account Requests",
     "Notifications",
     "Audit Log"
   ]);
@@ -40,6 +40,7 @@ test("USER navigation excludes admin and system destinations", () => {
   assert.equal(paths.includes("/robots"), false);
   assert.equal(paths.includes("/stations"), false);
   assert.equal(paths.includes("/audit"), false);
+  assert.equal(paths.includes("/users"), false);
 });
 
 test("USER dashboard does not request admin-only emergency state", () => {
@@ -117,8 +118,7 @@ test("a dashboard containing only queued tasks remains ready", () => {
 });
 
 test("direct USER access to admin-only routes is denied", () => {
-  assert.equal(routeAllowedForRole("/robots", "USER"), false);
   assert.equal(routeAllowedForRole("/stations/edit", "USER"), false);
   assert.equal(routeAllowedForRole("/tasks", "USER"), true);
-  assert.equal(routeAllowedForRole("/robots", "ADMIN"), true);
+  assert.equal(routeAllowedForRole("/audit", "USER"), false);
 });

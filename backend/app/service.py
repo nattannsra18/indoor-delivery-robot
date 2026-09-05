@@ -175,7 +175,8 @@ class DeliveryService:
         robot.y = telemetry.y
         robot.yaw = telemetry.yaw
         robot.battery = telemetry.battery
-        robot.last_seen = "Just now"
+        robot.battery_source = telemetry.battery_source.value
+        robot.last_seen = utc_now().isoformat()
 
         self.db.commit()
         self.db.refresh(robot)
@@ -205,7 +206,7 @@ class DeliveryService:
         robot.online = False
         robot.state = RobotState.OFFLINE
         robot.current_task_id = None
-        robot.last_seen = "Offline"
+        robot.last_seen = utc_now().isoformat()
         AuditService(self.db).log(actor_id, "robot.offline", "robot", robot.id, {"robot_id": robot.id})
         self.db.commit()
         self.db.refresh(robot)
@@ -221,7 +222,7 @@ class DeliveryService:
         robot.online = True
         robot.state = RobotState.IDLE
         robot.current_task_id = None
-        robot.last_seen = "Just now"
+        robot.last_seen = utc_now().isoformat()
         self.db.flush()
         self.dispatch_next_queued_task(robot=robot)
         AuditService(self.db).log(actor_id, "robot.online", "robot", robot.id, {"robot_id": robot.id})
@@ -244,7 +245,7 @@ class DeliveryService:
 
         robot.state = RobotState.IDLE
         robot.current_task_id = None
-        robot.last_seen = "Just now"
+        robot.last_seen = utc_now().isoformat()
         self.db.flush()
         self.dispatch_next_queued_task(robot=robot)
         AuditService(self.db).log(actor_id, "robot.recovered", "robot", robot.id, {"robot_id": robot.id})
@@ -297,6 +298,16 @@ class DeliveryService:
         self, task_status: TaskStatus | None = None, owner_id: str | None = None
     ) -> list[DeliveryTaskORM]:
         return self.repo.list_tasks(task_status, owner_id)
+
+    def list_tasks_page(
+        self,
+        task_status: TaskStatus | None,
+        owner_id: str | None,
+        query: str | None,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[DeliveryTaskORM], int]:
+        return self.repo.list_tasks_page(task_status, owner_id, query, offset, limit)
 
     def get_task(self, task_id: str) -> DeliveryTaskORM:
         return self._task_or_404(task_id)
@@ -444,7 +455,7 @@ class DeliveryService:
         )
 
         if robot.online:
-            robot.last_seen = "Just now"
+            robot.last_seen = utc_now().isoformat()
 
         self._log_event(
             task,
@@ -544,7 +555,7 @@ class DeliveryService:
 
         robot.state = RobotState.GOING_TO_PICKUP
         robot.current_task_id = task.id
-        robot.last_seen = "Just now"
+        robot.last_seen = utc_now().isoformat()
 
         self._log_event(
             task,
@@ -587,7 +598,7 @@ class DeliveryService:
 
         robot.state = RobotState.IDLE
         robot.current_task_id = None
-        robot.last_seen = "Just now"
+        robot.last_seen = utc_now().isoformat()
         AuditService(self.db).log(
             actor,
             "robot.recovered",
@@ -644,7 +655,7 @@ class DeliveryService:
         task.status = transition.to_status
         task.progress = PROGRESS[transition.to_status]
         robot.state = transition.robot_state
-        robot.last_seen = "Just now"
+        robot.last_seen = utc_now().isoformat()
 
         if transition.to_status == TaskStatus.WAITING_FOR_LOADING:
             pickup = self.get_station(task.pickup_station_id)
@@ -724,7 +735,7 @@ class DeliveryService:
         ):
             # Retain the current assignment until
             # Robot Agent confirms Nav2 cancellation.
-            robot.last_seen = "Just now"
+            robot.last_seen = utc_now().isoformat()
 
         self.db.commit()
         self.db.refresh(task)
@@ -760,7 +771,7 @@ class DeliveryService:
             if robot.online:
                 robot.state = RobotState.IDLE
                 robot.current_task_id = None
-                robot.last_seen = "Just now"
+                robot.last_seen = utc_now().isoformat()
             else:
                 robot.current_task_id = None
 
