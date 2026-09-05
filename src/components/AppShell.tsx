@@ -47,9 +47,10 @@ function ShellContent({ children }: { children: ReactNode }) {
   const { t } = useLocale();
 
   return (
-    <div className="min-h-screen lg:flex">
+    <div className="min-h-screen bg-[#f4f7fb] lg:flex">
       <Sidebar />
       <main className="min-w-0 flex-1 p-4 md:p-6 lg:p-8">
+        <div className="mx-auto w-full max-w-[1600px]">
         {user?.role === "ADMIN" && <AlertCenter />}
         {!loading && !backendOnline && (
           <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800 sm:flex-row sm:items-center sm:justify-between">
@@ -69,6 +70,7 @@ function ShellContent({ children }: { children: ReactNode }) {
           </div>
         )}
         {children}
+        </div>
       </main>
     </div>
   );

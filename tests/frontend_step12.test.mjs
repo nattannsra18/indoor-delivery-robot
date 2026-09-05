@@ -42,5 +42,5 @@ test("ADMIN and USER consume the backend canonical queue estimate", () => {
     /user\?\.role === "USER"\s*\?\s*await api\.getTaskEstimates/
   );
   assert.doesNotMatch(tasksSource, /buildQueueEstimates/);
-  assert.match(tasksSource, /taskEstimateById\.get\(task\.id\)/);
+  assert.match(tasksSource, /taskEstimateById\.get\(selectedTask\.id\)/);
 });

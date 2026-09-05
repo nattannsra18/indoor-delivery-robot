@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from .db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM
+from .db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM, UserORM
 from .models import TaskPriority, TaskStatus
 
 
@@ -69,6 +69,48 @@ class DeliveryRepository:
         stmt = stmt.order_by(DeliveryTaskORM.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
+    def list_tasks_page(
+        self,
+        task_status: TaskStatus | None,
+        owner_id: str | None,
+        query: str | None,
+        offset: int,
+        limit: int,
+    ) -> tuple[list[DeliveryTaskORM], int]:
+        filters = []
+        if task_status is not None:
+            filters.append(DeliveryTaskORM.status == task_status)
+        if owner_id is not None:
+            filters.append(DeliveryTaskORM.owner_id == owner_id)
+        normalized = (query or "").strip()
+        search_filter = None
+        if normalized:
+            pattern = f"%{normalized}%"
+            search_filter = (
+                DeliveryTaskORM.id.ilike(pattern)
+                | DeliveryTaskORM.pickup_station_id.ilike(pattern)
+                | DeliveryTaskORM.destination_station_id.ilike(pattern)
+                | UserORM.username.ilike(pattern)
+            )
+
+        item_statement = select(DeliveryTaskORM).outerjoin(
+            UserORM, DeliveryTaskORM.owner_id == UserORM.id
+        )
+        count_statement = select(func.count()).select_from(DeliveryTaskORM).outerjoin(
+            UserORM, DeliveryTaskORM.owner_id == UserORM.id
+        )
+        if filters:
+            item_statement = item_statement.where(*filters)
+            count_statement = count_statement.where(*filters)
+        if search_filter is not None:
+            item_statement = item_statement.where(search_filter)
+            count_statement = count_statement.where(search_filter)
+        items = list(self.db.scalars(
+            item_statement.order_by(DeliveryTaskORM.created_at.desc(), DeliveryTaskORM.id.desc())
+            .offset(offset).limit(limit)
+        ).all())
+        return items, int(self.db.scalar(count_statement) or 0)
+
     def get_task(self, task_id: str) -> DeliveryTaskORM | None:
         return self.db.get(DeliveryTaskORM, task_id)
 
@@ -118,7 +160,9 @@ class DeliveryRepository:
             .where(DeliveryTaskORM.status == TaskStatus.QUEUED)
             .order_by(*queued_task_ordering())
             .limit(1)
-            .with_for_update()
+            # Lock only the delivery task row. This remains valid if a loader
+            # option adds another table to the SELECT in the future.
+            .with_for_update(of=DeliveryTaskORM)
         )
         return self.db.scalar(stmt)
 

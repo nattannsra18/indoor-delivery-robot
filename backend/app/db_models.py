@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
 from .models import (
@@ -12,6 +12,7 @@ from .models import (
     RobotState,
     TaskPriority,
     TaskStatus,
+    NotificationCategory,
     UserRole,
     utc_now,
 )
@@ -99,6 +100,9 @@ class RobotORM(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     online: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     battery: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    battery_source: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="UNAVAILABLE"
+    )
     state: Mapped[RobotState] = mapped_column(
         enum_column(RobotState, "robot_state"),
         nullable=False,
@@ -108,7 +112,9 @@ class RobotORM(Base):
     y: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     yaw: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     current_task_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    last_seen: Mapped[str] = mapped_column(String(100), nullable=False, default="Just now")
+    last_seen: Mapped[str] = mapped_column(
+        String(100), nullable=False, default=lambda: utc_now().isoformat()
+    )
 
 
 class DeliveryTaskORM(Base):
@@ -155,6 +161,14 @@ class DeliveryTaskORM(Base):
     delivery_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     pickup_distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
     delivery_distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Keep owner data available to task DTOs without injecting a nullable
+    # OUTER JOIN into queue-locking queries. PostgreSQL rejects FOR UPDATE when
+    # it is applied to the nullable side of that join.
+    owner: Mapped[UserORM | None] = relationship(lazy="selectin")
+
+    @property
+    def owner_username(self) -> str | None:
+        return self.owner.username if self.owner is not None else None
 
 
 class TaskEventORM(Base):
@@ -226,6 +240,22 @@ class NotificationORM(Base):
     message: Mapped[str] = mapped_column(Text, nullable=False)
     entity_type: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     entity_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    category: Mapped[NotificationCategory] = mapped_column(
+        enum_column(NotificationCategory, "notification_category"),
+        nullable=False,
+        default=NotificationCategory.DELIVERY,
+        server_default=NotificationCategory.DELIVERY.value,
+        index=True,
+    )
+    severity: Mapped[AlertSeverity] = mapped_column(
+        enum_column(AlertSeverity, "notification_severity"),
+        nullable=False,
+        default=AlertSeverity.INFO,
+        server_default=AlertSeverity.INFO.value,
+    )
+    action_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false", index=True
+    )
     deduplication_key: Mapped[str] = mapped_column(String(300), nullable=False)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False, index=True)

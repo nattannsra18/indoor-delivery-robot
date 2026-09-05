@@ -438,6 +438,9 @@ async def robot_websocket(
                             "battery": (
                                 updated_robot.battery
                             ),
+                            "battery_source": (
+                                updated_robot.battery_source
+                            ),
                             "frame_id": (
                                 telemetry.frame_id
                             ),

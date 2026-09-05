@@ -7,7 +7,7 @@ import {
   RobotDiagnostics
 } from "@/types";
 import { useLocale } from "@/context/LocaleContext";
-import { operationalText } from "@/lib/i18n";
+import { adminUiText, operationalText } from "@/lib/i18n";
 
 const STALE_AFTER_MS = 5000;
 
@@ -59,6 +59,7 @@ export default function DiagnosticsCards({
 }: DiagnosticsCardsProps) {
   const { locale, format } = useLocale();
   const copy = operationalText[locale];
+  const ui = adminUiText[locale];
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -93,13 +94,12 @@ export default function DiagnosticsCards({
   return (
     <section
       aria-live="polite"
-      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+      className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-slate-900">
-            {copy.diagnostics}
-          </h2>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">ROS 2</p>
+          <h2 className="mt-1 text-lg font-bold text-slate-950">{ui.sensorHealth}</h2>
           <p className="mt-1 text-sm text-slate-500">
             {format(copy.diagnosticsHelp, { id: diagnostics.robotId })}
           </p>
@@ -117,12 +117,16 @@ export default function DiagnosticsCards({
         </div>
       </div>
 
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {(["OK", "WARN", "ERROR", "STALE"] as DiagnosticLevel[]).map((level) => <div key={level} className={`rounded-2xl px-4 py-3 ${LEVEL_STYLES[level].badge}`}><p className="text-2xl font-bold">{locallyStale && level === "STALE" ? diagnostics.statuses.length : diagnostics.statuses.filter((status) => status.level === level).length}</p><p className="text-xs font-semibold">{level}</p></div>)}
+      </div>
+
       {diagnostics.statuses.length === 0 ? (
         <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
           {copy.noDiagnosticStatuses}
         </div>
       ) : (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {diagnostics.statuses.map((status, index) => (
             <DiagnosticCard
               key={`${status.name}-${index}`}
@@ -150,10 +154,10 @@ function DiagnosticCard({
     ? "STALE"
     : status.level;
   const style = LEVEL_STYLES[displayLevel];
-  const details = status.values.slice(0, 4);
+  const details = status.values;
 
   return (
-    <article className={`rounded-xl border p-4 ${style.border}`}>
+    <article className={`rounded-2xl border bg-white p-4 ${style.border}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -169,6 +173,7 @@ function DiagnosticCard({
               {status.name}
             </p>
           )}
+          {status.hardwareId && <p className="mt-1 truncate text-xs text-slate-400">{status.hardwareId}</p>}
         </div>
         <LevelBadge
           level={displayLevel}
@@ -185,11 +190,11 @@ function DiagnosticCard({
       </p>
 
       {details.length > 0 && (
-        <dl className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
+        <dl className="mt-4 space-y-2 border-t border-slate-100 pt-4">
           {details.map((detail, index) => (
             <div
               key={`${detail.key}-${index}`}
-              className="flex items-start justify-between gap-3 text-xs"
+              className="flex items-start justify-between gap-4 text-xs"
             >
               <dt className="text-slate-400">
                 {formatKey(detail.key)}
