@@ -223,6 +223,8 @@ async def preview_task_route(
         destination_station_id=payload.destination_station_id,
         priority=payload.priority,
         map_revision=snapshot.revision,
+        pickup_distance_meters=pickup_distance,
+        delivery_distance_meters=delivery_distance,
     )
     return TaskRoutePreview(
         preview_id=preview_id,
@@ -235,6 +237,9 @@ async def preview_task_route(
         pickup_distance_meters=pickup_distance,
         delivery_distance_meters=delivery_distance,
         total_distance_meters=pickup_distance + delivery_distance,
+        travel_time_seconds=(
+            pickup_distance + delivery_distance
+        ) / PREVIEW_NOMINAL_SPEED_METERS_PER_SECOND,
         pickup_eta_seconds=pickup_eta,
         destination_eta_seconds=destination_eta,
         completion_eta_seconds=destination_eta + PREVIEW_UNLOADING_SECONDS,
@@ -256,20 +261,29 @@ async def create_task(
 ):
     authorize_priority(user, payload.priority)
     snapshot = map_store.get()
-    if snapshot is None or not route_preview_coordinator.consume_validation(
-        payload.preview_id,
-        owner_id=user.id,
-        robot_id="robot01",
-        pickup_station_id=payload.pickup_station_id,
-        destination_station_id=payload.destination_station_id,
-        priority=payload.priority,
-        map_revision=snapshot.revision if snapshot is not None else -1,
-    ):
+    validation = None
+    if snapshot is not None:
+        validation = route_preview_coordinator.consume_validation(
+            payload.preview_id,
+            owner_id=user.id,
+            robot_id="robot01",
+            pickup_station_id=payload.pickup_station_id,
+            destination_station_id=payload.destination_station_id,
+            priority=payload.priority,
+            map_revision=snapshot.revision,
+        )
+    if validation is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A fresh successful route preview is required",
         )
-    task = service.create_task(payload, owner_id=user.id, actor=TrustedActor.user(user))
+    task = service.create_task(
+        payload,
+        owner_id=user.id,
+        actor=TrustedActor.user(user),
+        pickup_distance_meters=validation.pickup_distance_meters,
+        delivery_distance_meters=validation.delivery_distance_meters,
+    )
     publish_committed_notifications(
         service.db, service.take_pending_notification_ids()
     )

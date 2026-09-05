@@ -32,6 +32,8 @@ class UserORM(Base):
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True, nullable=True)
+    google_subject: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
     password_hash: Mapped[str] = mapped_column(String(500), nullable=False)
     role: Mapped[UserRole] = mapped_column(enum_column(UserRole, "user_role"), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -49,6 +51,21 @@ class SessionORM(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
+
+class PasswordResetTokenORM(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+
 class StationORM(Base):
     __tablename__ = "stations"
 
@@ -58,6 +75,21 @@ class StationORM(Base):
     y: Mapped[float] = mapped_column(Float, nullable=False)
     yaw: Mapped[float] = mapped_column(Float, nullable=False)
     description: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    instructions: Mapped[str | None] = mapped_column(String(400), nullable=True)
+
+
+class MapMetadataORM(Base):
+    __tablename__ = "map_metadata"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    map_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    building: Mapped[str] = mapped_column(String(120), nullable=False)
+    floor: Mapped[str] = mapped_column(String(80), nullable=False)
+    area_description: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
+    )
 
 
 class RobotORM(Base):
@@ -121,6 +153,8 @@ class DeliveryTaskORM(Base):
     )
     recipient_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     delivery_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pickup_distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
+    delivery_distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class TaskEventORM(Base):

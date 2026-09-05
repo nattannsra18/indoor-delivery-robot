@@ -6,7 +6,7 @@ from .db_models import AuditRecordORM
 from .domain_context import ActorType, TrustedActor
 
 ALLOWED_METADATA = frozenset({"task_status", "robot_id", "alert_id", "reason", "priority"})
-ALLOWED_ACTION_FILTERS = frozenset({"auth.login", "auth.logout", "task.created", "task.dispatched", "task.cancel", "task.retry", "task.confirm_loaded", "task.confirm_received", "task.arrived_pickup", "task.arrived_destination", "task.navigation_failed", "alert.created", "alert.reopened", "alert.acknowledged", "alert.resolved", "emergency.activate_requested", "emergency.reset_requested", "emergency.activate_succeeded", "emergency.reset_succeeded", "emergency.command_failed", "robot.offline", "robot.online", "robot.recovered", "robot.connected", "robot.disconnected", "station.created", "station.deleted"})
+ALLOWED_ACTION_FILTERS = frozenset({"auth.login", "auth.logout", "auth.signup", "auth.account_approved", "auth.password_reset", "task.created", "task.dispatched", "task.cancel", "task.retry", "task.confirm_loaded", "task.confirm_received", "task.arrived_pickup", "task.arrived_destination", "task.navigation_failed", "alert.created", "alert.reopened", "alert.acknowledged", "alert.resolved", "emergency.activate_requested", "emergency.reset_requested", "emergency.activate_succeeded", "emergency.reset_succeeded", "emergency.command_failed", "robot.offline", "robot.online", "robot.recovered", "robot.connected", "robot.disconnected", "station.created", "station.updated", "station.deleted", "map.metadata_updated"})
 class AuditService:
     def __init__(self, db: Session): self.db = db
     def log(self, actor: TrustedActor | str | None, action: str, entity_type: str, entity_id: str | None, metadata: dict | None = None, result="success"):

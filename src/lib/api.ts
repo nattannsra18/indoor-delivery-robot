@@ -2,6 +2,7 @@ import type {
   Alert,
   DeliveryTask,
   EmergencyStop,
+  MapMetadata,
   OccupancyGridMap,
   Robot,
   Station,
@@ -81,6 +82,7 @@ type ApiTaskHistoryEntry = {
 };
 
 type ApiTaskEstimate = {
+  start_eta_seconds: number | null;
   task_id: string;
   status: TaskStatus;
   queue_position: number | null;
@@ -102,6 +104,7 @@ type ApiTaskRoutePreview = {
   pickup_distance_meters: number;
   delivery_distance_meters: number;
   total_distance_meters: number;
+  travel_time_seconds: number;
   pickup_eta_seconds: number;
   destination_eta_seconds: number;
   completion_eta_seconds: number;
@@ -110,6 +113,8 @@ type ApiTaskRoutePreview = {
 };
 
 type ApiOverview = {
+  global_queued_count: number;
+  robot_available_seconds: number | null;
   robot: ApiRobot;
   active_task: ApiDeliveryTask | null;
   queued_count: number;
@@ -218,11 +223,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function login(username: string, password: string): Promise<UserIdentity> {
+export function login(identifier: string, password: string): Promise<UserIdentity> {
   return request<UserIdentity>("/api/auth/login", {
-    method: "POST", body: JSON.stringify({ username, password })
+    method: "POST", body: JSON.stringify({ identifier, password })
   });
 }
+
+export function signup(input: {email:string;username:string;password:string}): Promise<{status:"PENDING_APPROVAL"}> {
+  return request("/api/auth/signup", {method:"POST",body:JSON.stringify(input)});
+}
+
+export function forgotPassword(email: string): Promise<{accepted:boolean;delivery_configured:boolean}> {
+  return request("/api/auth/forgot-password", {method:"POST",body:JSON.stringify({email})});
+}
+
+export function resetPassword(token: string, password: string): Promise<void> {
+  return request("/api/auth/reset-password", {method:"POST",body:JSON.stringify({token,password})});
+}
+
+export function getGoogleAuthConfiguration(): Promise<{enabled:boolean}> {
+  return request("/api/auth/google/config");
+}
+
+export const GOOGLE_AUTH_START_URL = `${API_BASE_URL}/api/auth/google/start`;
 
 export function logout(): Promise<void> {
   return request<void>("/api/auth/logout", { method: "POST" });
@@ -261,6 +284,8 @@ export async function getOverview() {
   return {
     robot: toRobot(data.robot),
     activeTask: data.active_task ? toTask(data.active_task) : undefined,
+    globalQueuedCount: data.global_queued_count,
+    robotAvailableSeconds: data.robot_available_seconds ?? undefined,
     queuedCount: data.queued_count,
     completedCount: data.completed_count,
     failedCount: data.failed_count
@@ -288,6 +313,42 @@ export async function getMap(): Promise<OccupancyGridMap> {
     receivedAt: map.received_at
   };
 }
+
+type ApiMapMetadata = {
+  map_name: string;
+  building: string;
+  floor: string;
+  area_description: string | null;
+  updated_at: string;
+};
+
+function toMapMetadata(metadata: ApiMapMetadata): MapMetadata {
+  return {
+    mapName: metadata.map_name,
+    building: metadata.building,
+    floor: metadata.floor,
+    areaDescription: metadata.area_description ?? undefined,
+    updatedAt: metadata.updated_at,
+  };
+}
+
+export async function getMapMetadata(): Promise<MapMetadata> {
+  return toMapMetadata(await request<ApiMapMetadata>("/api/map/metadata"));
+}
+
+export async function updateMapMetadata(
+  metadata: Omit<MapMetadata, "updatedAt">
+): Promise<MapMetadata> {
+  return toMapMetadata(await request<ApiMapMetadata>("/api/map/metadata", {
+    method: "PUT",
+    body: JSON.stringify({
+      map_name: metadata.mapName,
+      building: metadata.building,
+      floor: metadata.floor,
+      area_description: metadata.areaDescription ?? null,
+    }),
+  }));
+}
 export async function getTasks(): Promise<DeliveryTask[]> {
   const tasks = await request<ApiDeliveryTask[]>("/api/tasks");
   return tasks.map(toTask);
@@ -296,6 +357,7 @@ export async function getTasks(): Promise<DeliveryTask[]> {
 export async function getTaskEstimates(): Promise<TaskEstimate[]> {
   const estimates = await request<ApiTaskEstimate[]>("/api/tasks/estimates");
   return estimates.map((estimate) => ({
+    startEtaSeconds: estimate.start_eta_seconds ?? undefined,
     taskId: estimate.task_id,
     status: estimate.status,
     queuePosition: estimate.queue_position ?? undefined,
@@ -351,6 +413,7 @@ export async function previewTaskRoute(
     pickupDistanceMeters: preview.pickup_distance_meters,
     deliveryDistanceMeters: preview.delivery_distance_meters,
     totalDistanceMeters: preview.total_distance_meters,
+    travelTimeSeconds: preview.travel_time_seconds,
     pickupEtaSeconds: preview.pickup_eta_seconds,
     destinationEtaSeconds: preview.destination_eta_seconds,
     completionEtaSeconds: preview.completion_eta_seconds,
@@ -399,6 +462,16 @@ export async function recoverRobot(robotId: string): Promise<Robot> {
 export async function addStation(station: Omit<Station, "id">): Promise<Station> {
   return request<Station>("/api/stations", {
     method: "POST",
+    body: JSON.stringify(station)
+  });
+}
+
+export async function updateStation(
+  stationId: string,
+  station: Omit<Station, "id">
+): Promise<Station> {
+  return request<Station>(`/api/stations/${stationId}`, {
+    method: "PUT",
     body: JSON.stringify(station)
   });
 }

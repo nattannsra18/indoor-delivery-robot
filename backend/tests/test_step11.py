@@ -162,6 +162,57 @@ def test_user_position_uses_global_dispatcher_queue_without_data_leak():
         assert other_owner.id not in {item.task_id for item in estimates}
 
 
+def test_user_queue_estimate_exposes_time_until_owned_task_starts():
+    with Session() as db:
+        _, _, owned = create_global_queue(db)
+        estimate = next(
+            item for item in QueueEstimateService(db).list_for_owner("alice")
+            if item.task_id == owned.id
+        )
+
+        assert estimate.queue_position == 2
+        assert estimate.start_eta_seconds == 134.0
+        assert estimate.pickup_eta_seconds == 156.0
+
+
+def test_queue_estimate_uses_preview_distances_and_nominal_robot_speed():
+    with Session() as db:
+        _, preceding, owned = create_global_queue(db)
+        preceding.pickup_distance_meters = 5.0
+        preceding.delivery_distance_meters = 10.0
+        owned.pickup_distance_meters = 2.0
+        owned.delivery_distance_meters = 4.0
+        db.commit()
+
+        estimate = next(
+            item for item in QueueEstimateService(db).list_for_owner("alice")
+            if item.task_id == owned.id
+        )
+
+        # Active fallback: 67s. Preceding task: 5/0.25 + 10 +
+        # 10/0.25 + 12 = 82s. This task reaches pickup after 2/0.25 = 8s.
+        assert estimate.start_eta_seconds == pytest.approx(149.0)
+        assert estimate.pickup_eta_seconds == pytest.approx(157.0)
+        assert estimate.destination_eta_seconds == pytest.approx(183.0)
+
+        overview = DeliveryService(db).overview("alice")
+        # Owned task duration: 2/0.25 + 10 + 4/0.25 + 12 = 46s.
+        assert overview.robot_available_seconds == pytest.approx(195.0)
+
+
+def test_user_overview_exposes_only_aggregate_robot_availability():
+    with Session() as db:
+        active, other_owner, _ = create_global_queue(db)
+        overview = DeliveryService(db).overview("alice")
+
+        assert overview.active_task is None
+        assert overview.global_queued_count == 2
+        assert overview.robot_available_seconds == 201.0
+        serialized = overview.model_dump()
+        assert active.id not in str(serialized)
+        assert other_owner.id not in str(serialized)
+
+
 def test_admin_keeps_global_visibility_and_ownerless_does_not_leak():
     with Session() as db:
         _, _, owned = create_global_queue(db)
@@ -374,6 +425,33 @@ def test_accepted_navigation_result_clears_matching_feedback(monkeypatch):
         asyncio.run(robot_websocket(websocket, "robot01", db))
 
     assert ("robot01", task.id, "pickup") in calls
+
+
+def test_aborted_navigation_auto_dispatches_and_sends_next_command():
+    with Session() as db:
+        failed, next_task, _ = create_global_queue(db)
+        command = DeliveryService(db).build_navigation_command(failed)
+        assert command is not None
+        websocket = StubRobotWebSocket([
+            {
+                "type": "navigation_result",
+                "command_id": command["command_id"],
+                "task_id": failed.id,
+                "stage": "pickup",
+                "status": "aborted",
+                "detail": "Planner aborted the goal",
+            }
+        ])
+
+        asyncio.run(robot_websocket(websocket, "robot01", db))
+
+        dispatched = [
+            message
+            for message in websocket.sent
+            if message.get("type") == "command"
+            and message.get("task_id") == next_task.id
+        ]
+        assert dispatched
 
 
 def test_accepted_navigation_cancellation_clears_matching_feedback(monkeypatch):

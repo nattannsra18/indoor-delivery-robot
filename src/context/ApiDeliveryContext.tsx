@@ -30,6 +30,7 @@ import {
   NavigationFeedback,
   NavigationPath,
   NavigationPathStatus,
+  MapMetadata,
   OccupancyGridMap,
   Robot,
   RobotDiagnostics,
@@ -90,7 +91,10 @@ type NavigationFeedbackMessage = {
 };
 
 type ApiDeliveryContextValue = {
+  globalQueuedCount: number;
+  robotAvailableSeconds?: number;
   occupancyMap?: OccupancyGridMap;
+  mapMetadata?: MapMetadata;
   navigationFeedback?: NavigationFeedback;
   navigationPath?: NavigationPath;
   navigationPathStatus: NavigationPathStatus;
@@ -109,6 +113,13 @@ type ApiDeliveryContextValue = {
   createTask: (input: TaskCreateInput) => Promise<DeliveryTask>;
   previewTaskRoute: (input: TaskRoutePreviewInput) => Promise<TaskRoutePreview>;
   addStation: (
+    station: Omit<Station, "id">
+  ) => Promise<Station>;
+  updateMapMetadata: (
+    metadata: Omit<MapMetadata, "updatedAt">
+  ) => Promise<MapMetadata>;
+  updateStation: (
+    stationId: string,
     station: Omit<Station, "id">
   ) => Promise<Station>;
   removeStation: (
@@ -242,6 +253,8 @@ export function ApiDeliveryProvider({
   const { loseSession, user } = useAuth();
   const [occupancyMap, setOccupancyMap] =
     useState<OccupancyGridMap | undefined>();
+  const [mapMetadata, setMapMetadata] =
+    useState<MapMetadata | undefined>();
   const [
     navigationFeedback,
     setNavigationFeedback
@@ -257,6 +270,8 @@ export function ApiDeliveryProvider({
   const [stations, setStations] = useState<Station[]>([]);
   const [tasks, setTasks] = useState<DeliveryTask[]>([]);
   const [robot, setRobot] = useState<Robot>(EMPTY_ROBOT);
+  const [globalQueuedCount, setGlobalQueuedCount] = useState(0);
+  const [robotAvailableSeconds, setRobotAvailableSeconds] = useState<number>();
   const [loading, setLoading] = useState(true);
   const [backendOnline, setBackendOnline] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -303,6 +318,8 @@ export function ApiDeliveryProvider({
         : undefined;
       const estimates = await api.getTaskEstimates();
       if (!mountedRef.current) return;
+      setGlobalQueuedCount(overview.globalQueuedCount);
+      setRobotAvailableSeconds(overview.robotAvailableSeconds);
       setRobot(overview.robot);
       setStations(stationData);
       setTasks(taskData);
@@ -401,11 +418,20 @@ export function ApiDeliveryProvider({
     }
   }, []);
 
+  const refreshMapMetadata = useCallback(async () => {
+    try {
+      const metadata = await api.getMapMetadata();
+      if (mountedRef.current) setMapMetadata(metadata);
+    } catch {
+      if (mountedRef.current) setMapMetadata(undefined);
+    }
+  }, []);
+
   useEffect(() => {
     void refreshAll();
     const interval = window.setInterval(
       () => void refreshAll(),
-      2000
+      1000
     );
     return () => window.clearInterval(interval);
   }, [refreshAll]);
@@ -620,12 +646,16 @@ export function ApiDeliveryProvider({
 
   useEffect(() => {
     void refreshMap();
+    void refreshMapMetadata();
     const interval = window.setInterval(
-      () => void refreshMap(),
+      () => {
+        void refreshMap();
+        void refreshMapMetadata();
+      },
       5000
     );
     return () => window.clearInterval(interval);
-  }, [refreshMap]);
+  }, [refreshMap, refreshMapMetadata]);
 
   const queuedTasks = useMemo(
     () => tasks.filter((task) => task.status === "QUEUED"),
@@ -713,6 +743,40 @@ export function ApiDeliveryProvider({
     [refreshAll]
   );
 
+  const updateMapMetadata = useCallback(
+    async (metadata: Omit<MapMetadata, "updatedAt">) => {
+      try {
+        const updated = await api.updateMapMetadata(metadata);
+        setMapMetadata(updated);
+        return updated;
+      } catch (err) {
+        const message = err instanceof Error
+          ? err.message
+          : "Unable to update map information";
+        setError(message);
+        throw err;
+      }
+    },
+    []
+  );
+
+  const updateStation = useCallback(
+    async (stationId: string, station: Omit<Station, "id">) => {
+      try {
+        const updated = await api.updateStation(stationId, station);
+        await refreshAll();
+        return updated;
+      } catch (err) {
+        const message = err instanceof Error
+          ? err.message
+          : "Unable to update station";
+        setError(message);
+        throw err;
+      }
+    },
+    [refreshAll]
+  );
+
   const removeStation = useCallback(
     async (stationId: string) => {
       try {
@@ -782,6 +846,7 @@ export function ApiDeliveryProvider({
   const value = useMemo<ApiDeliveryContextValue>(
     () => ({
       occupancyMap,
+      mapMetadata,
       navigationFeedback,
       navigationPath,
       navigationPathStatus,
@@ -797,9 +862,13 @@ export function ApiDeliveryProvider({
       error,
       emergencyStop,
       taskEstimates,
+      globalQueuedCount,
+      robotAvailableSeconds,
       createTask,
       previewTaskRoute,
       addStation,
+      updateMapMetadata,
+      updateStation,
       removeStation,
       advanceRobotWorkflow,
       cancelTask,
@@ -810,6 +879,7 @@ export function ApiDeliveryProvider({
     }),
     [
       occupancyMap,
+      mapMetadata,
       navigationFeedback,
       navigationPath,
       navigationPathStatus,
@@ -825,9 +895,13 @@ export function ApiDeliveryProvider({
       error,
       emergencyStop,
       taskEstimates,
+      globalQueuedCount,
+      robotAvailableSeconds,
       createTask,
       previewTaskRoute,
       addStation,
+      updateMapMetadata,
+      updateStation,
       removeStation,
       advanceRobotWorkflow,
       cancelTask,

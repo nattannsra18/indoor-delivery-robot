@@ -33,15 +33,17 @@ test("creation sends the one-use preview id back to FastAPI", () => {
 });
 
 
-test("delivery review validates with Nav2 before task creation", () => {
+test("map-first delivery flow validates with Nav2 before task creation", () => {
   const pageSource = readFileSync(
     new URL("../src/app/delivery/page.tsx", import.meta.url),
     "utf8"
   );
   assert.match(pageSource, /await previewTaskRoute/);
-  assert.match(pageSource, /previewId:\s*routePreview\.previewId/);
+  assert.match(pageSource, /previewId:\s*preview\.previewId/);
   assert.match(pageSource, /routePreviewIsFresh/);
-  assert.match(pageSource, /copy\.routeReachable/);
+  assert.match(pageSource, /flow\.routeAvailable/);
+  assert.match(pageSource, /role="dialog"/);
+  assert.match(pageSource, /requestCreated/);
 });
 
 

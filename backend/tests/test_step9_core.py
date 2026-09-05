@@ -3,7 +3,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException, Request, Response, WebSocketDisconnect
+from fastapi import BackgroundTasks, HTTPException, Request, Response, WebSocketDisconnect
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -28,14 +28,15 @@ from app.db_models import (
     DeliveryTaskORM,
     EmergencyStopORM,
     RobotORM,
+    PasswordResetTokenORM,
     SessionORM,
     StationORM,
     TaskEventORM,
     UserORM,
 )
 from app.emergency_service import EmergencyStopService
-from app.models import AlertSeverity, DeliveryTaskCreate, LoginRequest, UserRole, utc_now
-from app.routers.auth import login
+from app.models import AlertSeverity, DeliveryTaskCreate, ForgotPasswordRequest, LoginRequest, ResetPasswordRequest, SignupRequest, UserRole, utc_now
+from app.routers.auth import approve_account, forgot_password, login, pending_accounts, reset_password, signup
 from app.routers.dashboard_ws import dashboard_websocket
 from app.routers.tasks import authorize_task, list_tasks as list_visible_tasks
 from app.seed import seed_database
@@ -60,6 +61,7 @@ def reset_database(monkeypatch):
             TaskEventORM,
             DeliveryTaskORM,
             SessionORM,
+            PasswordResetTokenORM,
             AlertORM,
             EmergencyStopORM,
             UserORM,
@@ -122,6 +124,86 @@ def test_password_hashing_verification_and_generic_login_failure(monkeypatch):
         assert missing.body == wrong.body
         assert authenticate(db, "missing", "bad") is None
         assert authenticate(db, "admin", "bad") is None
+
+
+def test_login_accepts_email_and_new_signup_waits_for_approval():
+    with Session() as db:
+        alice = db.get(UserORM, "alice")
+        alice.email = "alice@example.com"
+        db.commit()
+        response = Response()
+        authenticated = login(
+            LoginRequest(identifier="ALICE@example.com", password="alice-pass"),
+            request(),
+            response,
+            db,
+        )
+        assert authenticated.id == "alice"
+        assert SESSION_COOKIE_NAME in response.headers["set-cookie"]
+
+        result = signup(
+            SignupRequest(
+                email="new.user@example.com",
+                username="new.user",
+                password="1",
+            ),
+            db,
+        )
+        pending = db.scalar(select(UserORM).where(UserORM.username == "new.user"))
+        assert result.status == "PENDING_APPROVAL"
+        assert pending is not None
+        assert pending.email == "new.user@example.com"
+        assert pending.active is False
+        admin = db.get(UserORM, "admin")
+        assert [account.id for account in pending_accounts(admin, db)] == [pending.id]
+        approved = approve_account(pending.id, admin, db)
+        assert approved.active is True
+
+
+def test_password_reset_token_is_one_time_and_revokes_sessions():
+    raw_token = "reset-token-that-is-long-enough-for-validation"
+    with Session() as db:
+        alice = db.get(UserORM, "alice")
+        session_token, _ = create_session(db, alice)
+        db.add(
+            PasswordResetTokenORM(
+                id="reset-alice",
+                token_hash=token_digest(raw_token),
+                user_id=alice.id,
+                expires_at=utc_now() + timedelta(minutes=5),
+            )
+        )
+        db.commit()
+        result = reset_password(
+            ResetPasswordRequest(token=raw_token, password="2"),
+            db,
+        )
+        assert result.status_code == 204
+        assert verify_password("2", alice.password_hash)
+        assert resolve_session(db, session_token) is None
+        repeated = reset_password(
+            ResetPasswordRequest(token=raw_token, password="3"),
+            db,
+        )
+        assert repeated.status_code == 400
+
+
+def test_forgot_password_response_does_not_reveal_account(monkeypatch):
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("SMTP_FROM_EMAIL", raising=False)
+    with Session() as db:
+        alice = db.get(UserORM, "alice")
+        alice.email = "alice@example.com"
+        db.commit()
+        existing = forgot_password(
+            ForgotPasswordRequest(email="alice@example.com"), BackgroundTasks(), db
+        )
+        missing = forgot_password(
+            ForgotPasswordRequest(email="missing@example.com"), BackgroundTasks(), db
+        )
+        assert existing == missing
+        assert existing.accepted is True
+        assert existing.delivery_configured is False
 
 
 def test_session_hash_persistence_expiration_and_revocation():

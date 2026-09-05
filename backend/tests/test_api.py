@@ -535,8 +535,8 @@ def test_navigation_failure_and_retry():
     assert failed.json()["status"] == "FAILED"
 
     robot = client.get("/api/robots/robot01").json()
-    assert robot["state"] == "ERROR"
-    assert robot["current_task_id"] == task["id"]
+    assert robot["state"] == "IDLE"
+    assert robot["current_task_id"] is None
 
     retried = client.post(f"/api/tasks/{task['id']}/retry")
     assert retried.status_code == 200
@@ -570,16 +570,16 @@ def test_robot_offline_fails_active_task_and_online_dispatches_queue():
     assert second_after["status"] == "GOING_TO_PICKUP"
 
 
-def test_recover_robot_after_error_dispatches_queued_task():
+def test_navigation_failure_auto_recovers_and_dispatches_queued_task():
     first = create_task("A", "C")
     second = create_task("B", "D")
     advance(first["id"], "NAVIGATION_FAILED")
 
-    recover = client.post("/api/robots/robot01/recover")
-    assert recover.status_code == 200
-
     second_after = client.get(f"/api/tasks/{second['id']}").json()
     assert second_after["status"] == "GOING_TO_PICKUP"
+    robot = client.get("/api/robots/robot01").json()
+    assert robot["state"] == "GOING_TO_PICKUP"
+    assert robot["current_task_id"] == second["id"]
 
 
 def test_reject_same_pickup_and_destination():

@@ -45,6 +45,7 @@ export interface TaskRoutePreview {
   pickupDistanceMeters: number;
   deliveryDistanceMeters: number;
   totalDistanceMeters: number;
+  travelTimeSeconds: number;
   pickupEtaSeconds: number;
   destinationEtaSeconds: number;
   completionEtaSeconds: number;
@@ -59,6 +60,16 @@ export interface Station {
   y: number;
   yaw: number;
   description?: string;
+  location?: string;
+  instructions?: string;
+}
+
+export interface MapMetadata {
+  mapName: string;
+  building: string;
+  floor: string;
+  areaDescription?: string;
+  updatedAt: string;
 }
 
 export interface Robot {
@@ -168,6 +179,7 @@ export interface DeliveryTask {
 }
 
 export interface TaskEstimate {
+  startEtaSeconds?: number;
   taskId: string;
   status: TaskStatus;
   queuePosition?: number;

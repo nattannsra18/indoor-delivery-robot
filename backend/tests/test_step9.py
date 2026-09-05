@@ -115,7 +115,12 @@ def test_authentication_hash_session_persistence_expiry_logout_and_generic_failu
     second = client.post("/api/auth/login", json={"username": "admin", "password": "bad"})
     assert first.status_code == second.status_code == 401
     assert first.json() == second.json()
-    assert client.post("/api/auth/login", json={"username": "disabled", "password": "disabled-pass"}).status_code == 401
+    pending = client.post(
+        "/api/auth/login",
+        json={"username": "disabled", "password": "disabled-pass"},
+    )
+    assert pending.status_code == 403
+    assert pending.json() == {"detail": "Account pending approval"}
     login(client)
     assert client.post("/api/auth/logout").status_code == 204
     assert client.get("/api/auth/me").status_code == 401

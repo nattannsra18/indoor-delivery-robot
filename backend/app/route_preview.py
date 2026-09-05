@@ -42,6 +42,8 @@ class PreviewValidation:
     priority: TaskPriority
     map_revision: int
     expires_at: float
+    pickup_distance_meters: float | None = None
+    delivery_distance_meters: float | None = None
 
 
 class RoutePreviewCoordinator:
@@ -123,6 +125,8 @@ class RoutePreviewCoordinator:
         destination_station_id: str,
         priority: TaskPriority,
         map_revision: int,
+        pickup_distance_meters: float | None = None,
+        delivery_distance_meters: float | None = None,
         validity_seconds: float = PREVIEW_VALIDITY_SECONDS,
     ) -> str:
         preview_id = str(uuid4())
@@ -135,6 +139,8 @@ class RoutePreviewCoordinator:
             priority=priority,
             map_revision=map_revision,
             expires_at=now + validity_seconds,
+            pickup_distance_meters=pickup_distance_meters,
+            delivery_distance_meters=delivery_distance_meters,
         )
         with self._lock:
             self._remove_expired_locked(now)
@@ -151,14 +157,14 @@ class RoutePreviewCoordinator:
         destination_station_id: str,
         priority: TaskPriority,
         map_revision: int,
-    ) -> bool:
+    ) -> PreviewValidation | None:
         if not preview_id:
-            return False
+            return None
         now = time.monotonic()
         with self._lock:
             self._remove_expired_locked(now)
             validation = self._validations.pop(preview_id, None)
-        return bool(
+        matches = (
             validation is not None
             and validation.owner_id == owner_id
             and validation.robot_id == robot_id
@@ -167,6 +173,7 @@ class RoutePreviewCoordinator:
             and validation.priority == priority
             and validation.map_revision == map_revision
         )
+        return validation if matches else None
 
     def clear(self) -> None:
         with self._lock:

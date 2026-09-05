@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Response, status
 
 from ..dependencies import get_service
-from ..models import Station, StationCreate
+from ..models import Station, StationCreate, StationUpdate
 from ..service import DeliveryService
 from ..auth import require_admin, require_user
 from ..db_models import UserORM
@@ -22,6 +22,16 @@ def get_station(station_id: str, service: DeliveryService = Depends(get_service)
 @router.post("", response_model=Station, status_code=status.HTTP_201_CREATED)
 def create_station(payload: StationCreate, service: DeliveryService = Depends(get_service), user: UserORM = Depends(require_admin)):
     return service.add_station(payload, user.id)
+
+
+@router.put("/{station_id}", response_model=Station)
+def update_station(
+    station_id: str,
+    payload: StationUpdate,
+    service: DeliveryService = Depends(get_service),
+    user: UserORM = Depends(require_admin),
+):
+    return service.update_station(station_id, payload, user.id)
 
 
 @router.delete("/{station_id}", status_code=status.HTTP_204_NO_CONTENT)

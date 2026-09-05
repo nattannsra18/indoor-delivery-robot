@@ -23,19 +23,19 @@ export default function Sidebar() {
   useEffect(() => { let active = true; const refresh = () => { getNotifications(0, 1).then((page) => { if (active) setUnread(page.unreadCount); }).catch(() => {}); }; refresh(); window.addEventListener("idr:notification", refresh); return () => { active = false; window.removeEventListener("idr:notification", refresh); }; }, [pathname]);
 
   return (
-    <aside className="border-b border-slate-200 bg-slate-950 text-white lg:min-h-screen lg:w-64 lg:border-b-0 lg:border-r lg:border-slate-800">
+    <aside className="border-b border-slate-200 bg-slate-950 text-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:min-h-0 lg:w-64 lg:shrink-0 lg:self-start lg:flex-col lg:overflow-y-auto lg:border-b-0 lg:border-r lg:border-slate-800">
       <div className="flex items-center justify-between gap-3 px-5 py-4">
         <div className="flex items-center gap-3">
         <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-600 font-bold">R</div>
         <div className="min-w-0">
           <p className="truncate font-semibold">{t("appName")}</p>
-          <p className="text-xs text-slate-400">{t("controlCenter")}</p>
+          <p className="text-xs text-slate-400">{user?.role === "USER" ? (locale === "th" ? "พอร์ทัลผู้ใช้งาน" : "User Portal") : t("controlCenter")}</p>
         </div>
         </div>
         <button type="button" className="min-h-11 min-w-11 rounded border border-slate-700 lg:hidden" aria-label={t("openNavigation")} aria-expanded={open} aria-controls="primary-navigation" onClick={() => setOpen((value) => !value)}>☰</button>
       </div>
 
-      <nav id="primary-navigation" className={`${open ? "block" : "hidden"} px-3 pb-4 lg:block lg:space-y-1`}>
+      <nav id="primary-navigation" className={`${open ? "block" : "hidden"} px-3 pb-4 lg:block lg:min-h-0 lg:flex-1 lg:space-y-1`}>
         {navItems.map((item) => {
           const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
@@ -53,19 +53,24 @@ export default function Sidebar() {
 
       <div className={`${open ? "flex" : "hidden"} items-center justify-between px-5 pb-4 lg:hidden`}><LanguageSwitcher /><button onClick={() => void logout()} className="min-h-10 rounded border border-slate-700 px-3 text-sm">{t("logout")}</button></div>
 
-      <div className="hidden px-5 py-6 lg:block">
-        <div className="mb-3 flex items-center justify-between gap-2 text-xs text-slate-300"><span>{user?.username} · {user?.role}</span><LanguageSwitcher /><button onClick={() => void logout()} className="rounded border border-slate-700 px-2 py-1">{t("logout")}</button></div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
-          <div className="mb-2 flex items-center gap-2">
-            <span className={`h-2.5 w-2.5 rounded-full ${loading ? "bg-amber-400" : backendOnline ? "bg-emerald-400" : "bg-red-400"}`} />
-            <span className="text-sm font-medium">
-              {sidebarConnectionLabel(loading, backendOnline, locale)}
-            </span>
+      <div className="hidden shrink-0 px-5 py-6 lg:block">
+        {user?.role === "USER" ? (
+          <div className="space-y-4 border-t border-slate-800 pt-5">
+            <div className="flex items-center gap-3">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-800 text-sm font-bold">{user.username.slice(0, 1).toUpperCase()}</span>
+              <div className="min-w-0"><p className="truncate text-sm font-semibold">{user.username}</p><p className="text-xs text-slate-400">{locale === "th" ? "ผู้ใช้งาน" : "User"}</p></div>
+            </div>
+            <div className="flex items-center justify-between gap-2"><LanguageSwitcher /><button onClick={() => void logout()} className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-900">↪ {t("logout")}</button></div>
           </div>
-          <p className="text-xs leading-5 text-slate-400">
-            {t("sidebarDescription")}
-          </p>
-        </div>
+        ) : (
+          <>
+            <div className="mb-3 flex items-center justify-between gap-2 text-xs text-slate-300"><span>{user?.username} · {user?.role}</span><LanguageSwitcher /><button onClick={() => void logout()} className="rounded border border-slate-700 px-2 py-1">{t("logout")}</button></div>
+            <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+              <div className="mb-2 flex items-center gap-2"><span className={`h-2.5 w-2.5 rounded-full ${loading ? "bg-amber-400" : backendOnline ? "bg-emerald-400" : "bg-red-400"}`} /><span className="text-sm font-medium">{sidebarConnectionLabel(loading, backendOnline, locale)}</span></div>
+              <p className="text-xs leading-5 text-slate-400">{t("sidebarDescription")}</p>
+            </div>
+          </>
+        )}
       </div>
     </aside>
   );

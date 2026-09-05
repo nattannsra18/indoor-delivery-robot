@@ -2,6 +2,7 @@ import {
   NavigationFeedback,
   TaskStatus
 } from "@/types";
+import { useEffect, useState } from "react";
 import { useLocale } from "@/context/LocaleContext";
 import { operationalText } from "@/lib/i18n";
 
@@ -23,14 +24,20 @@ export default function NavigationMetrics({
 }: NavigationMetricsProps) {
   const { locale, format } = useLocale();
   const copy = operationalText[locale];
-  if (!NAVIGATING_STATUSES.includes(status)) {
-    return null;
-  }
-
   const currentFeedback =
     feedback?.taskId === taskId
       ? feedback
       : undefined;
+  const countdownEta = useSecondCountdown(
+    currentFeedback?.estimatedTimeRemainingSeconds
+  );
+  const elapsedNavigationTime = useSecondCountUp(
+    currentFeedback?.navigationTimeSeconds
+  );
+
+  if (!NAVIGATING_STATUSES.includes(status)) {
+    return null;
+  }
 
   if (!currentFeedback) {
     return (
@@ -81,15 +88,14 @@ export default function NavigationMetrics({
         <NavigationMetric
           label={copy.estimatedArrival}
           value={formatDuration(
-            currentFeedback
-              .estimatedTimeRemainingSeconds
+            countdownEta
           )}
         />
 
         <NavigationMetric
           label={copy.navigationTime}
           value={formatDuration(
-            currentFeedback.navigationTimeSeconds
+            elapsedNavigationTime
           )}
         />
 
@@ -131,6 +137,44 @@ export default function NavigationMetrics({
       </div>
     </section>
   );
+}
+
+function useSecondCountdown(value: number | undefined) {
+  const [remaining, setRemaining] = useState(value);
+
+  useEffect(() => {
+    setRemaining(value);
+  }, [value]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setRemaining((current) => current === undefined
+        ? undefined
+        : Math.max(0, current - 1));
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  return remaining;
+}
+
+function useSecondCountUp(value: number | undefined) {
+  const [elapsed, setElapsed] = useState(value);
+
+  useEffect(() => {
+    setElapsed(value);
+  }, [value]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setElapsed((current) => current === undefined
+        ? undefined
+        : current + 1);
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  return elapsed;
 }
 
 function NavigationMetric({

@@ -159,6 +159,7 @@ def test_successful_preview_issues_bound_one_use_validation(monkeypatch):
         ))
         assert preview.pickup_distance_meters == pytest.approx(5.0)
         assert preview.delivery_distance_meters == pytest.approx(5.0)
+        assert preview.travel_time_seconds == pytest.approx(40.0)
         assert preview.pickup_eta_seconds == pytest.approx(20.0)
         assert preview.destination_eta_seconds == pytest.approx(50.0)
         assert preview.completion_eta_seconds == pytest.approx(62.0)
@@ -172,6 +173,8 @@ def test_successful_preview_issues_bound_one_use_validation(monkeypatch):
             create_task(payload, BackgroundTasks(), service, alice)
         )
         assert created.owner_id == "alice"
+        assert created.pickup_distance_meters == pytest.approx(5.0)
+        assert created.delivery_distance_meters == pytest.approx(5.0)
 
         with pytest.raises(HTTPException) as reused:
             asyncio.run(

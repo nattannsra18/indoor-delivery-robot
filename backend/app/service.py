@@ -100,7 +100,7 @@ class DeliveryService:
 
     def record_robot_connection(self, robot_id: str, connected: bool) -> list[str]:
         """Record actual socket lifecycle edges, never telemetry heartbeats."""
-        robot = self._robot_or_404(robot_id)
+        robot = self._robot_or_404(robot_id, lock=True)
         action = "robot.connected" if connected else "robot.disconnected"
         AuditService(self.db).log(None, action, "robot", robot.id, {"robot_id": robot.id})
         event_key = f"robot:{robot.id}:{action}:{utc_now().isoformat()}"
@@ -110,8 +110,16 @@ class DeliveryService:
             f"Robot {robot.id} {'connected' if connected else 'disconnected'}.",
             event_key, "robot", robot.id,
         )
+        if connected and robot.current_task_id is not None:
+            failed_task = self.repo.get_task(robot.current_task_id)
+            if failed_task is not None:
+                self._auto_recover_failed_navigation(
+                    robot,
+                    failed_task,
+                    TrustedActor.robot(robot_id),
+                )
         self.db.commit()
-        return [item.id for item in notifications]
+        return [item.id for item in notifications] + self.take_pending_notification_ids()
 
     def _robot_or_404(self, robot_id: str = "robot01", *, lock: bool = False) -> RobotORM:
         robot = self.repo.get_robot_for_update(robot_id) if lock else self.repo.get_robot(robot_id)
@@ -258,6 +266,17 @@ class DeliveryService:
         station = StationORM(id=self.repo.next_station_id(), **payload.model_dump())
         self.repo.add_station(station)
         AuditService(self.db).log(actor_id, "station.created", "station", station.id)
+        self.db.commit()
+        self.db.refresh(station)
+        return station
+
+    def update_station(
+        self, station_id: str, payload: StationCreate, actor_id: str | None = None
+    ) -> StationORM:
+        station = self.get_station(station_id)
+        for field, value in payload.model_dump().items():
+            setattr(station, field, value)
+        AuditService(self.db).log(actor_id, "station.updated", "station", station.id)
         self.db.commit()
         self.db.refresh(station)
         return station
@@ -447,7 +466,16 @@ class DeliveryService:
         self.db.refresh(task)
         return task
 
-    def create_task(self, payload: DeliveryTaskCreate, owner_id: str | None = None, actor: TrustedActor | None = None, actor_id: str | None = None) -> DeliveryTaskORM:
+    def create_task(
+        self,
+        payload: DeliveryTaskCreate,
+        owner_id: str | None = None,
+        actor: TrustedActor | None = None,
+        actor_id: str | None = None,
+        *,
+        pickup_distance_meters: float | None = None,
+        delivery_distance_meters: float | None = None,
+    ) -> DeliveryTaskORM:
         self.get_station(payload.pickup_station_id)
         self.get_station(payload.destination_station_id)
         robot = self._robot_or_404(lock=True)
@@ -463,6 +491,8 @@ class DeliveryService:
             priority=payload.priority,
             recipient_name=payload.recipient_name,
             delivery_note=payload.delivery_note,
+            pickup_distance_meters=pickup_distance_meters,
+            delivery_distance_meters=delivery_distance_meters,
         )
         self.repo.add_task(task)
         self._log_event(
@@ -536,6 +566,41 @@ class DeliveryService:
         if not queued:
             return None
         return self._assign_task(queued, robot)
+
+    def _auto_recover_failed_navigation(
+        self,
+        robot: RobotORM,
+        failed_task: DeliveryTaskORM,
+        actor: TrustedActor | None,
+    ) -> bool:
+        """Return a navigation failure to service without bypassing E-stop."""
+        from .emergency_service import EmergencyStopService
+
+        if (
+            not robot.online
+            or robot.state != RobotState.ERROR
+            or failed_task.status != TaskStatus.FAILED
+            or robot.current_task_id != failed_task.id
+            or EmergencyStopService(self.db).is_latched(robot.id)
+        ):
+            return False
+
+        robot.state = RobotState.IDLE
+        robot.current_task_id = None
+        robot.last_seen = "Just now"
+        AuditService(self.db).log(
+            actor,
+            "robot.recovered",
+            "robot",
+            robot.id,
+            {
+                "robot_id": robot.id,
+                "reason": "automatic navigation failure recovery",
+            },
+        )
+        self.db.flush()
+        self.dispatch_next_queued_task(robot=robot)
+        return True
 
     def apply_task_event(
         self,
@@ -617,6 +682,12 @@ class DeliveryService:
         if transition.to_status == TaskStatus.COMPLETED:
             self.db.flush()
             self.dispatch_next_queued_task(robot=robot)
+        elif transition.to_status == TaskStatus.FAILED:
+            self._auto_recover_failed_navigation(
+                robot,
+                task,
+                actor if isinstance(actor, TrustedActor) else None,
+            )
 
         self.db.commit()
         self.db.refresh(task)
@@ -708,11 +779,29 @@ class DeliveryService:
 
     def overview(self, owner_id: str | None = None) -> DashboardOverview:
         robot = self._robot_or_404()
-        active = self.active_task()
+        global_active = self.active_task()
+        active = global_active
+        robot_view = Robot.model_validate(robot)
         if active is not None and owner_id is not None and active.owner_id != owner_id:
             active = None
+            robot_view.current_task_id = None
+        # Aggregate availability exposes no other owner's task details.
+        from .queue_estimate_service import QueueEstimateService
+        estimate_service = QueueEstimateService(self.db)
+        remaining = estimate_service._active_remaining(global_active)
+        global_queue = self.repo.queued_tasks()
+        global_queued_count = len(global_queue)
+        available = (
+            remaining + estimate_service.total_queued_seconds(global_queue)
+            if remaining is not None
+            and robot.online
+            and robot.state not in (RobotState.ERROR, RobotState.OFFLINE)
+            else None
+        )
         return DashboardOverview(
-            robot=Robot.model_validate(robot),
+            global_queued_count=global_queued_count,
+            robot_available_seconds=available,
+            robot=robot_view,
             active_task=DeliveryTask.model_validate(active) if active else None,
             queued_count=self.repo.count_tasks(TaskStatus.QUEUED, owner_id),
             completed_count=self.repo.count_tasks(TaskStatus.COMPLETED, owner_id),

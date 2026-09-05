@@ -9,7 +9,7 @@ import {
 } from "@/lib/mapGeometry";
 import { framesAreCompatible } from "@/lib/navigationPath";
 import {
-  NavigationPathStatus, OccupancyGridMap, Station, TaskRoutePreview
+  NavigationPathStatus, OccupancyGridMap, Robot, Station, TaskRoutePreview
 } from "@/types";
 
 export type StationSelectionMode = "pickup" | "destination";
@@ -21,11 +21,18 @@ type RobotMapProps = {
   selectionMode?: StationSelectionMode;
   onStationSelect?: (station: Station) => void;
   routePreview?: TaskRoutePreview;
+  smoothMotion?: boolean;
+  showStationButtons?: boolean;
+  showTechnicalDetails?: boolean;
 };
 
 const PATH_STATUS_LABEL: Record<"en" | "th", Record<NavigationPathStatus, string>> = {
   en: { live: "Live Nav2 path", waiting: "Waiting for path", unavailable: "Path unavailable", stale: "Path stale" },
   th: { live: "เส้นทาง Nav2 ปัจจุบัน", waiting: "กำลังรอเส้นทาง", unavailable: "ไม่มีเส้นทาง", stale: "เส้นทางล้าสมัย" },
+};
+const USER_PATH_STATUS_LABEL: Record<"en" | "th", Record<NavigationPathStatus, string>> = {
+  en: { live: "Current route", waiting: "Waiting for route", unavailable: "Route unavailable", stale: "Route updating" },
+  th: { live: "เส้นทางปัจจุบัน", waiting: "กำลังรอเส้นทาง", unavailable: "ไม่มีเส้นทาง", stale: "กำลังอัปเดตเส้นทาง" },
 };
 
 export default function RobotMap({
@@ -34,7 +41,10 @@ export default function RobotMap({
   selectedDestinationStationId,
   selectionMode = "pickup",
   onStationSelect,
-  routePreview
+  routePreview,
+  smoothMotion = false,
+  showStationButtons = true,
+  showTechnicalDetails = true
 }: RobotMapProps) {
   const { locale, format } = useLocale();
   const copy = operationalText[locale];
@@ -47,9 +57,10 @@ export default function RobotMap({
     width: 900, height: 540
   });
   const {
-    occupancyMap, navigationPath, navigationPathStatus, robot,
+    occupancyMap, navigationPath, navigationPathStatus, robot: liveRobot,
     stations, activeTask, stationName
   } = useDeliveryApi();
+  const robot = useSmoothRobotPose(liveRobot, smoothMotion);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -92,8 +103,10 @@ export default function RobotMap({
     const mapCanvas = occupancyCanvasRef.current;
     if (!canvas || !occupancyMap || !mapCanvas) return;
     const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
-    canvas.width = Math.round(canvasSize.width * pixelRatio);
-    canvas.height = Math.round(canvasSize.height * pixelRatio);
+    const pixelWidth = Math.round(canvasSize.width * pixelRatio);
+    const pixelHeight = Math.round(canvasSize.height * pixelRatio);
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     canvas.style.width = `${canvasSize.width}px`;
     canvas.style.height = `${canvasSize.height}px`;
     const context = canvas.getContext("2d");
@@ -165,12 +178,14 @@ export default function RobotMap({
     return (
       <div className="grid min-h-[360px] place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
         <div>
-          <p className="font-semibold text-slate-700">{locale === "th" ? "กำลังรอแผนที่ ROS" : "Waiting for ROS map"}</p>
+          <p className="font-semibold text-slate-700">{showTechnicalDetails
+            ? (locale === "th" ? "กำลังรอแผนที่ ROS" : "Waiting for ROS map")
+            : (locale === "th" ? "กำลังรอแผนที่" : "Waiting for map")}</p>
           <p className="mt-2 text-sm text-slate-500">
             {locale === "th" ? "ยังเลือกสถานีจากรายการได้ขณะไม่มีแผนที่ปัจจุบัน" : "Station dropdowns remain available while the live map is missing."}
           </p>
           <p className="mt-2 text-xs font-semibold text-amber-700">
-            {PATH_STATUS_LABEL[locale].unavailable}
+            {(showTechnicalDetails ? PATH_STATUS_LABEL : USER_PATH_STATUS_LABEL)[locale].unavailable}
           </p>
         </div>
       </div>
@@ -182,14 +197,17 @@ export default function RobotMap({
       <div ref={containerRef} className="w-full overflow-hidden">
         <canvas
           ref={canvasRef}
+          tabIndex={interactive ? 0 : undefined}
           className={`block max-w-full ${interactive ? "cursor-pointer" : ""}`}
-          aria-label={locale === "th" ? "แผนที่ ROS พร้อมเส้นทาง Nav2 สถานี และตำแหน่งหุ่นยนต์" : "ROS occupancy grid with live Nav2 path, stations and robot pose"}
+          aria-label={showTechnicalDetails
+            ? (locale === "th" ? "แผนที่ ROS พร้อมเส้นทาง Nav2 สถานี และตำแหน่งหุ่นยนต์" : "ROS occupancy grid with live Nav2 path, stations and robot pose")
+            : (locale === "th" ? "แผนที่จัดส่งพร้อมเส้นทาง สถานี และตำแหน่งหุ่นยนต์" : "Delivery map with route, stations and robot position")}
           onClick={handleMapClick}
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
         {!routePreview && (
-          <Legend color="#0ea5e9" label={PATH_STATUS_LABEL[locale][displayedPathStatus]} line />
+          <Legend color="#0ea5e9" label={(showTechnicalDetails ? PATH_STATUS_LABEL : USER_PATH_STATUS_LABEL)[locale][displayedPathStatus]} line />
         )}
         {routePreview && <Legend color="#0891b2" label={copy.mapPreviewPickup} line />}
         {routePreview && <Legend color="#7c3aed" label={copy.mapPreviewDestination} line />}
@@ -198,7 +216,7 @@ export default function RobotMap({
         <Legend color="#8b5cf6" label={locale === "th" ? "จุดหมาย" : "Destination"} />
         <Legend color="#2563eb" label={locale === "th" ? "หุ่นยนต์" : "Robot"} />
       </div>
-      {interactive && (
+      {interactive && showStationButtons && (
         <div className="border-t border-slate-200 bg-white px-4 py-3">
           <p className="mb-2 text-xs text-slate-500">
             {copy.selectStationHelp}
@@ -223,7 +241,7 @@ export default function RobotMap({
           </div>
         </div>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-500">
+      {showTechnicalDetails && <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-500">
         <span>
           {format(copy.mapInfo, { width: occupancyMap.width, height: occupancyMap.height, resolution: occupancyMap.resolution.toFixed(3), revision: occupancyMap.revision })}
         </span>
@@ -232,9 +250,62 @@ export default function RobotMap({
             ? `${activeTask.id}: ${stationName(activeTask.pickupStationId)} → ${stationName(activeTask.destinationStationId)}`
             : format(copy.robotPose, { x: robot.x.toFixed(2), y: robot.y.toFixed(2), yaw: robot.yaw.toFixed(2) })}
         </span>
-      </div>
+      </div>}
     </div>
   );
+}
+
+function useSmoothRobotPose(robot: Robot, enabled: boolean): Robot {
+  const poseRef = useRef(robot);
+  const [displayed, setDisplayed] = useState(robot);
+
+  useEffect(() => {
+    if (!enabled) {
+      poseRef.current = robot;
+      setDisplayed(robot);
+      return;
+    }
+
+    const from = poseRef.current;
+    const startedAt = performance.now();
+    const duration = 900;
+    const yawDelta = Math.atan2(
+      Math.sin(robot.yaw - from.yaw),
+      Math.cos(robot.yaw - from.yaw)
+    );
+    let frame = 0;
+
+    const animate = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const next = {
+        ...robot,
+        x: from.x + (robot.x - from.x) * eased,
+        y: from.y + (robot.y - from.y) * eased,
+        yaw: from.yaw + yawDelta * eased
+      };
+      poseRef.current = next;
+      setDisplayed(next);
+      if (progress < 1) frame = requestAnimationFrame(animate);
+    };
+
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, [
+    enabled,
+    robot.battery,
+    robot.currentTaskId,
+    robot.id,
+    robot.lastSeen,
+    robot.name,
+    robot.online,
+    robot.state,
+    robot.x,
+    robot.y,
+    robot.yaw
+  ]);
+
+  return displayed;
 }
 
 function createOccupancyCanvas(map: OccupancyGridMap): HTMLCanvasElement {

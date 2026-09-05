@@ -21,23 +21,23 @@ function AuthGate({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const loginPage = pathname === "/login";
+  const authPage = ["/login", "/signup", "/forgot-password", "/reset-password"].includes(pathname);
   const { t } = useLocale();
   useEffect(() => {
-    if (!loading && !user && !loginPage) router.replace("/login");
+    if (!loading && !user && !authPage) router.replace("/login");
     if (
       !loading
       && user
-      && !loginPage
+      && !authPage
       && !routeAllowedForRole(pathname, user.role)
     ) router.replace("/");
-    if (!loading && user && loginPage) router.replace("/");
-  }, [loading, user, loginPage, pathname, router]);
+    if (!loading && user && authPage) router.replace("/");
+  }, [loading, user, authPage, pathname, router]);
   const routeAllowed = !user || routeAllowedForRole(pathname, user.role);
-  if (loading || (!user && !loginPage) || (user && loginPage) || !routeAllowed) {
+  if (loading || (!user && !authPage) || (user && authPage) || !routeAllowed) {
     return <main className="grid min-h-screen place-items-center text-sm text-slate-500">{t("loading")}</main>;
   }
-  if (loginPage) return children;
+  if (authPage) return children;
   return <ApiDeliveryProvider><ShellContent>{children}</ShellContent></ApiDeliveryProvider>;
 }
 

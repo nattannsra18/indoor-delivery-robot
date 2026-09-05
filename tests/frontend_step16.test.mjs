@@ -5,6 +5,9 @@ const i18n = readFileSync(new URL("../src/lib/i18n.ts", import.meta.url), "utf8"
 const locale = readFileSync(new URL("../src/context/LocaleContext.tsx", import.meta.url), "utf8");
 const sidebar = readFileSync(new URL("../src/components/Sidebar.tsx", import.meta.url), "utf8");
 const login = readFileSync(new URL("../src/app/login/page.tsx", import.meta.url), "utf8");
+const authShell = readFileSync(new URL("../src/components/AuthShell.tsx", import.meta.url), "utf8");
+const signup = readFileSync(new URL("../src/app/signup/page.tsx", import.meta.url), "utf8");
+const forgotPassword = readFileSync(new URL("../src/app/forgot-password/page.tsx", import.meta.url), "utf8");
 const workflow = readFileSync(new URL("../src/components/WorkflowControls.tsx", import.meta.url), "utf8");
 const globals = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
 const modal = readFileSync(new URL("../src/components/TaskHistoryModal.tsx", import.meta.url), "utf8");
@@ -23,7 +26,10 @@ test("mobile navigation has keyboard close and accessible state", () => {
   assert.match(sidebar, /event\.key === "Escape"/); assert.match(sidebar, /aria-expanded/); assert.match(sidebar, /setOpen\(false\)/); assert.match(sidebar, /navigationLabel/);
 });
 test("login uses localized labels and an accessible language switcher", () => {
-  assert.match(login, /LanguageSwitcher/); assert.match(login, /t\("signIn"\)/); assert.match(login, /t\("invalidCredentials"\)/);
+  assert.match(login, /authText\[locale\]/); assert.match(login, /copy\.signIn/); assert.match(login, /copy\.invalidCredentials/);
+  assert.match(authShell, /LanguageSwitcher variant="light"/);
+  assert.match(signup, /copy\.confirmEmail/); assert.match(signup, /copy\.confirmPassword/);
+  assert.match(forgotPassword, /copy\.sendReset/);
 });
 test("workflow controls translate operator actions without translating status values", () => {
   for (const key of ["confirmLoaded", "confirmReceived", "robotOfflineWaiting", "recoverRobot"]) assert.match(workflow, new RegExp(`t\\("${key}"\\)`));

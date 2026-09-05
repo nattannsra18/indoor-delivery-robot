@@ -8,7 +8,7 @@ import { UserIdentity } from "@/types";
 type AuthValue = {
   user?: UserIdentity;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   loseSession: () => void;
 };
@@ -34,8 +34,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       api.setUnauthorizedHandler(undefined);
     };
   }, [loseSession]);
-  async function login(username: string, password: string) {
-    setUser(await api.login(username, password));
+  async function login(identifier: string, password: string) {
+    setUser(await api.login(identifier, password));
   }
   async function logout() {
     await logoutWithLocalTeardown(

@@ -3,12 +3,18 @@ from __future__ import annotations
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from .db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM
+from .db_models import (
+    DeliveryTaskORM,
+    MapMetadataORM,
+    RobotORM,
+    StationORM,
+    TaskEventORM,
+)
 from .models import RobotState, TaskStatus, utc_now
 
 INITIAL_STATIONS = [
-    dict(id="A", name="Station A", x=1.2, y=3.7, yaw=0.0, description="Main Office"),
-    dict(id="B", name="Station B", x=4.7, y=1.8, yaw=1.57, description="Storage Area"),
+    dict(id="A", name="Station A", x=1.2, y=3.7, yaw=0.0, description="Main Office", location="Main warehouse · Ground floor · Front office", instructions="Use the marked handoff point beside the reception desk."),
+    dict(id="B", name="Station B", x=4.7, y=1.8, yaw=1.57, description="Storage Area", location="Main warehouse · Ground floor · Storage zone", instructions="Meet the robot at the aisle entrance and keep the route clear."),
     dict(
         id="C",
         name="Station C",
@@ -16,6 +22,8 @@ INITIAL_STATIONS = [
         y=-3.3482987880706787,
         yaw=1.57,
         description="Production Line",
+        location="Main warehouse · Ground floor · Production zone",
+        instructions="Use the designated handoff point outside the production line.",
     ),
     dict(
         id="D",
@@ -24,6 +32,8 @@ INITIAL_STATIONS = [
         y=4.6371917724609375,
         yaw=3.14,
         description="Quality Control",
+        location="Main warehouse · Ground floor · Quality control area",
+        instructions="Meet the robot beside the quality control entrance.",
     ),
 ]
 
@@ -31,6 +41,17 @@ INITIAL_STATIONS = [
 def seed_database(db: Session) -> None:
     if db.scalar(select(StationORM.id).limit(1)) is None:
         db.add_all([StationORM(**station) for station in INITIAL_STATIONS])
+
+    if db.get(MapMetadataORM, "active") is None:
+        db.add(
+            MapMetadataORM(
+                id="active",
+                map_name="Warehouse Delivery Map",
+                building="Main Warehouse",
+                floor="Ground Floor",
+                area_description="Indoor pickup and delivery service area",
+            )
+        )
 
     if db.get(RobotORM, "robot01") is None:
         db.add(

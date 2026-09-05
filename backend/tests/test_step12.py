@@ -149,12 +149,19 @@ def test_compatibility_migration_preserves_rows_and_backfills_normal():
     apply_compatibility_migrations(legacy_engine)
 
     columns = {column["name"] for column in inspect(legacy_engine).get_columns("delivery_tasks")}
-    assert {"priority", "recipient_name", "delivery_note"} <= columns
+    assert {
+        "priority",
+        "recipient_name",
+        "delivery_note",
+        "pickup_distance_meters",
+        "delivery_distance_meters",
+    } <= columns
     with legacy_engine.connect() as connection:
         row = connection.execute(text(
-            "SELECT id, priority, recipient_name, delivery_note FROM delivery_tasks"
+            "SELECT id, priority, recipient_name, delivery_note, "
+            "pickup_distance_meters, delivery_distance_meters FROM delivery_tasks"
         )).one()
-    assert row == ("TASK-OLD", "NORMAL", None, None)
+    assert row == ("TASK-OLD", "NORMAL", None, None, None, None)
 
 
 def test_user_cannot_create_high_but_admin_can_and_metadata_round_trips():
@@ -257,6 +264,48 @@ def test_retry_preserves_priority_recipient_and_note():
         assert retried.priority == TaskPriority.HIGH
         assert retried.recipient_name == "Katherine Johnson"
         assert retried.delivery_note == "Fragile payload"
+
+
+def test_navigation_failure_recovers_robot_and_dispatches_next_task():
+    with Session() as db:
+        service = DeliveryService(db)
+        failed = service.create_task(payload(), owner_id="alice")
+        queued = service.create_task(payload("B", "C"), owner_id="admin")
+
+        service.apply_task_event(
+            failed.id,
+            TaskEvent.NAVIGATION_FAILED,
+            source=EventSource.ROBOT_AGENT,
+        )
+
+        db.refresh(failed)
+        db.refresh(queued)
+        robot = db.get(RobotORM, "robot01")
+        assert failed.status == TaskStatus.FAILED
+        assert queued.status == TaskStatus.GOING_TO_PICKUP
+        assert robot.state == RobotState.GOING_TO_PICKUP
+        assert robot.current_task_id == queued.id
+
+
+def test_robot_connection_recovers_a_persisted_navigation_error():
+    with Session() as db:
+        service = DeliveryService(db)
+        failed = service.create_task(payload(), owner_id="alice")
+        queued = service.create_task(payload("B", "C"), owner_id="admin")
+        robot = db.get(RobotORM, "robot01")
+        failed.status = TaskStatus.FAILED
+        failed.progress = 0
+        robot.state = RobotState.ERROR
+        robot.current_task_id = failed.id
+        db.commit()
+
+        service.record_robot_connection("robot01", True)
+
+        db.refresh(queued)
+        db.refresh(robot)
+        assert queued.status == TaskStatus.GOING_TO_PICKUP
+        assert robot.state == RobotState.GOING_TO_PICKUP
+        assert robot.current_task_id == queued.id
 
 
 def test_metadata_visibility_follows_existing_task_ownership_filter():

@@ -86,8 +86,70 @@ class UserIdentity(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=100)
+    identifier: Optional[str] = Field(default=None, min_length=1, max_length=320)
+    username: Optional[str] = Field(default=None, min_length=1, max_length=320)
     password: str = Field(min_length=1, max_length=1024)
+
+    @model_validator(mode="after")
+    def require_identifier(self):
+        if not (self.identifier or self.username):
+            raise ValueError("Email or username is required")
+        return self
+
+    @property
+    def login_identifier(self) -> str:
+        return (self.identifier or self.username or "").strip()
+
+
+class SignupRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    username: str = Field(min_length=3, max_length=100, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(min_length=1, max_length=1024)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        normalized = value.strip().casefold()
+        local, separator, domain = normalized.rpartition("@")
+        if not separator or not local or "." not in domain:
+            raise ValueError("Enter a valid email address")
+        return normalized
+
+    @field_validator("username")
+    @classmethod
+    def normalize_username(cls, value: str) -> str:
+        return value.strip()
+
+
+class SignupResult(BaseModel):
+    status: Literal["PENDING_APPROVAL"]
+
+
+class PendingAccount(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    email: str
+    username: str
+    created_at: datetime
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+
+
+class ForgotPasswordResult(BaseModel):
+    accepted: bool
+    delivery_configured: bool
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=500)
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class GoogleAuthConfiguration(BaseModel):
+    enabled: bool
 
 
 class Station(BaseModel):
@@ -99,6 +161,8 @@ class Station(BaseModel):
     y: float
     yaw: float
     description: Optional[str] = None
+    location: Optional[str] = None
+    instructions: Optional[str] = None
 
 
 class StationCreate(BaseModel):
@@ -107,6 +171,29 @@ class StationCreate(BaseModel):
     y: float
     yaw: float
     description: Optional[str] = Field(default=None, max_length=200)
+    location: Optional[str] = Field(default=None, max_length=200)
+    instructions: Optional[str] = Field(default=None, max_length=400)
+
+
+class StationUpdate(StationCreate):
+    pass
+
+
+class MapMetadata(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    map_name: str
+    building: str
+    floor: str
+    area_description: Optional[str] = None
+    updated_at: datetime
+
+
+class MapMetadataUpdate(BaseModel):
+    map_name: str = Field(min_length=1, max_length=120)
+    building: str = Field(min_length=1, max_length=120)
+    floor: str = Field(min_length=1, max_length=80)
+    area_description: Optional[str] = Field(default=None, max_length=240)
 
 
 class Robot(BaseModel):
@@ -459,12 +546,15 @@ class DeliveryTask(BaseModel):
     priority: TaskPriority = TaskPriority.NORMAL
     recipient_name: Optional[str] = None
     delivery_note: Optional[str] = None
+    pickup_distance_meters: Optional[float] = Field(default=None, ge=0.0)
+    delivery_distance_meters: Optional[float] = Field(default=None, ge=0.0)
 
 
 class TaskEstimate(BaseModel):
     task_id: str
     status: TaskStatus
     queue_position: Optional[int] = Field(default=None, ge=1)
+    start_eta_seconds: Optional[float] = Field(default=None, ge=0)
     pickup_eta_seconds: Optional[float] = Field(default=None, ge=0)
     destination_eta_seconds: Optional[float] = Field(default=None, ge=0)
     generated_at: datetime
@@ -577,6 +667,7 @@ class TaskRoutePreview(BaseModel):
     pickup_distance_meters: float = Field(ge=0.0)
     delivery_distance_meters: float = Field(ge=0.0)
     total_distance_meters: float = Field(ge=0.0)
+    travel_time_seconds: float = Field(ge=0.0)
     pickup_eta_seconds: float = Field(ge=0.0)
     destination_eta_seconds: float = Field(ge=0.0)
     completion_eta_seconds: float = Field(ge=0.0)
@@ -606,6 +697,8 @@ class TaskHistoryEntry(BaseModel):
 
 
 class DashboardOverview(BaseModel):
+    global_queued_count: int = 0
+    robot_available_seconds: Optional[float] = None
     robot: Robot
     active_task: Optional[DeliveryTask]
     queued_count: int

@@ -97,9 +97,9 @@ export function taskStatusCounts(tasks: DeliveryTask[]) {
   };
 }
 
-export function formatTaskTimestamp(value: string): string {
+export function formatTaskTimestamp(value: string, locale?: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
-    : date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+    : date.toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
 }

@@ -930,6 +930,17 @@ async def robot_websocket(
                         {"type": "alert_changed", "event": event, "alert": Alert.model_validate(alert).model_dump(mode="json")},
                         admin_only=True,
                     )
+                    next_task = service.active_task()
+                    if (
+                        next_task is not None
+                        and next_task.robot_id == robot_id
+                        and next_task.id != navigation.task_id
+                    ):
+                        next_command = service.build_navigation_command(
+                            next_task
+                        )
+                        if next_command is not None:
+                            await websocket.send_json(next_command)
             elif message_type == "navigation_cancelled":
                 cancel_id = message.get(
                     "cancel_id"

@@ -13,7 +13,7 @@ from datetime import timedelta
 from uuid import uuid4
 
 from fastapi import Depends, HTTPException, Request, WebSocket, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .config import security_settings
@@ -72,10 +72,27 @@ def robot_authorization_valid(
     return hmac.compare_digest(authorization, f"Bearer {expected_token}")
 
 
-def authenticate(db: Session, username: str, password: str) -> UserORM | None:
-    user = db.scalar(select(UserORM).where(UserORM.username == username))
+def find_user_by_identifier(db: Session, identifier: str) -> UserORM | None:
+    normalized = identifier.strip().casefold()
+    return db.scalar(
+        select(UserORM).where(
+            or_(
+                func.lower(UserORM.username) == normalized,
+                func.lower(UserORM.email) == normalized,
+            )
+        )
+    )
+
+
+def authenticate(db: Session, identifier: str, password: str) -> UserORM | None:
+    user = verify_credentials(db, identifier, password)
+    return user if user is not None and user.active else None
+
+
+def verify_credentials(db: Session, identifier: str, password: str) -> UserORM | None:
+    user = find_user_by_identifier(db, identifier)
     valid = verify_password(password, user.password_hash if user else _dummy_hash())
-    return user if user is not None and user.active and valid else None
+    return user if user is not None and valid else None
 
 
 def create_session(db: Session, user: UserORM) -> tuple[str, SessionORM]:
