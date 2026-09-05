@@ -126,6 +126,23 @@ export interface RobotMapDetails {
   areaDescription?: string;
 }
 
+export type MappingPhase = "IDLE" | "STARTING" | "MAPPING" | "STOPPING" | "REVIEW" | "SAVING" | "RESTORING" | "FAILED";
+
+export interface MappingSession {
+  robotId: string;
+  sessionId?: string;
+  phase: MappingPhase;
+  detail?: string;
+  startedAt?: string;
+  updatedAt: string;
+  savedMapId?: string;
+  mapRevision?: number;
+}
+
+export interface MappingMapDetails extends RobotMapDetails {
+  mapId: string;
+}
+
 export interface Robot {
   id: string;
   name: string;

@@ -23,6 +23,7 @@ from ..models import (
     RobotMapCatalogMessage,
     RobotMapCatalogOperationResultMessage,
     RobotMapSwitchResultMessage,
+    RobotMappingStatusMessage,
     NavigationFeedbackMessage,
     NavigationPathClearMessage,
     NavigationPathMessage,
@@ -37,6 +38,7 @@ from ..map_store import map_store
 from ..map_catalog_store import map_catalog_store
 from ..map_switch_store import map_switch_store
 from ..map_catalog_operation_store import map_catalog_operation_store
+from ..mapping_store import mapping_store
 from ..audit_service import AuditService
 from ..navigation_path_store import navigation_path_store
 from ..alert_service import AlertService
@@ -298,7 +300,6 @@ async def robot_websocket(
                         ),
                     }
                 )
-
             elif message_type == "diagnostics":
                 try:
                     diagnostics = (
@@ -460,6 +461,18 @@ async def robot_websocket(
                         ),
                     }
                 )
+                await browser_connection_manager.broadcast_json(
+                    {
+                        "type": "robot_telemetry",
+                        "robot_id": robot_id,
+                        "data": {
+                            "x": updated_robot.x,
+                            "y": updated_robot.y,
+                            "yaw": updated_robot.yaw,
+                            "last_seen": updated_robot.last_seen,
+                        },
+                    }
+                )
 
             elif message_type == "map":
                 try:
@@ -500,6 +513,13 @@ async def robot_websocket(
                             current_utc_time()
                         ),
                     }
+                )
+                await browser_connection_manager.broadcast_json(
+                    {
+                        "type": "map_updated",
+                        "revision": snapshot.revision,
+                    },
+                    admin_only=True,
                 )
             elif message_type == "map_catalog":
                 try:
@@ -662,6 +682,58 @@ async def robot_websocket(
                         "accepted": matched,
                         "server_time": current_utc_time(),
                     }
+                )
+            elif message_type == "mapping_status":
+                try:
+                    mapping_status = RobotMappingStatusMessage.model_validate(message)
+                except ValidationError as error:
+                    details = "; ".join(
+                        f"{'.'.join(map(str, item['loc']))}: {item['msg']}"
+                        for item in error.errors(include_url=False)
+                    )
+                    await send_error(websocket, "INVALID_MAPPING_STATUS", details)
+                    continue
+                if mapping_status.robot_id != robot_id:
+                    await send_error(
+                        websocket,
+                        "MAPPING_ROBOT_MISMATCH",
+                        "robot_id does not match the authenticated connection",
+                    )
+                    continue
+                previous = mapping_store.get(robot_id)
+                session = mapping_store.apply(mapping_status)
+                if mapping_status.command_id and previous.phase != session.phase:
+                    action = (
+                        "mapping.command_succeeded"
+                        if mapping_status.accepted else "mapping.command_failed"
+                    )
+                    AuditService(db).log(
+                        TrustedActor.robot(robot_id),
+                        action,
+                        "map" if session.saved_map_id else "robot",
+                        session.saved_map_id or robot_id,
+                        {
+                            "robot_id": robot_id,
+                            "session_id": session.session_id,
+                            "phase": session.phase.value,
+                            "detail": session.detail,
+                        },
+                        result="success" if mapping_status.accepted else "failed",
+                    )
+                    db.commit()
+                await websocket.send_json({
+                    "type": "mapping_status_ack",
+                    "command_id": mapping_status.command_id,
+                    "accepted": True,
+                    "server_time": current_utc_time(),
+                })
+                await browser_connection_manager.broadcast_json(
+                    {
+                        "type": "mapping_status_changed",
+                        "mapping": session.model_dump(mode="json"),
+                        "server_time": current_utc_time(),
+                    },
+                    admin_only=True,
                 )
             elif message_type == "navigation_path":
                 try:

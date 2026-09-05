@@ -460,6 +460,19 @@ export function ApiDeliveryProvider({
 
           if (message.type === "notification_created") {
             window.dispatchEvent(new CustomEvent("idr:notification"));
+          } else if (message.type === "robot_telemetry") {
+            const data = (message as { data?: { x?: unknown; y?: unknown; yaw?: unknown; last_seen?: unknown } }).data;
+            if (data && typeof data.x === "number" && typeof data.y === "number" && typeof data.yaw === "number") {
+              setRobot((current) => ({
+                ...current,
+                x: data.x as number,
+                y: data.y as number,
+                yaw: data.yaw as number,
+                lastSeen: typeof data.last_seen === "string" ? data.last_seen : current.lastSeen,
+              }));
+            }
+          } else if (message.type === "map_updated") {
+            void refreshMap();
           } else if (message.type === "workflow_updated") {
             pendingNavigationPathRef.current = undefined;
             navigationPathRef.current = undefined;
@@ -627,7 +640,7 @@ export function ApiDeliveryProvider({
 
       websocket?.close();
     };
-  }, [loseSession, refreshAll, user?.role]);
+  }, [loseSession, refreshAll, refreshMap, user?.role]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {

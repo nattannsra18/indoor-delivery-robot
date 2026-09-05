@@ -529,12 +529,14 @@ class DeliveryService:
 
     def _robot_available(self, robot: RobotORM) -> bool:
         from .emergency_service import EmergencyStopService
+        from .mapping_store import mapping_store
         return (
             robot.online
             and robot.state == RobotState.IDLE
             and robot.current_task_id is None
             and self.repo.active_task_for_robot(robot.id, ACTIVE_STATUSES) is None
             and not EmergencyStopService(self.db).is_latched(robot.id)
+            and not mapping_store.is_active(robot.id)
         )
 
     def _assign_task(self, task: DeliveryTaskORM, robot: RobotORM) -> DeliveryTaskORM:

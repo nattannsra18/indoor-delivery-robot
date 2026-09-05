@@ -6,6 +6,8 @@ import type {
   MapMetadata,
   MapSwitchOperation,
   MapCatalogOperation,
+  MappingMapDetails,
+  MappingSession,
   RobotMapDetails,
   RobotMapCatalog,
   OccupancyGridMap,
@@ -541,6 +543,64 @@ export async function deleteRobotMap(
     `/api/map/catalog/${encodeURIComponent(mapId)}?robot_id=${encodeURIComponent(robotId)}`,
     { method: "DELETE" }
   ));
+}
+
+type ApiMappingSession = {
+  robot_id: string;
+  session_id: string | null;
+  phase: MappingSession["phase"];
+  detail: string | null;
+  started_at: string | null;
+  updated_at: string;
+  saved_map_id: string | null;
+  map_revision: number | null;
+};
+
+function toMappingSession(value: ApiMappingSession): MappingSession {
+  return {
+    robotId: value.robot_id,
+    sessionId: value.session_id ?? undefined,
+    phase: value.phase,
+    detail: value.detail ?? undefined,
+    startedAt: value.started_at ?? undefined,
+    updatedAt: value.updated_at,
+    savedMapId: value.saved_map_id ?? undefined,
+    mapRevision: value.map_revision ?? undefined,
+  };
+}
+
+export async function getMappingStatus(robotId = "robot01"): Promise<MappingSession> {
+  return toMappingSession(await request<ApiMappingSession>(`/api/mapping/status?robot_id=${encodeURIComponent(robotId)}`));
+}
+
+export async function startMapping(robotId = "robot01"): Promise<MappingSession> {
+  return toMappingSession(await request<ApiMappingSession>("/api/mapping/start", {
+    method: "POST", body: JSON.stringify({ robot_id: robotId }),
+  }));
+}
+
+export async function stopMapping(robotId = "robot01"): Promise<MappingSession> {
+  return toMappingSession(await request<ApiMappingSession>(`/api/mapping/stop?robot_id=${encodeURIComponent(robotId)}`, { method: "POST" }));
+}
+
+export async function discardMapping(robotId = "robot01"): Promise<MappingSession> {
+  return toMappingSession(await request<ApiMappingSession>(`/api/mapping/discard?robot_id=${encodeURIComponent(robotId)}`, { method: "POST" }));
+}
+
+export async function saveMapping(details: MappingMapDetails, robotId = "robot01"): Promise<MappingSession> {
+  return toMappingSession(await request<ApiMappingSession>(`/api/mapping/save?robot_id=${encodeURIComponent(robotId)}`, {
+    method: "POST",
+    body: JSON.stringify({
+      map_id: details.mapId, name: details.name, building: details.building ?? null,
+      floor: details.floor ?? null, area_description: details.areaDescription ?? null,
+    }),
+  }));
+}
+
+export async function driveMappingRobot(linearX: number, angularZ: number, robotId = "robot01"): Promise<void> {
+  await request(`/api/mapping/teleop?robot_id=${encodeURIComponent(robotId)}`, {
+    method: "POST", body: JSON.stringify({ linear_x: linearX, angular_z: angularZ }),
+  });
 }
 export async function getTasks(): Promise<DeliveryTask[]> {
   const tasks = await request<ApiDeliveryTask[]>("/api/tasks");

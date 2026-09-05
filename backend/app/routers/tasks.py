@@ -37,6 +37,7 @@ from ..db_models import DeliveryTaskORM, UserORM
 from ..models import UserRole
 from ..queue_estimate_service import QueueEstimateService
 from ..map_store import map_store
+from ..mapping_store import mapping_store
 from ..route_preview import (
     PREVIEW_LOADING_SECONDS,
     PREVIEW_NOMINAL_SPEED_METERS_PER_SECOND,
@@ -156,6 +157,11 @@ async def preview_task_route(
     user: UserORM = Depends(require_user),
 ):
     authorize_priority(user, payload.priority)
+    if mapping_store.is_active("robot01"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Route preview is unavailable while the robot is mapping",
+        )
     pickup = service.get_station(payload.pickup_station_id)
     destination = service.get_station(payload.destination_station_id)
     robot = service.get_robot("robot01")
@@ -283,6 +289,11 @@ async def create_task(
     user: UserORM = Depends(require_user),
 ):
     authorize_priority(user, payload.priority)
+    if mapping_store.is_active("robot01"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Delivery creation is unavailable while the robot is mapping",
+        )
     snapshot = map_store.get()
     validation = None
     if snapshot is not None:

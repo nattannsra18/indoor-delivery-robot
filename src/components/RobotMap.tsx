@@ -22,6 +22,7 @@ type RobotMapProps = {
   onStationSelect?: (station: Station) => void;
   routePreview?: TaskRoutePreview;
   smoothMotion?: boolean;
+  showStations?: boolean;
   showStationButtons?: boolean;
   showTechnicalDetails?: boolean;
 };
@@ -43,6 +44,7 @@ export default function RobotMap({
   onStationSelect,
   routePreview,
   smoothMotion = false,
+  showStations = true,
   showStationButtons = true,
   showTechnicalDetails = true
 }: RobotMapProps) {
@@ -129,19 +131,21 @@ export default function RobotMap({
         context, occupancyMap, viewport, renderablePath?.poses ?? [], "#0ea5e9"
       );
     }
-    stations.forEach((station) => drawStation(
-      context, occupancyMap, viewport, station,
-      {
-        pickup: station.id === selectedPickupStationId,
-        destination: station.id === selectedDestinationStationId,
-        targeted: interactive && (
-          selectionMode === "pickup"
-            ? station.id === selectedPickupStationId
-            : station.id === selectedDestinationStationId
-        )
-      },
-      selectionMode
-    ));
+    if (showStations) {
+      stations.forEach((station) => drawStation(
+        context, occupancyMap, viewport, station,
+        {
+          pickup: station.id === selectedPickupStationId,
+          destination: station.id === selectedDestinationStationId,
+          targeted: interactive && (
+            selectionMode === "pickup"
+              ? station.id === selectedPickupStationId
+              : station.id === selectedDestinationStationId
+          )
+        },
+        selectionMode
+      ));
+    }
     const robotPoint = worldToCanvas(
       occupancyMap, viewport, robot.x, robot.y
     );
@@ -149,7 +153,7 @@ export default function RobotMap({
   }, [
     canvasSize, interactive, occupancyMap, renderablePath, robot,
     selectedDestinationStationId, selectedPickupStationId,
-    routePreview, selectionMode, stations
+    routePreview, selectionMode, showStations, stations
   ]);
 
   function handleMapClick(event: MouseEvent<HTMLCanvasElement>) {
@@ -200,7 +204,7 @@ export default function RobotMap({
           tabIndex={interactive ? 0 : undefined}
           className={`block max-w-full ${interactive ? "cursor-pointer" : ""}`}
           aria-label={showTechnicalDetails
-            ? (locale === "th" ? "แผนที่ ROS พร้อมเส้นทาง Nav2 สถานี และตำแหน่งหุ่นยนต์" : "ROS occupancy grid with live Nav2 path, stations and robot pose")
+            ? (locale === "th" ? `แผนที่ ROS พร้อมเส้นทาง Nav2${showStations ? " สถานี" : ""} และตำแหน่งหุ่นยนต์` : `ROS occupancy grid with live Nav2 path${showStations ? ", stations" : ""} and robot pose`)
             : (locale === "th" ? "แผนที่จัดส่งพร้อมเส้นทาง สถานี และตำแหน่งหุ่นยนต์" : "Delivery map with route, stations and robot position")}
           onClick={handleMapClick}
         />
@@ -211,9 +215,9 @@ export default function RobotMap({
         )}
         {routePreview && <Legend color="#0891b2" label={copy.mapPreviewPickup} line />}
         {routePreview && <Legend color="#7c3aed" label={copy.mapPreviewDestination} line />}
-        <Legend color="#10b981" label={copy.station} />
-        <Legend color="#06b6d4" label={locale === "th" ? "จุดรับ" : "Pickup"} />
-        <Legend color="#8b5cf6" label={locale === "th" ? "จุดหมาย" : "Destination"} />
+        {showStations && <Legend color="#10b981" label={copy.station} />}
+        {showStations && <Legend color="#06b6d4" label={locale === "th" ? "จุดรับ" : "Pickup"} />}
+        {showStations && <Legend color="#8b5cf6" label={locale === "th" ? "จุดหมาย" : "Destination"} />}
         <Legend color="#2563eb" label={locale === "th" ? "หุ่นยนต์" : "Robot"} />
       </div>
       {interactive && showStationButtons && (

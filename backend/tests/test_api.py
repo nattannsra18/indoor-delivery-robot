@@ -27,7 +27,7 @@ from app.db_models import (
 )
 from app.auth import hash_password
 from app.config import security_settings
-from app.models import OccupancyGridPayload, TaskPriority, UserRole
+from app.models import OccupancyGridPayload, TaskPriority, TaskStatus, UserRole, utc_now
 from app.main import app
 from app.routers.robot_ws import robot_websocket
 from app.seed import seed_database
@@ -35,6 +35,7 @@ from app.map_store import map_store
 from app.map_catalog_store import map_catalog_store
 from app.map_switch_store import map_switch_store
 from app.map_catalog_operation_store import map_catalog_operation_store
+from app.mapping_store import mapping_store
 from app.navigation_feedback_store import (
     navigation_feedback_store,
 )
@@ -167,6 +168,7 @@ def setup_function():
     map_catalog_store.clear()
     map_switch_store.clear()
     map_catalog_operation_store.clear()
+    mapping_store.clear()
     with TestingSessionLocal() as db:
         db.execute(delete(SessionORM))
         db.execute(delete(AuditRecordORM))
@@ -1245,6 +1247,73 @@ def test_robot_map_catalog_is_exposed_to_admin():
         assert catalog["active_map_id"] == "warehouse_map"
         assert catalog["robot_online"] is True
         assert catalog["maps"][0]["available"] is True
+
+
+def test_admin_mapping_session_is_robot_acknowledged_and_teleop_is_scoped():
+    with robot_websocket_connect() as websocket:
+        assert websocket.receive_json()["type"] == "connection_ack"
+
+        response = client.post("/api/mapping/start", json={"robot_id": "robot01"})
+        assert response.status_code == 202
+        assert response.json()["phase"] == "STARTING"
+        command = websocket.receive_json()
+        assert command["type"] == "mapping_command"
+        assert command["action"] == "START"
+
+        websocket.send_json({
+            "type": "mapping_status",
+            "robot_id": "robot01",
+            "session_id": command["session_id"],
+            "command_id": command["command_id"],
+            "phase": "MAPPING",
+            "accepted": True,
+            "detail": "SLAM Toolbox is active",
+            "started_at": response.json()["started_at"],
+            "saved_map_id": None,
+            "map_revision": 3,
+        })
+        assert websocket.receive_json()["type"] == "mapping_status_ack"
+        assert client.get("/api/mapping/status").json()["phase"] == "MAPPING"
+
+        teleop = client.post(
+            "/api/mapping/teleop",
+            json={"linear_x": 0.16, "angular_z": 0.0},
+        )
+        assert teleop.status_code == 202
+        drive = websocket.receive_json()
+        assert drive["type"] == "mapping_teleop"
+        assert drive["session_id"] == command["session_id"]
+
+        stop = client.post("/api/mapping/stop")
+        assert stop.status_code == 202
+        assert stop.json()["phase"] == "STOPPING"
+        assert websocket.receive_json()["action"] == "STOP"
+
+
+def test_mapping_rejects_motion_outside_active_session():
+    response = client.post(
+        "/api/mapping/teleop",
+        json={"linear_x": 0.1, "angular_z": 0.0},
+    )
+    assert response.status_code == 409
+
+
+def test_mapping_start_rejects_queued_delivery():
+    with TestingSessionLocal() as db:
+        db.add(DeliveryTaskORM(
+            id="TASK-MAP-BLOCK",
+            pickup_station_id="A",
+            destination_station_id="B",
+            status=TaskStatus.QUEUED,
+            progress=0,
+            priority=TaskPriority.NORMAL,
+            created_at=utc_now(),
+        ))
+        db.commit()
+    with robot_websocket_connect() as websocket:
+        assert websocket.receive_json()["type"] == "connection_ack"
+        response = client.post("/api/mapping/start", json={"robot_id": "robot01"})
+        assert response.status_code == 409
 
 
 def test_admin_map_switch_requires_and_applies_matching_robot_ack():

@@ -686,6 +686,68 @@ class RobotMapCatalogOperationResultMessage(BaseModel):
     detail: Optional[str] = Field(default=None, max_length=300)
 
 
+class MappingPhase(str, Enum):
+    IDLE = "IDLE"
+    STARTING = "STARTING"
+    MAPPING = "MAPPING"
+    STOPPING = "STOPPING"
+    REVIEW = "REVIEW"
+    SAVING = "SAVING"
+    RESTORING = "RESTORING"
+    FAILED = "FAILED"
+
+
+class MappingSession(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    robot_id: str = Field(min_length=1, max_length=100)
+    session_id: Optional[str] = Field(default=None, max_length=100)
+    phase: MappingPhase
+    detail: Optional[str] = Field(default=None, max_length=500)
+    started_at: Optional[datetime] = None
+    updated_at: datetime
+    saved_map_id: Optional[str] = Field(default=None, max_length=120)
+    map_revision: Optional[int] = Field(default=None, ge=0)
+
+
+class MappingStartRequest(BaseModel):
+    robot_id: str = Field(default="robot01", min_length=1, max_length=100)
+
+
+class MappingSaveRequest(BaseModel):
+    map_id: str = Field(
+        min_length=1,
+        max_length=120,
+        pattern=r"^[A-Za-z0-9_.-]+$",
+    )
+    name: str = Field(min_length=1, max_length=160)
+    building: Optional[str] = Field(default=None, max_length=120)
+    floor: Optional[str] = Field(default=None, max_length=80)
+    area_description: Optional[str] = Field(default=None, max_length=240)
+
+
+class MappingTeleopRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    linear_x: float = Field(ge=-0.22, le=0.22)
+    angular_z: float = Field(ge=-1.0, le=1.0)
+
+
+class RobotMappingStatusMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["mapping_status"]
+    robot_id: str = Field(min_length=1, max_length=100)
+    session_id: Optional[str] = Field(default=None, max_length=100)
+    command_id: Optional[str] = Field(default=None, max_length=100)
+    phase: MappingPhase
+    accepted: bool = True
+    detail: Optional[str] = Field(default=None, max_length=500)
+    started_at: Optional[datetime] = None
+    saved_map_id: Optional[str] = Field(default=None, max_length=120)
+    map_revision: Optional[int] = Field(default=None, ge=0)
+
+
 class DeliveryTask(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
