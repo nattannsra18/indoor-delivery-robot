@@ -14,6 +14,11 @@ Browser -> FastAPI control plane <- WSS <- Robot Agent -> Nav2 adapter -> ROS 2 
 - Physical emergency-stop and motion safety remain local to the robot. A web stop is an operational command, not a certified safety circuit.
 - Hardware details such as wheel radius, encoder resolution, serial ports, and PID gains stay in robot-side profiles.
 
+The companion ROS repository provides a simulator profile and a physical
+SCUTTLE template under `amr_web_bridge/config/profiles`. These files select
+identity, capabilities, and ROS interface names; credentials remain in the
+Agent credential store and must never be committed into a profile.
+
 ## Enrollment and pairing
 
 1. The agent calls `POST /api/robot-registry/enrollments` using the limited bootstrap credential.

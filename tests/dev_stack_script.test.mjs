@@ -30,6 +30,11 @@ test("FastAPI and ROS Bridge inherit the same tmux token", () => {
   assert.match(source, /ROBOT_WS_AUTH_REQUIRED=true/);
 });
 
+test("ROS Bridge starts from the simulator robot profile", () => {
+  assert.match(source, /--params-file/);
+  assert.match(source, /turtlebot3_waffle_sim\.yaml/);
+});
+
 test("stop is scoped to the owned tmux session", () => {
   assert.match(source, /send-keys[^\n]+C-c/);
   assert.match(source, /kill-session -t/);

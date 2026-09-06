@@ -99,6 +99,7 @@ run_bridge() {
   done
   exec ros2 run amr_web_bridge web_bridge_node \
     --ros-args \
+    --params-file "${ROS_WORKSPACE}/src/amr_web_bridge/config/profiles/turtlebot3_waffle_sim.yaml" \
     -p server_url:=ws://127.0.0.1:8000 \
     -p robot_id:=robot01 \
     -p maps_directory:="${ROS_WORKSPACE}/src/amr_simulation/maps" \
