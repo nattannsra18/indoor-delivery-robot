@@ -5,6 +5,7 @@ out
 .env.local
 .DS_Store
 *.log
+/AGENTS.md
 
 # Python / FastAPI
 backend/.venv/
