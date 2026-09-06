@@ -99,6 +99,9 @@ def active_command(db):
     )
     command = service.build_navigation_command(task)
     assert command is not None
+    assert command["protocol_version"] == "1.0"
+    assert command["robot_id"] == task.robot_id
+    assert command["expires_at"] > command["issued_at"]
     return task, command
 
 

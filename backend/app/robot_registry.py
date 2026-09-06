@@ -141,6 +141,13 @@ class RobotRegistryService:
         hardware_fingerprint: str,
     ) -> RobotCredentialClaimed:
         item = self._enrollment(enrollment_id)
+        if _aware(item.expires_at) <= utc_now():
+            raise HTTPException(status.HTTP_410_GONE, "Pairing code expired")
+        if item.status == RobotEnrollmentStatus.PENDING:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Enrollment is awaiting approval",
+            )
         self._validate_pairing(item, pairing_code)
         if not hmac.compare_digest(
             item.hardware_fingerprint_hash, token_digest(hardware_fingerprint)

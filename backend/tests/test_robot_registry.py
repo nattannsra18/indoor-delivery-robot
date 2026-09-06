@@ -151,6 +151,14 @@ def test_expired_pairing_code_and_revoked_credential_are_rejected():
         registry.approve(created.enrollment_id, created.pairing_code, "admin")
     assert expired.value.status_code == 410
 
+    with pytest.raises(HTTPException) as expired_claim:
+        registry.claim(
+            created.enrollment_id,
+            created.pairing_code,
+            enrollment_payload().hardware_fingerprint,
+        )
+    assert expired_claim.value.status_code == 410
+
     fresh = registry.create_enrollment(enrollment_payload(), ttl_seconds=600)
     registry.approve(fresh.enrollment_id, fresh.pairing_code, "admin")
     claimed = registry.claim(

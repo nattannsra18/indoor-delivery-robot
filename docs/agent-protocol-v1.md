@@ -53,6 +53,13 @@ After its ROS checks complete, the agent sends `agent_readiness` with a `READY`,
 
 New commands use an envelope containing `command_id`, `robot_id`, `issued_at`, `expires_at`, optional expected map/profile revisions, an action identifier, and an action-specific payload. Agents must reject expired commands and commands addressed to another robot.
 
+The current navigation migration retains the established `command`, `task_id`,
+`stage`, and `target` fields while adding the v1 protocol version, destination,
+expiry, and expected profile. This lets the simulated fleet migrate without
+changing the ROS navigation adapter in one deployment. New adapters should use
+the versioned envelope fields and keep hardware-specific configuration in their
+robot profile.
+
 Agents report one or more lifecycle states:
 
 ```text
@@ -60,6 +67,11 @@ accepted | rejected -> started -> succeeded | failed
 ```
 
 All status frames repeat the command ID, robot ID, protocol version, and timestamp. Command IDs are idempotency keys: receiving a duplicate must not repeat physical motion.
+
+Navigation commands currently expire after 30 seconds. The Agent also checks an
+optional expected map revision and expected profile version before queueing
+motion. It keeps a bounded in-memory history of processed command IDs and emits
+the v1 lifecycle alongside the legacy navigation result during migration.
 
 ## State model
 

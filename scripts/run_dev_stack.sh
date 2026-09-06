@@ -112,8 +112,8 @@ run_bridge() {
 }
 
 ensure_shared_token() {
-  local token
-  token="$("${BACKEND_PYTHON}" - "${BACKEND_ENV_FILE}" <<'PY'
+  local credentials token enrollment_token
+  credentials="$("${BACKEND_PYTHON}" - "${BACKEND_ENV_FILE}" <<'PY'
 import secrets
 import sys
 from pathlib import Path
@@ -121,15 +121,23 @@ from dotenv import dotenv_values, set_key
 
 env_path = Path(sys.argv[1])
 env_path.touch(mode=0o600, exist_ok=True)
-token = dotenv_values(env_path).get("ROBOT_WS_TOKEN") or secrets.token_hex(32)
+values = dotenv_values(env_path)
+token = values.get("ROBOT_WS_TOKEN") or secrets.token_hex(32)
+enrollment_token = values.get("ROBOT_ENROLLMENT_TOKEN") or secrets.token_hex(32)
 set_key(str(env_path), "ROBOT_WS_TOKEN", token, quote_mode="never")
 set_key(str(env_path), "ROBOT_WS_AUTH_REQUIRED", "true", quote_mode="never")
+set_key(str(env_path), "ROBOT_ENROLLMENT_TOKEN", enrollment_token, quote_mode="never")
+set_key(str(env_path), "ROBOT_ENROLLMENT_ENABLED", "true", quote_mode="never")
 env_path.chmod(0o600)
-print(token, end="")
+print(f"{token}|{enrollment_token}", end="")
 PY
 )"
+  IFS='|' read -r token enrollment_token <<<"${credentials}"
   [[ -n "${token}" ]] || die "Unable to load or create ROBOT_WS_TOKEN"
+  [[ -n "${enrollment_token}" ]] || die "Unable to load or create ROBOT_ENROLLMENT_TOKEN"
   export ROBOT_WS_TOKEN="${token}"
+  export ROBOT_ENROLLMENT_TOKEN="${enrollment_token}"
+  export ROBOT_ENROLLMENT_ENABLED=true
   export ROBOT_WS_AUTH_REQUIRED=true
   export APP_ENV=development
   export SESSION_COOKIE_SECURE=false
@@ -180,6 +188,8 @@ start_stack() {
   printf -v quoted_script '%q' "${SCRIPT_PATH}"
   tmux new-session -d -s "${SESSION_NAME}" -n fastapi
   tmux set-environment -t "${SESSION_NAME}" ROBOT_WS_TOKEN "${ROBOT_WS_TOKEN}"
+  tmux set-environment -t "${SESSION_NAME}" ROBOT_ENROLLMENT_TOKEN "${ROBOT_ENROLLMENT_TOKEN}"
+  tmux set-environment -t "${SESSION_NAME}" ROBOT_ENROLLMENT_ENABLED "${ROBOT_ENROLLMENT_ENABLED}"
   tmux set-environment -t "${SESSION_NAME}" ROBOT_WS_AUTH_REQUIRED "${ROBOT_WS_AUTH_REQUIRED}"
   tmux set-environment -t "${SESSION_NAME}" APP_ENV "${APP_ENV}"
   tmux set-environment -t "${SESSION_NAME}" SESSION_COOKIE_SECURE "${SESSION_COOKIE_SECURE}"

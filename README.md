@@ -251,7 +251,13 @@ cd ../indoor-delivery-robot
 
 Open [http://localhost:3000](http://localhost:3000). The stack script starts the frontend, FastAPI, Gazebo/Nav2, Gazebo GUI, and the ROS bridge in a managed `tmux` session.
 
+On the first run, inspect the bridge log for the pairing code, sign in as the
+bootstrap administrator, open **Robot Registry**, verify the serial and
+fingerprint, and approve the simulator. Its individual credential is stored
+outside the repository and is reused automatically on later starts.
+
 ```bash
+./scripts/run_dev_stack.sh logs bridge
 ./scripts/run_dev_stack.sh attach
 ./scripts/run_dev_stack.sh logs
 ./scripts/run_dev_stack.sh stop

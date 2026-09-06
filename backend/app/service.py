@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from datetime import timedelta
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -401,12 +402,18 @@ class DeliveryService:
             task.id,
             stage,
         )
+        issued_at = utc_now()
+        robot = self._robot_or_404(task.robot_id)
 
         return {
             "type": "command",
+            "protocol_version": "1.0",
             "command_id": command.command_id,
             "command": "navigate_to_pose",
             "robot_id": task.robot_id,
+            "issued_at": issued_at.isoformat(),
+            "expires_at": (issued_at + timedelta(seconds=30)).isoformat(),
+            "expected_profile_version": robot.profile_version,
             "task_id": task.id,
             "stage": stage,
             "target": {

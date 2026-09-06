@@ -34,6 +34,7 @@ from ..models import (
     RobotTelemetry,
     RobotAgentHello,
     RobotAgentReadiness,
+    RobotCommandAcknowledgement,
     TaskEvent,
 )
 from ..service import DeliveryService
@@ -1492,6 +1493,35 @@ async def robot_websocket(
                     {"type": "emergency_stop_changed", "emergency_stop": EmergencyStop.model_validate(state).model_dump(mode="json")}
                 )
 
+            elif message_type == "command_status":
+                try:
+                    command_status = RobotCommandAcknowledgement.model_validate(
+                        message
+                    )
+                except ValidationError as error:
+                    await send_error(
+                        websocket,
+                        "INVALID_COMMAND_STATUS",
+                        str(error),
+                    )
+                    continue
+                if command_status.robot_id != robot_id:
+                    await send_error(
+                        websocket,
+                        "COMMAND_ROBOT_MISMATCH",
+                        "Command status belongs to another robot",
+                    )
+                    continue
+                await websocket.send_json(
+                    {
+                        "type": "command_status_received",
+                        "robot_id": robot_id,
+                        "command_id": command_status.command_id,
+                        "lifecycle": command_status.lifecycle,
+                        "server_time": current_utc_time(),
+                    }
+                )
+
             elif message_type == "command_ack":
                 command_id = message.get(
                     "command_id"
@@ -1545,6 +1575,7 @@ async def robot_websocket(
                         "'navigation_feedback', "
                         "'navigation_result', "
                         "'navigation_cancelled' and "
+                        "'command_status' or "
                         "'command_ack'"
                     ),
                 )

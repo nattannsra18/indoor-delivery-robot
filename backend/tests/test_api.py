@@ -973,6 +973,34 @@ def test_robot_receives_pickup_navigation_command():
         )
         assert receipt["accepted"] is True
 
+
+def test_robot_command_lifecycle_status_is_validated_and_correlated():
+    with robot_websocket_connect() as websocket:
+        websocket.receive_json()
+
+        task = create_task("A", "C")
+        command = websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "command_status",
+                "protocol_version": "1.0",
+                "command_id": command["command_id"],
+                "robot_id": "robot01",
+                "lifecycle": "accepted",
+                "timestamp": "2026-09-07T00:00:00+00:00",
+                "detail": "Queued by the Robot Agent",
+            }
+        )
+
+        receipt = websocket.receive_json()
+        assert receipt == {
+            "type": "command_status_received",
+            "robot_id": "robot01",
+            "command_id": command["command_id"],
+            "lifecycle": "accepted",
+            "server_time": receipt["server_time"],
+        }
+
 def test_robot_receives_destination_command():
     with robot_websocket_connect() as websocket:
         websocket.receive_json()

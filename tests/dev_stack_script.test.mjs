@@ -23,6 +23,8 @@ test("launcher documents lifecycle commands", () => {
 
 test("FastAPI and ROS Bridge inherit the same tmux token", () => {
   assert.match(source, /set-environment[^\n]+ROBOT_WS_TOKEN/);
+  assert.match(source, /set-environment[^\n]+ROBOT_ENROLLMENT_TOKEN/);
+  assert.match(source, /set_key\(str\(env_path\), "ROBOT_ENROLLMENT_TOKEN"/);
   assert.match(source, /run_fastapi\(\)/);
   assert.match(source, /run_bridge\(\)/);
   assert.match(source, /ROBOT_WS_AUTH_REQUIRED=true/);
