@@ -70,3 +70,22 @@ export function worldToCanvas(
     y: viewport.y + (map.height - 1 - gridY) * viewport.scale
   };
 }
+
+export function canvasToWorld(
+  map: OccupancyGridMap,
+  viewport: MapViewport,
+  canvasX: number,
+  canvasY: number
+): { x: number; y: number } | undefined {
+  const gridX = (canvasX - viewport.x) / viewport.scale;
+  const gridY = map.height - 1 - (canvasY - viewport.y) / viewport.scale;
+  if (gridX < 0 || gridY < 0 || gridX >= map.width || gridY >= map.height) return undefined;
+  const localX = gridX * map.resolution;
+  const localY = gridY * map.resolution;
+  const cosine = Math.cos(map.originYaw);
+  const sine = Math.sin(map.originYaw);
+  return {
+    x: map.originX + cosine * localX - sine * localY,
+    y: map.originY + sine * localX + cosine * localY,
+  };
+}

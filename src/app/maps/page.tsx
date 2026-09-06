@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import RobotMap from "@/components/RobotMap";
+import LocalizationWorkspace from "@/components/LocalizationWorkspace";
 import { useLocale } from "@/context/LocaleContext";
 import {
   activateRobotMap,
@@ -20,7 +21,7 @@ import {
   startMapping,
   stopMapping,
 } from "@/lib/api";
-import { formatDate, mapManagementActionsText, mapManagementText, webMappingText } from "@/lib/i18n";
+import { formatDate, localizationText, mapManagementActionsText, mapManagementText, webMappingText } from "@/lib/i18n";
 import type { MappingSession, RobotMapCatalog, RobotMapRecord } from "@/types";
 
 function fileSize(bytes: number, locale: string) {
@@ -34,7 +35,8 @@ export default function MapsPage() {
   const copy = mapManagementText[locale];
   const actions = mapManagementActionsText[locale];
   const mappingCopy = webMappingText[locale];
-  const [view, setView] = useState<"library" | "mapping">("library");
+  const localizationCopy = localizationText[locale];
+  const [view, setView] = useState<"library" | "mapping" | "localization">("library");
   const [mapping, setMapping] = useState<MappingSession>();
   const [mappingBusy, setMappingBusy] = useState(false);
   const [mappingError, setMappingError] = useState("");
@@ -161,12 +163,16 @@ export default function MapsPage() {
   }
 
   return <>
-    <PageHeader title={copy.title} description={copy.description} />
+    <PageHeader
+      title={view === "localization" ? localizationCopy.title : view === "mapping" ? mappingCopy.title : copy.title}
+      description={view === "localization" ? localizationCopy.description : view === "mapping" ? mappingCopy.description : copy.description}
+    />
     <div className="mt-6 inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm" role="tablist" aria-label={copy.title}>
       <button type="button" role="tab" aria-selected={view === "library"} onClick={() => setView("library")} className={`min-h-10 rounded-lg px-4 text-sm font-bold ${view === "library" ? "bg-blue-600 text-white" : "text-slate-600"}`}>{mappingCopy.library}</button>
       <button type="button" role="tab" aria-selected={view === "mapping"} onClick={() => setView("mapping")} className={`min-h-10 rounded-lg px-4 text-sm font-bold ${view === "mapping" ? "bg-blue-600 text-white" : "text-slate-600"}`}>{mappingCopy.create}</button>
+      <button type="button" role="tab" aria-selected={view === "localization"} onClick={() => setView("localization")} className={`min-h-10 rounded-lg px-4 text-sm font-bold ${view === "localization" ? "bg-blue-600 text-white" : "text-slate-600"}`}>{localizationCopy.tab}</button>
     </div>
-    {view === "mapping" ? <MappingWorkspace session={mapping} busy={mappingBusy} error={mappingError} copy={mappingCopy} locale={locale} onBusy={setMappingBusy} onError={setMappingError} onSession={setMapping} onSaved={() => { void load(false); }} onOpenLibrary={() => setView("library")} /> : <>
+    {view === "localization" ? <LocalizationWorkspace /> : view === "mapping" ? <MappingWorkspace session={mapping} busy={mappingBusy} error={mappingError} copy={mappingCopy} locale={locale} onBusy={setMappingBusy} onError={setMappingError} onSession={setMapping} onSaved={() => { void load(false); }} onOpenLibrary={() => setView("library")} /> : <>
     <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
       <p className="max-w-3xl text-sm leading-6 text-blue-900">{actions.sourcePolicy}</p>
       <button type="button" disabled={refreshing} onClick={() => void requestRefresh()} className="min-h-11 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{refreshing ? actions.syncing : actions.sync}</button>

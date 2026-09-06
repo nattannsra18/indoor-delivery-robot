@@ -5,6 +5,8 @@ import type {
   EmergencyStop,
   MapMetadata,
   MapSwitchOperation,
+  InitialPoseInput,
+  LocalizationStatus,
   MapCatalogOperation,
   MappingMapDetails,
   MappingSession,
@@ -543,6 +545,96 @@ export async function deleteRobotMap(
     `/api/map/catalog/${encodeURIComponent(mapId)}?robot_id=${encodeURIComponent(robotId)}`,
     { method: "DELETE" }
   ));
+}
+
+type ApiLocalizationStatus = {
+  robot_id: string;
+  health: LocalizationStatus["health"];
+  reason: LocalizationStatus["reason"];
+  amcl_state: LocalizationStatus["amclState"];
+  map_id: string | null;
+  pose: { frame_id: string; x: number; y: number; yaw: number } | null;
+  pose_age_seconds: number | null;
+  position_uncertainty: number | null;
+  yaw_uncertainty: number | null;
+  tf_available: boolean;
+  moving: boolean;
+  recovery_count: number;
+  recovery_active: boolean;
+  automatic_scan_active: boolean;
+  automatic_scan_progress: number;
+  detail: string | null;
+  pending_command_id: string | null;
+  last_command_id: string | null;
+  last_command_action: LocalizationStatus["lastCommandAction"] | null;
+  last_command_succeeded: boolean | null;
+  updated_at: string;
+};
+
+function toLocalizationStatus(value: ApiLocalizationStatus): LocalizationStatus {
+  return {
+    robotId: value.robot_id,
+    health: value.health,
+    reason: value.reason,
+    amclState: value.amcl_state,
+    mapId: value.map_id ?? undefined,
+    pose: value.pose ? { frameId: value.pose.frame_id, x: value.pose.x, y: value.pose.y, yaw: value.pose.yaw } : undefined,
+    poseAgeSeconds: value.pose_age_seconds ?? undefined,
+    positionUncertainty: value.position_uncertainty ?? undefined,
+    yawUncertainty: value.yaw_uncertainty ?? undefined,
+    tfAvailable: value.tf_available,
+    moving: value.moving,
+    recoveryCount: value.recovery_count,
+    recoveryActive: value.recovery_active ?? false,
+    automaticScanActive: value.automatic_scan_active ?? false,
+    automaticScanProgress: value.automatic_scan_progress ?? 0,
+    detail: value.detail ?? undefined,
+    pendingCommandId: value.pending_command_id ?? undefined,
+    lastCommandId: value.last_command_id ?? undefined,
+    lastCommandAction: value.last_command_action ?? undefined,
+    lastCommandSucceeded: value.last_command_succeeded ?? undefined,
+    updatedAt: value.updated_at,
+  };
+}
+
+export async function getLocalizationStatus(robotId = "robot01"): Promise<LocalizationStatus> {
+  return toLocalizationStatus(await request<ApiLocalizationStatus>(
+    `/api/localization/status?robot_id=${encodeURIComponent(robotId)}`
+  ));
+}
+
+export async function setLocalizationInitialPose(input: InitialPoseInput): Promise<LocalizationStatus> {
+  return toLocalizationStatus(await request<ApiLocalizationStatus>("/api/localization/initial-pose", {
+    method: "POST",
+    body: JSON.stringify({
+      robot_id: input.robotId ?? "robot01",
+      pose: { frame_id: input.pose.frameId, x: input.pose.x, y: input.pose.y, yaw: input.pose.yaw },
+      position_uncertainty: input.positionUncertainty,
+      yaw_uncertainty: input.yawUncertainty,
+    }),
+  }));
+}
+
+export async function runGlobalLocalization(robotId = "robot01"): Promise<LocalizationStatus> {
+  return toLocalizationStatus(await request<ApiLocalizationStatus>("/api/localization/relocalize", {
+    method: "POST",
+    body: JSON.stringify({ robot_id: robotId }),
+  }));
+}
+
+export async function driveLocalizationRecovery(linearX: number, angularZ: number, robotId = "robot01"): Promise<void> {
+  await request(`/api/localization/recovery/teleop?robot_id=${encodeURIComponent(robotId)}`, {
+    method: "POST",
+    body: JSON.stringify({ linear_x: linearX, angular_z: angularZ }),
+  });
+}
+
+export async function startLocalizationScan(robotId = "robot01"): Promise<void> {
+  await request(`/api/localization/recovery/scan/start?robot_id=${encodeURIComponent(robotId)}`, { method: "POST" });
+}
+
+export async function stopLocalizationScan(robotId = "robot01"): Promise<void> {
+  await request(`/api/localization/recovery/scan/stop?robot_id=${encodeURIComponent(robotId)}`, { method: "POST" });
 }
 
 type ApiMappingSession = {

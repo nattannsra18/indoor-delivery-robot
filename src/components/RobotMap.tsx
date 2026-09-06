@@ -5,7 +5,7 @@ import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useLocale } from "@/context/LocaleContext";
 import { operationalText } from "@/lib/i18n";
 import {
-  calculateMapViewport, CanvasPoint, CanvasSize, MapViewport, worldToCanvas
+  calculateMapViewport, canvasToWorld, CanvasPoint, CanvasSize, MapViewport, worldToCanvas
 } from "@/lib/mapGeometry";
 import { framesAreCompatible } from "@/lib/navigationPath";
 import {
@@ -25,6 +25,11 @@ type RobotMapProps = {
   showStations?: boolean;
   showStationButtons?: boolean;
   showTechnicalDetails?: boolean;
+  draftPose?: { x: number; y: number; yaw: number };
+  draftPoseLabel?: string;
+  onMapPointSelect?: (point: { x: number; y: number }) => void;
+  onMapPoseSelect?: (pose: { x: number; y: number; yaw: number }) => void;
+  mapAriaLabel?: string;
 };
 
 const PATH_STATUS_LABEL: Record<"en" | "th", Record<NavigationPathStatus, string>> = {
@@ -46,12 +51,18 @@ export default function RobotMap({
   smoothMotion = false,
   showStations = true,
   showStationButtons = true,
-  showTechnicalDetails = true
+  showTechnicalDetails = true,
+  draftPose,
+  draftPoseLabel,
+  onMapPointSelect,
+  onMapPoseSelect,
+  mapAriaLabel,
 }: RobotMapProps) {
   const { locale, format } = useLocale();
   const copy = operationalText[locale];
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const poseGesture = useRef<{ pointerId: number; x: number; y: number; yaw: number } | undefined>(undefined);
   const occupancyCanvasRef = useRef<HTMLCanvasElement | undefined>(
     undefined
   );
@@ -150,20 +161,31 @@ export default function RobotMap({
       occupancyMap, viewport, robot.x, robot.y
     );
     if (robotPoint) drawRobot(context, occupancyMap, robotPoint, robot.yaw);
+    if (draftPose) {
+      const draftPoint = worldToCanvas(occupancyMap, viewport, draftPose.x, draftPose.y);
+      if (draftPoint) drawDraftPose(context, occupancyMap, draftPoint, draftPose.yaw);
+    }
   }, [
     canvasSize, interactive, occupancyMap, renderablePath, robot,
     selectedDestinationStationId, selectedPickupStationId,
-    routePreview, selectionMode, showStations, stations
+    routePreview, selectionMode, showStations, stations, draftPose
   ]);
 
   function handleMapClick(event: MouseEvent<HTMLCanvasElement>) {
-    if (!interactive || !occupancyMap || !onStationSelect) return;
+    if (onMapPoseSelect) return;
+    if ((!interactive && !onMapPointSelect) || !occupancyMap) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     const click = {
       x: (event.clientX - bounds.left) * (canvasSize.width / bounds.width),
       y: (event.clientY - bounds.top) * (canvasSize.height / bounds.height)
     };
     const viewport = calculateMapViewport(occupancyMap, canvasSize);
+    if (onMapPointSelect) {
+      const point = canvasToWorld(occupancyMap, viewport, click.x, click.y);
+      if (point) onMapPointSelect(point);
+      return;
+    }
+    if (!onStationSelect) return;
     const nearest = stations.map((station) => ({
       station,
       point: worldToCanvas(
@@ -176,6 +198,48 @@ export default function RobotMap({
       distance: Math.hypot(item.point.x - click.x, item.point.y - click.y)
     })).sort((a, b) => a.distance - b.distance)[0];
     if (nearest && nearest.distance <= 20) onStationSelect(nearest.station);
+  }
+
+  function worldPointFromPointer(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!occupancyMap) return undefined;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const viewport = calculateMapViewport(occupancyMap, canvasSize);
+    return canvasToWorld(
+      occupancyMap,
+      viewport,
+      (event.clientX - bounds.left) * (canvasSize.width / bounds.width),
+      (event.clientY - bounds.top) * (canvasSize.height / bounds.height),
+    );
+  }
+
+  function handlePosePointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!onMapPoseSelect) return;
+    const point = worldPointFromPointer(event);
+    if (!point) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const yaw = draftPose?.yaw ?? robot.yaw ?? 0;
+    poseGesture.current = { pointerId: event.pointerId, ...point, yaw };
+    onMapPoseSelect({ ...point, yaw });
+  }
+
+  function handlePosePointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
+    const start = poseGesture.current;
+    if (!start || start.pointerId !== event.pointerId || !onMapPoseSelect) return;
+    const point = worldPointFromPointer(event);
+    if (!point) return;
+    const distance = Math.hypot(point.x - start.x, point.y - start.y);
+    const yaw = distance < 0.04 ? start.yaw : Math.atan2(point.y - start.y, point.x - start.x);
+    onMapPoseSelect({ x: start.x, y: start.y, yaw });
+  }
+
+  function finishPoseGesture(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (poseGesture.current?.pointerId !== event.pointerId) return;
+    handlePosePointerMove(event);
+    poseGesture.current = undefined;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   }
 
   if (!occupancyMap) {
@@ -201,12 +265,16 @@ export default function RobotMap({
       <div ref={containerRef} className="w-full overflow-hidden">
         <canvas
           ref={canvasRef}
-          tabIndex={interactive ? 0 : undefined}
-          className={`block max-w-full ${interactive ? "cursor-pointer" : ""}`}
-          aria-label={showTechnicalDetails
+          tabIndex={interactive || onMapPointSelect || onMapPoseSelect ? 0 : undefined}
+          className={`block max-w-full ${interactive || onMapPointSelect || onMapPoseSelect ? "cursor-crosshair touch-none" : ""}`}
+          aria-label={mapAriaLabel ?? (showTechnicalDetails
             ? (locale === "th" ? `แผนที่ ROS พร้อมเส้นทาง Nav2${showStations ? " สถานี" : ""} และตำแหน่งหุ่นยนต์` : `ROS occupancy grid with live Nav2 path${showStations ? ", stations" : ""} and robot pose`)
-            : (locale === "th" ? "แผนที่จัดส่งพร้อมเส้นทาง สถานี และตำแหน่งหุ่นยนต์" : "Delivery map with route, stations and robot position")}
+            : (locale === "th" ? "แผนที่จัดส่งพร้อมเส้นทาง สถานี และตำแหน่งหุ่นยนต์" : "Delivery map with route, stations and robot position"))}
           onClick={handleMapClick}
+          onPointerDown={handlePosePointerDown}
+          onPointerMove={handlePosePointerMove}
+          onPointerUp={finishPoseGesture}
+          onPointerCancel={finishPoseGesture}
         />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
@@ -219,6 +287,7 @@ export default function RobotMap({
         {showStations && <Legend color="#06b6d4" label={locale === "th" ? "จุดรับ" : "Pickup"} />}
         {showStations && <Legend color="#8b5cf6" label={locale === "th" ? "จุดหมาย" : "Destination"} />}
         <Legend color="#2563eb" label={locale === "th" ? "หุ่นยนต์" : "Robot"} />
+        {draftPose && <Legend color="#d97706" label={draftPoseLabel ?? (locale === "th" ? "ตำแหน่งเริ่มต้น" : "Initial pose")} />}
       </div>
       {interactive && showStationButtons && (
         <div className="border-t border-slate-200 bg-white px-4 py-3">
@@ -456,6 +525,30 @@ function drawRobot(
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillText("R", point.x, point.y + 0.5);
+}
+
+function drawDraftPose(
+  context: CanvasRenderingContext2D,
+  map: OccupancyGridMap,
+  point: CanvasPoint,
+  yaw: number
+) {
+  const canvasYaw = -(yaw - map.originYaw);
+  context.save();
+  context.strokeStyle = "#d97706";
+  context.fillStyle = "#fffbeb";
+  context.lineWidth = 3;
+  context.setLineDash([5, 4]);
+  context.beginPath();
+  context.arc(point.x, point.y, 14, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+  context.setLineDash([]);
+  context.beginPath();
+  context.moveTo(point.x, point.y);
+  context.lineTo(point.x + Math.cos(canvasYaw) * 34, point.y + Math.sin(canvasYaw) * 34);
+  context.stroke();
+  context.restore();
 }
 
 function Legend({ color, label, line = false }: {

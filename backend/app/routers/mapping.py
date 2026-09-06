@@ -10,6 +10,7 @@ from ..map_catalog_operation_store import map_catalog_operation_store
 from ..map_catalog_store import map_catalog_store
 from ..map_switch_store import map_switch_store
 from ..mapping_store import ACTIVE_PHASES, mapping_store
+from ..localization_store import localization_store
 from ..models import (
     MappingPhase,
     MappingSaveRequest,
@@ -41,6 +42,8 @@ def _require_robot_ready(db: Session, robot_id: str) -> None:
         )
     if map_switch_store.has_pending(robot_id) or map_catalog_operation_store.has_pending(robot_id):
         raise HTTPException(status_code=409, detail="A map operation is already pending")
+    if localization_store.has_pending(robot_id):
+        raise HTTPException(status_code=409, detail="A localization command is already pending")
 
 
 async def _deliver(robot_id: str, payload: dict) -> None:

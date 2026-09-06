@@ -143,6 +143,49 @@ export interface MappingMapDetails extends RobotMapDetails {
   mapId: string;
 }
 
+export type LocalizationHealth = "UNKNOWN" | "LOCALIZED" | "DEGRADED" | "LOST";
+export type AmclLifecycleState = "UNKNOWN" | "ACTIVE" | "INACTIVE";
+export type LocalizationReason = "READY" | "ROBOT_OFFLINE" | "MAPPING_ACTIVE" | "AMCL_INACTIVE" | "NO_POSE" | "TF_UNAVAILABLE" | "POSE_STALE" | "HIGH_UNCERTAINTY";
+export type LocalizationCommandAction = "SET_INITIAL_POSE" | "GLOBAL_LOCALIZATION";
+
+export interface LocalizationPose {
+  frameId: string;
+  x: number;
+  y: number;
+  yaw: number;
+}
+
+export interface LocalizationStatus {
+  robotId: string;
+  health: LocalizationHealth;
+  reason: LocalizationReason;
+  amclState: AmclLifecycleState;
+  mapId?: string;
+  pose?: LocalizationPose;
+  poseAgeSeconds?: number;
+  positionUncertainty?: number;
+  yawUncertainty?: number;
+  tfAvailable: boolean;
+  moving: boolean;
+  recoveryCount: number;
+  recoveryActive: boolean;
+  automaticScanActive: boolean;
+  automaticScanProgress: number;
+  detail?: string;
+  pendingCommandId?: string;
+  lastCommandId?: string;
+  lastCommandAction?: LocalizationCommandAction;
+  lastCommandSucceeded?: boolean;
+  updatedAt: string;
+}
+
+export interface InitialPoseInput {
+  robotId?: string;
+  pose: LocalizationPose;
+  positionUncertainty: number;
+  yawUncertainty: number;
+}
+
 export interface Robot {
   id: string;
   name: string;

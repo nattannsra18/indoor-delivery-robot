@@ -748,6 +748,117 @@ class RobotMappingStatusMessage(BaseModel):
     map_revision: Optional[int] = Field(default=None, ge=0)
 
 
+class LocalizationHealth(str, Enum):
+    UNKNOWN = "UNKNOWN"
+    LOCALIZED = "LOCALIZED"
+    DEGRADED = "DEGRADED"
+    LOST = "LOST"
+
+
+class AmclLifecycleState(str, Enum):
+    UNKNOWN = "UNKNOWN"
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+
+
+class LocalizationReason(str, Enum):
+    READY = "READY"
+    ROBOT_OFFLINE = "ROBOT_OFFLINE"
+    MAPPING_ACTIVE = "MAPPING_ACTIVE"
+    AMCL_INACTIVE = "AMCL_INACTIVE"
+    NO_POSE = "NO_POSE"
+    TF_UNAVAILABLE = "TF_UNAVAILABLE"
+    POSE_STALE = "POSE_STALE"
+    HIGH_UNCERTAINTY = "HIGH_UNCERTAINTY"
+
+
+class LocalizationCommandAction(str, Enum):
+    SET_INITIAL_POSE = "SET_INITIAL_POSE"
+    GLOBAL_LOCALIZATION = "GLOBAL_LOCALIZATION"
+
+
+class LocalizationPose(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    frame_id: Literal["map"] = "map"
+    x: float = Field(ge=-10000.0, le=10000.0)
+    y: float = Field(ge=-10000.0, le=10000.0)
+    yaw: float = Field(ge=-3.141593, le=3.141593)
+
+
+class LocalizationStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    robot_id: str = Field(min_length=1, max_length=100)
+    health: LocalizationHealth
+    reason: LocalizationReason
+    amcl_state: AmclLifecycleState
+    map_id: Optional[str] = Field(default=None, max_length=120)
+    pose: Optional[LocalizationPose] = None
+    pose_age_seconds: Optional[float] = Field(default=None, ge=0.0)
+    position_uncertainty: Optional[float] = Field(default=None, ge=0.0)
+    yaw_uncertainty: Optional[float] = Field(default=None, ge=0.0)
+    tf_available: bool
+    moving: bool
+    recovery_count: int = Field(default=0, ge=0)
+    recovery_active: bool = False
+    automatic_scan_active: bool = False
+    automatic_scan_progress: float = Field(default=0.0, ge=0.0, le=1.0)
+    detail: Optional[str] = Field(default=None, max_length=500)
+    pending_command_id: Optional[str] = Field(default=None, max_length=100)
+    last_command_id: Optional[str] = Field(default=None, max_length=100)
+    last_command_action: Optional[LocalizationCommandAction] = None
+    last_command_succeeded: Optional[bool] = None
+    updated_at: datetime
+
+
+class LocalizationInitialPoseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    robot_id: str = Field(default="robot01", min_length=1, max_length=100)
+    pose: LocalizationPose
+    position_uncertainty: float = Field(default=0.5, ge=0.05, le=5.0)
+    yaw_uncertainty: float = Field(default=0.35, ge=0.05, le=3.141593)
+
+
+class LocalizationCommandRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    robot_id: str = Field(default="robot01", min_length=1, max_length=100)
+
+
+class LocalizationTeleopRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    linear_x: float = Field(ge=-0.12, le=0.12)
+    angular_z: float = Field(ge=-0.4, le=0.4)
+
+
+class RobotLocalizationStatusMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    type: Literal["localization_status"]
+    robot_id: str = Field(min_length=1, max_length=100)
+    health: LocalizationHealth
+    reason: LocalizationReason
+    amcl_state: AmclLifecycleState
+    map_id: Optional[str] = Field(default=None, max_length=120)
+    pose: Optional[LocalizationPose] = None
+    pose_age_seconds: Optional[float] = Field(default=None, ge=0.0)
+    position_uncertainty: Optional[float] = Field(default=None, ge=0.0)
+    yaw_uncertainty: Optional[float] = Field(default=None, ge=0.0)
+    tf_available: bool
+    moving: bool
+    recovery_count: int = Field(default=0, ge=0)
+    recovery_active: bool = False
+    automatic_scan_active: bool = False
+    automatic_scan_progress: float = Field(default=0.0, ge=0.0, le=1.0)
+    detail: Optional[str] = Field(default=None, max_length=500)
+    command_id: Optional[str] = Field(default=None, max_length=100)
+    command_action: Optional[LocalizationCommandAction] = None
+    accepted: bool = True
+
+
 class DeliveryTask(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

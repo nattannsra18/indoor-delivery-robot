@@ -36,6 +36,7 @@ from app.map_catalog_store import map_catalog_store
 from app.map_switch_store import map_switch_store
 from app.map_catalog_operation_store import map_catalog_operation_store
 from app.mapping_store import mapping_store
+from app.localization_store import localization_store
 from app.navigation_feedback_store import (
     navigation_feedback_store,
 )
@@ -169,6 +170,7 @@ def setup_function():
     map_switch_store.clear()
     map_catalog_operation_store.clear()
     mapping_store.clear()
+    localization_store.clear()
     with TestingSessionLocal() as db:
         db.execute(delete(SessionORM))
         db.execute(delete(AuditRecordORM))
@@ -1314,6 +1316,158 @@ def test_mapping_start_rejects_queued_delivery():
         assert websocket.receive_json()["type"] == "connection_ack"
         response = client.post("/api/mapping/start", json={"robot_id": "robot01"})
         assert response.status_code == 409
+
+
+def test_admin_localization_status_and_initial_pose_are_robot_acknowledged():
+    with robot_websocket_connect() as websocket:
+        assert websocket.receive_json()["type"] == "connection_ack"
+        websocket.send_json({
+            "type": "localization_status",
+            "robot_id": "robot01",
+            "health": "LOCALIZED",
+            "reason": "READY",
+            "amcl_state": "ACTIVE",
+            "map_id": "warehouse_map",
+            "pose": {"frame_id": "map", "x": 1.2, "y": -0.4, "yaw": 0.5},
+            "pose_age_seconds": 0.2,
+            "position_uncertainty": 0.1,
+            "yaw_uncertainty": 0.08,
+            "tf_available": True,
+            "moving": False,
+            "recovery_count": 0,
+        })
+        assert websocket.receive_json()["type"] == "localization_status_ack"
+        status_response = client.get("/api/localization/status")
+        assert status_response.status_code == 200
+        assert status_response.json()["health"] == "LOCALIZED"
+        assert status_response.json()["pose"]["x"] == 1.2
+
+        response = client.post("/api/localization/initial-pose", json={
+            "robot_id": "robot01",
+            "pose": {"frame_id": "map", "x": 1.0, "y": 2.0, "yaw": 0.25},
+            "position_uncertainty": 0.4,
+            "yaw_uncertainty": 0.3,
+        })
+        assert response.status_code == 202
+        command = websocket.receive_json()
+        assert command["type"] == "localization_command"
+        assert command["action"] == "SET_INITIAL_POSE"
+        assert command["pose"]["frame_id"] == "map"
+
+        websocket.send_json({
+            "type": "localization_status",
+            "robot_id": "robot01",
+            "command_id": command["command_id"],
+            "command_action": "SET_INITIAL_POSE",
+            "accepted": True,
+            "health": "LOCALIZED",
+            "reason": "READY",
+            "amcl_state": "ACTIVE",
+            "map_id": "warehouse_map",
+            "pose": command["pose"],
+            "pose_age_seconds": 0.0,
+            "position_uncertainty": 0.4,
+            "yaw_uncertainty": 0.3,
+            "tf_available": True,
+            "moving": False,
+            "recovery_count": 1,
+            "detail": "Initial pose published to AMCL",
+        })
+        assert websocket.receive_json()["type"] == "localization_status_ack"
+        completed = client.get("/api/localization/status").json()
+        assert completed["pending_command_id"] is None
+        assert completed["last_command_succeeded"] is True
+        assert completed["recovery_count"] == 1
+    offline = client.get("/api/localization/status").json()
+    assert offline["health"] == "UNKNOWN"
+    assert offline["reason"] == "ROBOT_OFFLINE"
+    assert offline["tf_available"] is False
+
+
+def test_localization_command_rejects_invalid_pose_and_queued_delivery():
+    invalid = client.post("/api/localization/initial-pose", json={
+        "robot_id": "robot01",
+        "pose": {"frame_id": "odom", "x": 0, "y": 0, "yaw": 0},
+        "position_uncertainty": 0.5,
+        "yaw_uncertainty": 0.3,
+    })
+    assert invalid.status_code == 422
+    with TestingSessionLocal() as db:
+        db.add(DeliveryTaskORM(
+            id="TASK-LOCALIZATION-BLOCK",
+            pickup_station_id="A",
+            destination_station_id="B",
+            status=TaskStatus.QUEUED,
+            progress=0,
+            priority=TaskPriority.NORMAL,
+            created_at=utc_now(),
+        ))
+        db.commit()
+    blocked = client.post("/api/localization/relocalize", json={"robot_id": "robot01"})
+    assert blocked.status_code == 409
+
+
+def test_global_localization_enables_scoped_recovery_teleop():
+    with robot_websocket_connect() as websocket:
+        assert websocket.receive_json()["type"] == "connection_ack"
+        response = client.post(
+            "/api/localization/relocalize",
+            json={"robot_id": "robot01"},
+        )
+        assert response.status_code == 202
+        command = websocket.receive_json()
+        assert command["action"] == "GLOBAL_LOCALIZATION"
+        websocket.send_json({
+            "type": "localization_status",
+            "robot_id": "robot01",
+            "command_id": command["command_id"],
+            "command_action": "GLOBAL_LOCALIZATION",
+            "accepted": True,
+            "health": "DEGRADED",
+            "reason": "HIGH_UNCERTAINTY",
+            "amcl_state": "ACTIVE",
+            "map_id": "warehouse_map",
+            "pose": {"frame_id": "map", "x": 0, "y": 0, "yaw": 0},
+            "pose_age_seconds": 0.0,
+            "position_uncertainty": 2.0,
+            "yaw_uncertainty": 1.0,
+            "tf_available": True,
+            "moving": False,
+            "recovery_count": 1,
+            "recovery_active": True,
+        })
+        assert websocket.receive_json()["type"] == "localization_status_ack"
+        drive = client.post(
+            "/api/localization/recovery/teleop",
+            json={"linear_x": 0.08, "angular_z": 0.0},
+        )
+        assert drive.status_code == 202
+        message = websocket.receive_json()
+        assert message["type"] == "localization_teleop"
+        assert message["linear_x"] == 0.08
+        scan = client.post("/api/localization/recovery/scan/start")
+        assert scan.status_code == 202
+        scan_message = websocket.receive_json()
+        assert scan_message["type"] == "localization_scan"
+        assert scan_message["action"] == "START"
+        stop_scan = client.post("/api/localization/recovery/scan/stop")
+        assert stop_scan.status_code == 202
+        assert websocket.receive_json()["action"] == "STOP"
+        unsafe = client.post(
+            "/api/localization/recovery/teleop",
+            json={"linear_x": 0.2, "angular_z": 0.0},
+        )
+        assert unsafe.status_code == 422
+
+
+def test_localization_recovery_teleop_requires_active_search():
+    with robot_websocket_connect() as websocket:
+        websocket.receive_json()
+        blocked = client.post(
+            "/api/localization/recovery/teleop",
+            json={"linear_x": 0.05, "angular_z": 0.0},
+        )
+        assert blocked.status_code == 409
 
 
 def test_admin_map_switch_requires_and_applies_matching_robot_ack():

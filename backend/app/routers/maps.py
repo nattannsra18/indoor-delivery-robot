@@ -23,6 +23,7 @@ from ..models import (
 from ..map_catalog_store import map_catalog_store
 from ..map_switch_store import map_switch_store
 from ..map_catalog_operation_store import map_catalog_operation_store
+from ..localization_store import localization_store
 from ..service import DeliveryService
 from ..config import security_settings
 from ..websocket_manager import robot_connection_manager
@@ -142,6 +143,8 @@ def _require_idle_robot(db: Session, robot_id: str) -> None:
             status_code=409,
             detail="Robot must be online and idle with no active mission",
         )
+    if localization_store.has_pending(robot_id):
+        raise HTTPException(status_code=409, detail="A localization command is pending")
 
 
 async def _send_catalog_operation(
@@ -153,6 +156,8 @@ async def _send_catalog_operation(
     db: Session,
     user: UserORM,
 ) -> MapCatalogOperation:
+    if localization_store.has_pending(robot_id):
+        raise HTTPException(status_code=409, detail="A localization command is pending")
     if map_switch_store.has_pending(robot_id):
         raise HTTPException(status_code=409, detail="A map switch is pending")
     operation = map_catalog_operation_store.begin(
@@ -295,6 +300,8 @@ async def activate_map(
     db: Session = Depends(get_db),
     user: UserORM = Depends(require_admin),
 ) -> MapSwitchOperation:
+    if localization_store.has_pending(robot_id):
+        raise HTTPException(status_code=409, detail="A localization command is pending")
     if map_catalog_operation_store.has_pending(robot_id):
         raise HTTPException(status_code=409, detail="A map edit is pending")
     catalog = map_catalog_store.get(

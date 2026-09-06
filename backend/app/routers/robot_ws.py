@@ -24,6 +24,7 @@ from ..models import (
     RobotMapCatalogOperationResultMessage,
     RobotMapSwitchResultMessage,
     RobotMappingStatusMessage,
+    RobotLocalizationStatusMessage,
     NavigationFeedbackMessage,
     NavigationPathClearMessage,
     NavigationPathMessage,
@@ -39,6 +40,7 @@ from ..map_catalog_store import map_catalog_store
 from ..map_switch_store import map_switch_store
 from ..map_catalog_operation_store import map_catalog_operation_store
 from ..mapping_store import mapping_store
+from ..localization_store import localization_store
 from ..audit_service import AuditService
 from ..navigation_path_store import navigation_path_store
 from ..alert_service import AlertService
@@ -735,6 +737,67 @@ async def robot_websocket(
                     },
                     admin_only=True,
                 )
+            elif message_type == "localization_status":
+                try:
+                    localization_status = (
+                        RobotLocalizationStatusMessage.model_validate(message)
+                    )
+                except ValidationError as error:
+                    details = "; ".join(
+                        f"{'.'.join(map(str, item['loc']))}: {item['msg']}"
+                        for item in error.errors(include_url=False)
+                    )
+                    await send_error(
+                        websocket,
+                        "INVALID_LOCALIZATION_STATUS",
+                        details,
+                    )
+                    continue
+                if localization_status.robot_id != robot_id:
+                    await send_error(
+                        websocket,
+                        "LOCALIZATION_ROBOT_MISMATCH",
+                        "robot_id does not match the authenticated connection",
+                    )
+                    continue
+                current, matched = localization_store.apply(localization_status)
+                action = localization_status.command_action
+                if matched and action is not None:
+                    AuditService(db).log(
+                        TrustedActor.robot(robot_id),
+                        (
+                            f"localization.{action.value.lower()}_succeeded"
+                            if localization_status.accepted
+                            else f"localization.{action.value.lower()}_failed"
+                        ),
+                        "robot",
+                        robot_id,
+                        {
+                            "robot_id": robot_id,
+                            "command_id": localization_status.command_id,
+                            "health": current.health.value,
+                            "reason": current.reason.value,
+                            "map_id": current.map_id,
+                        },
+                        result=(
+                            "success" if localization_status.accepted else "failed"
+                        ),
+                    )
+                    db.commit()
+                await websocket.send_json({
+                    "type": "localization_status_ack",
+                    "command_id": localization_status.command_id,
+                    "accepted": True,
+                    "server_time": current_utc_time(),
+                })
+                await browser_connection_manager.broadcast_json(
+                    {
+                        "type": "localization_status_changed",
+                        "localization": current.model_dump(mode="json"),
+                        "server_time": current_utc_time(),
+                    },
+                    admin_only=True,
+                )
             elif message_type == "navigation_path":
                 try:
                     navigation_path = (
@@ -1419,6 +1482,7 @@ async def robot_websocket(
             websocket,
         )
         if disconnected:
+            localization_store.mark_offline(robot_id)
             publish_committed_notifications(
                 db, service.record_robot_connection(robot_id, False)
             )
@@ -1452,6 +1516,7 @@ async def robot_websocket(
             websocket,
         )
         if disconnected:
+            localization_store.mark_offline(robot_id)
             publish_committed_notifications(
                 db, service.record_robot_connection(robot_id, False)
             )

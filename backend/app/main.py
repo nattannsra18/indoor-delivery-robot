@@ -14,6 +14,7 @@ from .routers import (
     health,
     maps,
     mapping,
+    localization,
     robot_ws,
     robots,
     stations,
@@ -73,6 +74,7 @@ app.include_router(notifications.router)
 app.include_router(audit.router)
 app.include_router(maps.router)
 app.include_router(mapping.router)
+app.include_router(localization.router)
 app.include_router(robot_ws.router)
 app.include_router(dashboard_ws.router)
 
