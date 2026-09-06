@@ -81,6 +81,9 @@ class StationORM(Base):
     description: Mapped[str | None] = mapped_column(String(200), nullable=True)
     location: Mapped[str | None] = mapped_column(String(200), nullable=True)
     instructions: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False, index=True
+    )
 
 
 class MapMetadataORM(Base):

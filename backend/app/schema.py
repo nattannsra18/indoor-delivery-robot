@@ -136,8 +136,16 @@ def apply_compatibility_migrations(engine: Engine) -> None:
                     "ALTER TABLE stations ADD COLUMN map_id VARCHAR(120) "
                     "NOT NULL DEFAULT 'warehouse_map'"
                 ))
+            if "active" not in station_columns:
+                connection.execute(text(
+                    "ALTER TABLE stations ADD COLUMN active BOOLEAN "
+                    "NOT NULL DEFAULT true"
+                ))
             connection.execute(text(
                 "CREATE INDEX IF NOT EXISTS ix_stations_map_id ON stations (map_id)"
+            ))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_stations_active ON stations (active)"
             ))
 
     inspector = inspect(engine)

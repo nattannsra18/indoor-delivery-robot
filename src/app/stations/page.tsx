@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import RobotMap from "@/components/RobotMap";
+import ActionToast from "@/components/ActionToast";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useLocale } from "@/context/LocaleContext";
 import * as api from "@/lib/api";
@@ -131,17 +132,34 @@ export default function StationsPage() {
 
   async function confirmRemove() {
     if (!pendingRemove) return;
+    const station = pendingRemove;
     setBusy(true);
-    const result = await removeStation(pendingRemove.id);
-    setIsError(!result.ok); setMessage(result.message);
+    const result = await removeStation(station.id);
+    setIsError(!result.ok);
+    setMessage(
+      result.ok
+        ? format(copy.removed, { name: station.name, id: station.id })
+        : result.message.includes("active or queued")
+          ? copy.stationInUse
+          : result.message
+    );
     if (result.ok) {
-      if (editingId === pendingRemove.id) resetStationForm();
+      if (editingId === station.id) resetStationForm();
       await loadStations(selectedMapId);
     }
     setPendingRemove(undefined); setBusy(false);
   }
 
   return <>
+    {message && (
+      <ActionToast
+        kind={isError ? "error" : "success"}
+        title={isError ? copy.errorTitle : copy.successTitle}
+        body={message}
+        closeLabel={copy.close}
+        onClose={() => setMessage("")}
+      />
+    )}
     <PageHeader title={copy.title} description={copy.description} />
     <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
@@ -183,7 +201,6 @@ export default function StationsPage() {
             {draftPose ? <div className="mt-2 grid grid-cols-3 gap-2 text-sm"><PoseValue label="X" value={draftPose.x.toFixed(2)} /><PoseValue label="Y" value={draftPose.y.toFixed(2)} /><PoseValue label={copy.heading} value={`${radiansToDegrees(draftPose.yaw).toFixed(0)}°`} /></div> : <p className="mt-2 text-sm text-amber-700">{copy.positionRequired}</p>}
           </div>
           <button type="submit" disabled={busy || !backendOnline || !isActiveMap || !draftPose} className="min-h-11 rounded-xl bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">{busy ? copy.save : editingId ? copy.saveChanges : copy.addAction}</button>
-          <div aria-live="polite">{message && <p role={isError ? "alert" : "status"} className={`rounded-xl p-3 text-sm leading-6 ${isError ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800"}`}>{message}</p>}</div>
         </div>
       </form>
     </div>
@@ -194,7 +211,7 @@ export default function StationsPage() {
         {mapStations.map((station) => <article key={station.id} className={`rounded-xl border p-4 ${editingId === station.id ? "border-blue-400 bg-blue-50/40" : "border-slate-200"}`}>
           <p className="font-bold text-slate-900">{stationDisplayName(station)}</p><p className="mt-1 text-xs font-semibold text-slate-500">{station.id} · {format(copy.pose, { x: station.x.toFixed(2), y: station.y.toFixed(2), yaw: radiansToDegrees(station.yaw).toFixed(0) })}</p>
           {station.location && <p className="mt-3 text-sm text-slate-600">{station.location}</p>}
-          {pendingRemove?.id === station.id ? <div className="mt-4 rounded-xl bg-rose-50 p-3"><p className="font-bold text-rose-900">{copy.confirmRemove}</p><p className="mt-1 text-sm leading-5 text-rose-700">{format(copy.confirmRemoveHelp, { name: station.name })}</p><div className="mt-3 flex gap-2"><button type="button" onClick={() => setPendingRemove(undefined)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold">{copy.cancel}</button><button type="button" onClick={() => void confirmRemove()} disabled={busy} className="min-h-10 rounded-lg bg-rose-600 px-3 text-sm font-bold text-white disabled:opacity-50">{copy.confirm}</button></div></div> : <div className="mt-4 flex gap-2"><button type="button" onClick={() => beginEdit(station)} disabled={busy || !backendOnline || !isActiveMap} className="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-700 disabled:opacity-50">{copy.edit}</button><button type="button" onClick={() => setPendingRemove(station)} disabled={busy || !backendOnline || !isActiveMap} className="min-h-10 rounded-lg border border-rose-200 px-3 text-sm font-bold text-rose-700 disabled:opacity-50">{copy.remove}</button></div>}
+          {pendingRemove?.id === station.id ? <div className="mt-4 rounded-xl bg-rose-50 p-3"><p className="font-bold text-rose-900">{copy.confirmRemove}</p><p className="mt-1 text-sm leading-5 text-rose-700">{format(copy.confirmRemoveHelp, { name: station.name })}</p><div className="mt-3 flex gap-2"><button type="button" onClick={() => setPendingRemove(undefined)} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-bold">{copy.cancel}</button><button type="button" onClick={() => void confirmRemove()} disabled={busy} className="min-h-10 rounded-lg bg-rose-600 px-3 text-sm font-bold text-white disabled:opacity-50">{busy ? copy.removing : copy.confirm}</button></div></div> : <div className="mt-4 flex gap-2"><button type="button" onClick={() => beginEdit(station)} disabled={busy || !backendOnline || !isActiveMap} className="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-700 disabled:opacity-50">{copy.edit}</button><button type="button" onClick={() => setPendingRemove(station)} disabled={busy || !backendOnline || !isActiveMap} className="min-h-10 rounded-lg border border-rose-200 px-3 text-sm font-bold text-rose-700 disabled:opacity-50">{copy.remove}</button></div>}
         </article>)}
         {mapStations.length === 0 && <p className="py-6 text-sm text-slate-500">{copy.empty}</p>}
       </div>

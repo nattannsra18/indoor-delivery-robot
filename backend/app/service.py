@@ -267,6 +267,12 @@ class DeliveryService:
 
     def get_station(self, station_id: str) -> StationORM:
         station = self.repo.get_station(station_id)
+        if not station or not station.active:
+            raise HTTPException(status_code=404, detail="Station not found")
+        return station
+
+    def _get_station_for_task(self, station_id: str) -> StationORM:
+        station = self.repo.get_station(station_id)
         if not station:
             raise HTTPException(status_code=404, detail="Station not found")
         return station
@@ -327,10 +333,10 @@ class DeliveryService:
 
     def delete_station(self, station_id: str, actor_id: str | None = None) -> None:
         station = self.get_station(station_id)
-        if self.repo.station_is_referenced(station.id):
+        if self.repo.station_has_open_task(station.id):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Station is referenced by a delivery task",
+                detail="Station is used by an active or queued delivery task",
             )
         self.repo.delete_station(station)
         AuditService(self.db).log(actor_id, "station.deleted", "station", station.id)
@@ -377,13 +383,13 @@ class DeliveryService:
 
         if task.status == TaskStatus.GOING_TO_PICKUP:
             stage = "pickup"
-            station = self.get_station(
+            station = self._get_station_for_task(
                 task.pickup_station_id
             )
 
         elif task.status == TaskStatus.DELIVERING:
             stage = "destination"
-            station = self.get_station(
+            station = self._get_station_for_task(
                 task.destination_station_id
             )
 
@@ -712,19 +718,19 @@ class DeliveryService:
         robot.last_seen = utc_now().isoformat()
 
         if transition.to_status == TaskStatus.WAITING_FOR_LOADING:
-            pickup = self.get_station(task.pickup_station_id)
+            pickup = self._get_station_for_task(task.pickup_station_id)
             robot.x = pickup.x
             robot.y = pickup.y
             robot.yaw = pickup.yaw
 
         elif transition.to_status == TaskStatus.WAITING_FOR_UNLOADING:
-            destination = self.get_station(task.destination_station_id)
+            destination = self._get_station_for_task(task.destination_station_id)
             robot.x = destination.x
             robot.y = destination.y
             robot.yaw = destination.yaw
 
         elif transition.to_status == TaskStatus.COMPLETED:
-            destination = self.get_station(task.destination_station_id)
+            destination = self._get_station_for_task(task.destination_station_id)
             task.completed_at = utc_now()
             robot.current_task_id = None
             robot.x = destination.x

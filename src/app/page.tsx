@@ -16,6 +16,7 @@ import { useLocale } from "@/context/LocaleContext";
 import { adminUiText, dashboardText, formatDate, robotStateLabel, robotText } from "@/lib/i18n";
 import { taskStatusCounts } from "@/lib/roleDashboard";
 import { displayedTaskProgress } from "@/lib/taskProgress";
+import type { DiagnosticLevel, DiagnosticStatus, RobotDiagnostics } from "@/types";
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -30,6 +31,18 @@ export default function DashboardPage() {
   if (user?.role === "USER") return <UserDashboard />;
 
   const diagnosticIssues = diagnostics?.statuses.filter((item) => item.level !== "OK") ?? [];
+  const sensorStatuses = diagnostics?.statuses.filter(
+    (item) => !isNav2Diagnostic(item)
+  ) ?? [];
+  const sensorIssues = sensorStatuses.filter((item) => item.level !== "OK");
+  const sensorDiagnostics: RobotDiagnostics | undefined = diagnostics
+    ? {
+        ...diagnostics,
+        overallLevel: diagnosticOverallLevel(sensorStatuses),
+        statuses: sensorStatuses
+      }
+    : undefined;
+  const nav2Diagnostic = diagnostics?.statuses.find(isNav2Diagnostic);
   const robotConnected = backendOnline && robot.online;
   const systemHealthy = robotConnected && diagnosticIssues.length === 0;
   const missionProgress = activeTask
@@ -65,7 +78,7 @@ export default function DashboardPage() {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2"><h2 className="text-2xl font-bold text-slate-950">{robot.name}</h2><StatePill active={robotConnected} label={robotConnected ? robotCopy.online : robotCopy.offline}/></div>
             <p className="mt-1 text-sm text-slate-500">{robotCopy.robotId}: {robot.id}</p>
-            <div className="mt-4 flex flex-wrap gap-2"><SmallPill label={robotCopy.state} value={robotStateLabel(robot.state, locale)}/><SmallPill label={robotCopy.activeTask} value={activeTask?.id ?? robotCopy.none}/><SmallPill label={ui.sensorHealth} value={diagnosticIssues.length === 0 ? ui.ready : `${diagnosticIssues.length} ${ui.attention.toLowerCase()}`}/></div>
+            <div className="mt-4 flex flex-wrap gap-2"><SmallPill label={robotCopy.state} value={robotStateLabel(robot.state, locale)}/><SmallPill label={robotCopy.activeTask} value={activeTask?.id ?? robotCopy.none}/><SmallPill label={ui.sensorHealth} value={sensorIssues.length === 0 ? ui.ready : `${sensorIssues.length} ${ui.attention.toLowerCase()}`}/></div>
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -101,10 +114,10 @@ export default function DashboardPage() {
 
     <details className="group mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
       <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 md:px-6 [&::-webkit-details-marker]:hidden">
-        <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">{ui.sensorHealth}</p><h2 className="mt-1 text-lg font-bold text-slate-950">{ui.diagnosticsDetails}</h2><p className="mt-1 text-sm text-slate-500">{diagnosticIssues.length === 0 ? ui.allHealthy : ui.diagnosticsNeedAttention}</p></div>
+        <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">{ui.sensorHealth}</p><h2 className="mt-1 text-lg font-bold text-slate-950">{ui.diagnosticsDetails}</h2><p className="mt-1 text-sm text-slate-500">{sensorIssues.length === 0 ? ui.allHealthy : ui.diagnosticsNeedAttention}</p></div>
         <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-600 transition group-open:rotate-180" aria-hidden="true">⌄</span>
       </summary>
-      <div className="border-t border-slate-100 p-4 md:p-6"><DiagnosticsCards diagnostics={diagnostics}/></div>
+      <div className="border-t border-slate-100 p-4 md:p-6"><DiagnosticsCards diagnostics={sensorDiagnostics}/></div>
     </details>
 
     <details className="group mt-4 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -112,9 +125,37 @@ export default function DashboardPage() {
         <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">{ui.integrationHealth}</p><h2 className="mt-1 text-lg font-bold text-slate-950">{robotCopy.integration}</h2><p className="mt-1 text-sm text-slate-500">{ui.integrationDetailsHelp}</p></div>
         <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-600 transition group-open:rotate-180" aria-hidden="true">⌄</span>
       </summary>
-      <div className="grid gap-3 border-t border-slate-100 p-5 md:grid-cols-2 md:p-6 xl:grid-cols-3"><Integration name="Next.js → FastAPI" state={backendOnline ? robotCopy.connected : robotCopy.offline} active={backendOnline}/><Integration name="PostgreSQL" state={backendOnline ? ui.apiDatabaseReachable : robotCopy.unavailable} active={backendOnline}/><Integration name="ROS 2 Web Bridge" state={robotConnected ? robotCopy.connected : robotCopy.offline} active={robotConnected}/><Integration name={ui.poseTelemetry} state={localizationDiagnostic ? localizationDiagnostic.message : robotCopy.waiting} active={localizationDiagnostic?.level === "OK"}/><Integration name="Nav2" state={activeTask ? t("taskStatus")[activeTask.status] : ui.missionStandby} active={robotConnected}/><Integration name={ui.diagnosticsStream} state={diagnosticsFresh ? ui.telemetryFresh : ui.telemetryStale} active={diagnosticsFresh}/></div>
+      <div className="grid gap-3 border-t border-slate-100 p-5 md:grid-cols-2 md:p-6 xl:grid-cols-3"><Integration name="Next.js → FastAPI" state={backendOnline ? robotCopy.connected : robotCopy.offline} active={backendOnline}/><Integration name="PostgreSQL" state={backendOnline ? ui.apiDatabaseReachable : robotCopy.unavailable} active={backendOnline}/><Integration name="ROS 2 Web Bridge" state={robotConnected ? robotCopy.connected : robotCopy.offline} active={robotConnected}/><Integration name={ui.poseTelemetry} state={localizationDiagnostic ? localizationDiagnostic.message : robotCopy.waiting} active={localizationDiagnostic?.level === "OK"}/><Integration name="Nav2" state={nav2Diagnostic?.message ?? (activeTask ? t("taskStatus")[activeTask.status] : ui.missionStandby)} active={nav2Diagnostic ? nav2Diagnostic.level === "OK" : robotConnected}/><Integration name={ui.diagnosticsStream} state={diagnosticsFresh ? ui.telemetryFresh : ui.telemetryStale} active={diagnosticsFresh}/></div>
     </details>
   </>;
+}
+
+function isNav2Diagnostic(status: DiagnosticStatus): boolean {
+  const name = status.name.toLowerCase();
+  return (
+    name.includes("lifecycle_manager_navigation")
+    || name.includes("nav2 health")
+  );
+}
+
+function diagnosticOverallLevel(
+  statuses: DiagnosticStatus[]
+): DiagnosticLevel {
+  const severity: Record<DiagnosticLevel, number> = {
+    OK: 0,
+    WARN: 1,
+    ERROR: 2,
+    STALE: 3
+  };
+
+  return statuses.reduce<DiagnosticLevel>(
+    (overall, status) => (
+      severity[status.level] > severity[overall]
+        ? status.level
+        : overall
+    ),
+    statuses.length > 0 ? "OK" : "STALE"
+  );
 }
 
 function OverviewCard({icon,label,value,detail,tone}:{icon:"robot"|"mission"|"queue"|"health";label:string;value:string;detail:string;tone:"emerald"|"red"|"blue"|"amber"|"violet"|"slate"}) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import ActionToast from "@/components/ActionToast";
 import PageHeader from "@/components/PageHeader";
 import { useLocale } from "@/context/LocaleContext";
 import { approveAccount, getPendingAccounts } from "@/lib/api";
@@ -12,17 +13,17 @@ export default function UserManagementPage() {
   const copy = userManagementText[locale];
   const [accounts, setAccounts] = useState<PendingAccount[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [approvingId, setApprovingId] = useState<string>();
-  const [message, setMessage] = useState("");
+  const [toast, setToast] = useState<{ kind: "success" | "error"; body: string }>();
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       setAccounts(await getPendingAccounts());
-      setError("");
+      setLoadError("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : copy.loadFailed);
+      setLoadError(reason instanceof Error ? reason.message : copy.loadFailed);
     } finally {
       setLoading(false);
     }
@@ -32,14 +33,13 @@ export default function UserManagementPage() {
 
   async function approve(account: PendingAccount) {
     setApprovingId(account.id);
-    setMessage("");
-    setError("");
+    setToast(undefined);
     try {
       await approveAccount(account.id);
       setAccounts((current) => current.filter((item) => item.id !== account.id));
-      setMessage(copy.approved.replace("{username}", account.username));
+      setToast({ kind: "success", body: copy.approved.replace("{username}", account.username) });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : copy.approveFailed);
+      setToast({ kind: "error", body: reason instanceof Error ? reason.message : copy.approveFailed });
     } finally {
       setApprovingId(undefined);
     }
@@ -47,6 +47,7 @@ export default function UserManagementPage() {
 
   return (
     <>
+      {toast && <ActionToast kind={toast.kind} title={toast.kind === "success" ? copy.approvedTitle : copy.approveFailedTitle} body={toast.body} closeLabel={copy.close} onClose={() => setToast(undefined)} />}
       <PageHeader title={copy.title} description={copy.description} />
       <section className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <header className="flex flex-col gap-3 border-b border-slate-100 px-5 py-5 sm:flex-row sm:items-center sm:justify-between md:px-6">
@@ -59,8 +60,7 @@ export default function UserManagementPage() {
           </span>
         </header>
 
-        {message && <p aria-live="polite" className="m-5 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</p>}
-        {error && <div role="alert" className="m-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700"><span>{error}</span><button type="button" onClick={() => void load()} className="rounded-lg bg-white px-3 py-2 font-semibold shadow-sm">{copy.retry}</button></div>}
+        {loadError && <div role="alert" className="m-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700"><span>{loadError}</span><button type="button" onClick={() => void load()} className="rounded-lg bg-white px-3 py-2 font-semibold shadow-sm">{copy.retry}</button></div>}
 
         {loading ? (
           <div className="grid gap-3 p-5 md:p-6" aria-busy="true" aria-live="polite">

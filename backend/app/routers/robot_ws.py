@@ -55,6 +55,7 @@ from ..navigation_feedback_store import (
 from ..route_preview import route_preview_coordinator
 from ..notification_delivery import publish_committed_notifications
 from ..domain_context import TrustedActor
+from ..diagnostics_store import diagnostics_store
 
 router = APIRouter(tags=["robot-websocket"])
 
@@ -196,6 +197,7 @@ async def robot_websocket(
         robot_id,
         websocket,
     )
+    diagnostics_store.clear_robot(robot_id)
     publish_committed_notifications(
         db, service.record_robot_connection(robot_id, True)
     )
@@ -333,16 +335,20 @@ async def robot_websocket(
                     "ERROR": 2,
                     "STALE": 3,
                 }
+                merged_statuses = diagnostics_store.update(
+                    robot_id,
+                    diagnostics.statuses,
+                )
                 overall_level = (
                     max(
                         (
                             status.level
                             for status
-                            in diagnostics.statuses
+                            in merged_statuses
                         ),
                         key=severity.__getitem__,
                     )
-                    if diagnostics.statuses
+                    if merged_statuses
                     else "STALE"
                 )
 
@@ -353,8 +359,7 @@ async def robot_websocket(
                         "overall_level": overall_level,
                         "statuses": [
                             status.model_dump()
-                            for status
-                            in diagnostics.statuses
+                            for status in merged_statuses
                         ],
                         "timestamp": diagnostics.timestamp,
                         "server_time": current_utc_time(),
@@ -1490,6 +1495,7 @@ async def robot_websocket(
             websocket,
         )
         if disconnected:
+            diagnostics_store.clear_robot(robot_id)
             localization_store.mark_offline(robot_id)
             publish_committed_notifications(
                 db, service.record_robot_connection(robot_id, False)
@@ -1524,6 +1530,7 @@ async def robot_websocket(
             websocket,
         )
         if disconnected:
+            diagnostics_store.clear_robot(robot_id)
             localization_store.mark_offline(robot_id)
             publish_committed_notifications(
                 db, service.record_robot_connection(robot_id, False)
