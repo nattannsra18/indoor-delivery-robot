@@ -7,6 +7,7 @@ import { ApiDeliveryProvider, useDeliveryApi } from "@/context/ApiDeliveryContex
 import { API_BASE_URL } from "@/lib/api";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import AlertCenter from "@/components/AlertCenter";
+import AccountRequestNotice from "@/components/AccountRequestNotice";
 import { routeAllowedForRole } from "@/lib/roleDashboard";
 import { LocaleProvider } from "@/context/LocaleContext";
 import { useLocale } from "@/context/LocaleContext";
@@ -52,6 +53,7 @@ function ShellContent({ children }: { children: ReactNode }) {
       <main className="min-w-0 flex-1 p-4 md:p-6 lg:p-8">
         <div className="mx-auto w-full max-w-[1600px]">
         {user?.role === "ADMIN" && <AlertCenter />}
+        {user?.role === "ADMIN" && <AccountRequestNotice />}
         {!loading && !backendOnline && (
           <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800 sm:flex-row sm:items-center sm:justify-between">
             <div>

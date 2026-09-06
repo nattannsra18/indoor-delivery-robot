@@ -459,6 +459,15 @@ export function ApiDeliveryProvider({
           };
 
           if (message.type === "notification_created") {
+            window.dispatchEvent(new CustomEvent("idr:notification", {
+              detail: message,
+            }));
+          } else if (message.type === "notification_snapshot") {
+            window.dispatchEvent(new CustomEvent("idr:notification", {
+              detail: message,
+            }));
+          } else if (message.type === "account_requests_changed") {
+            window.dispatchEvent(new CustomEvent("idr:account-request"));
             window.dispatchEvent(new CustomEvent("idr:notification"));
           } else if (message.type === "robot_telemetry") {
             const data = (message as { data?: { x?: unknown; y?: unknown; yaw?: unknown; last_seen?: unknown } }).data;

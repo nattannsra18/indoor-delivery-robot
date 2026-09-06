@@ -27,6 +27,7 @@ from app.db_models import (
     AlertORM,
     DeliveryTaskORM,
     EmergencyStopORM,
+    NotificationORM,
     RobotORM,
     PasswordResetTokenORM,
     SessionORM,
@@ -156,11 +157,18 @@ def test_login_accepts_email_and_new_signup_waits_for_approval(monkeypatch):
         assert pending is not None
         assert pending.email == "new.user@example.com"
         assert pending.active is False
+        account_notice = db.scalar(select(NotificationORM).where(
+            NotificationORM.entity_id == pending.id,
+            NotificationORM.event_type == "auth.account_requested",
+        ))
+        assert account_notice is not None and account_notice.read_at is None
         admin = db.get(UserORM, "admin")
         assert [account.id for account in pending_accounts(admin, db)] == [pending.id]
         background_tasks = BackgroundTasks()
         approved = approve_account(pending.id, background_tasks, admin, db)
         assert approved.active is True
+        db.refresh(account_notice)
+        assert account_notice.read_at is not None
         assert len(background_tasks.tasks) == 0
 
 

@@ -32,12 +32,16 @@ from ..auth import (
 from ..browser_websocket_manager import browser_connection_manager
 from ..config import security_settings
 from ..database import get_db
-from ..db_models import PasswordResetTokenORM, SessionORM, UserORM
+from ..db_models import NotificationORM, PasswordResetTokenORM, SessionORM, UserORM
+from ..notification_delivery import publish_committed_notifications
+from ..notification_service import NotificationService
 from ..models import (
+    AlertSeverity,
     ForgotPasswordRequest,
     ForgotPasswordResult,
     GoogleAuthConfiguration,
     LoginRequest,
+    NotificationCategory,
     PendingAccount,
     PasswordPolicy,
     ResetPasswordRequest,
@@ -206,8 +210,23 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
         active=False,
     )
     db.add(user)
+    # Persist the account before the audit row that references it. PostgreSQL
+    # enforces this foreign key immediately, while SQLite tests may not.
+    db.flush()
+    notifications = NotificationService(db).create_for_admins(
+        "auth.account_requested",
+        "New account request",
+        f"{user.username} requested access to Delivery Robot.",
+        f"account-request:{user.id}",
+        "user",
+        user.id,
+        category=NotificationCategory.ACTION_REQUIRED,
+        severity=AlertSeverity.WARNING,
+        action_required=True,
+    )
     AuditService(db).log(user.id, "auth.signup", "user", user.id)
     db.commit()
+    publish_committed_notifications(db, [item.id for item in notifications])
     return SignupResult(status="PENDING_APPROVAL")
 
 
@@ -237,8 +256,20 @@ def approve_account(
     if user.active:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Account is already approved")
     user.active = True
+    for item in db.scalars(
+        select(NotificationORM).where(
+            NotificationORM.entity_type == "user",
+            NotificationORM.entity_id == user.id,
+            NotificationORM.read_at.is_(None),
+        )
+    ):
+        item.read_at = utc_now()
     AuditService(db).log(admin.id, "auth.account_approved", "user", user.id)
     db.commit()
+    browser_connection_manager.schedule_broadcast(
+        {"type": "account_requests_changed"},
+        admin_only=True,
+    )
     if user.email and _smtp_configured():
         background_tasks.add_task(_send_approval_email, user.email, user.username)
     return user
@@ -408,3 +439,4 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserIdentity)
 def me(user: UserORM = Depends(require_user)):
     return user
+    NotificationCategory,

@@ -72,6 +72,8 @@ def notification_category(event_type: str) -> NotificationCategory:
         return NotificationCategory.ACTION_REQUIRED
     if event_type in {"alert.created", "alert.reopened"}:
         return NotificationCategory.ACTION_REQUIRED
+    if event_type == "auth.account_requested":
+        return NotificationCategory.ACTION_REQUIRED
     if event_type.startswith("robot.") or event_type.startswith("emergency.") or event_type == "alert.resolved":
         return NotificationCategory.SYSTEM
     return NotificationCategory.DELIVERY

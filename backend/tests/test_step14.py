@@ -133,6 +133,28 @@ def test_dashboard_notification_targeting_uses_registered_identity_only():
     asyncio.run(run())
 
 
+def test_dashboard_notification_can_be_scheduled_from_sync_handler_thread():
+    class Socket:
+        def __init__(self): self.messages = []
+        async def accept(self): pass
+        async def send_json(self, value): self.messages.append(value)
+
+    async def run():
+        manager = BrowserConnectionManager(); admin = Socket()
+        await manager.connect(admin, UserRole.ADMIN, "admin", "session-admin")
+        await asyncio.to_thread(
+            manager.schedule_notification,
+            {"type": "notification_created", "notification": {"id": "n-account"}},
+            "admin",
+        )
+        await asyncio.sleep(0)
+        await manager.drain_scheduled_notifications()
+        assert admin.messages == [{"type": "notification_created", "notification": {"id": "n-account"}}]
+        manager.clear()
+
+    asyncio.run(run())
+
+
 def test_compatibility_migration_adds_step14_tables_without_losing_legacy_task():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.tables["users"].create(engine)
