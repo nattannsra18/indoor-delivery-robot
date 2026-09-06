@@ -35,33 +35,59 @@ This project demonstrates an end-to-end autonomous delivery workflow: a user sel
 
 ## Product tour
 
-### One operational view
+### Live operations in one view
 
-The control center brings safety, robot availability, simulated charge, live pose, mission control, and the ROS occupancy grid into one screen.
+The control center combines safety, robot availability, simulated charge, live pose, mission control, and the ROS occupancy grid. This capture shows `TASK-123` navigating to its pickup station with live Nav2 progress and motion telemetry.
 
 <p align="center">
-  <a href="docs/images/admin-dashboard.jpg">
-    <img src="docs/images/admin-dashboard.jpg" alt="Admin operations dashboard with robot status, mission controls, and live map" width="1200" />
+  <a href="docs/images/operations-dashboard.png">
+    <img src="docs/images/operations-dashboard.png" alt="Admin operations dashboard while TASK-123 navigates to its pickup station" width="1200" />
   </a>
 </p>
 
-### Maps and localization from the browser
+### Map-first delivery workflow
 
-Administrators can inspect the robot-hosted map inventory and manage AMCL localization without switching to RViz for routine operations.
+Pickup and destination selection, the Nav2 route preview, distance, travel time, queue state, and estimated completion are presented before a delivery is submitted.
 
-| Robot-backed map management | Browser-based localization |
+<p align="center">
+  <a href="docs/images/create-delivery.png">
+    <img src="docs/images/create-delivery.png" alt="Create Delivery page with pickup and destination route preview" width="1200" />
+  </a>
+</p>
+
+### Task operations and traceability
+
+Operators can search and filter the complete delivery history, perform stage-specific actions, open task details, and inspect an event-by-event timeline with source attribution and stage durations.
+
+| Delivery operations | Event history |
 | --- | --- |
-| [![Map management showing the active ROS map and robot-backed inventory](docs/images/map-management.jpg)](docs/images/map-management.jpg) | [![Robot localization showing AMCL health, pose, and interactive initial-pose controls](docs/images/localization.jpg)](docs/images/localization.jpg) |
+| [![All Delivery Tasks with mission control, filters, task status, and owner](docs/images/all-tasks.png)](docs/images/all-tasks.png) | [![Completed delivery event timeline with sources and stage durations](docs/images/task-event-history.png)](docs/images/task-event-history.png) |
 
-### Actionable operational history
+### ROS diagnostics and integration health
 
-Delivery events, robot connectivity, and account requests are grouped into a filterable notification timeline instead of appearing as an unstructured event feed.
+Detailed sensor and topic diagnostics expose LiDAR, odometry, velocity commands, RGB camera, ArUco detection, and AMCL health. Integration status keeps the web, database, ROS bridge, localization, Nav2, and diagnostic stream visible in the same operational surface.
 
 <p align="center">
-  <a href="docs/images/notifications.jpg">
-    <img src="docs/images/notifications.jpg" alt="Grouped admin notification timeline with delivery and account events" width="1200" />
+  <a href="docs/images/diagnostics-integrations.png">
+    <img src="docs/images/diagnostics-integrations.png" alt="Detailed ROS diagnostics and integration status on the admin dashboard" width="1200" />
   </a>
 </p>
+
+### Robot-backed mapping
+
+The map library reflects the robot filesystem as its source of truth. A new occupancy map can be built with SLAM while an operator drives from the browser using dead-man controls, keyboard input, and adjustable speed.
+
+| Map library | Live web mapping |
+| --- | --- |
+| [![Map library showing the active ROS map and robot-backed inventory](docs/images/map-library.png)](docs/images/map-library.png) | [![Live SLAM mapping with browser driving controls and speed adjustment](docs/images/web-mapping.png)](docs/images/web-mapping.png) |
+
+### Localization and station placement
+
+Routine AMCL localization can be managed without RViz: inspect localization health, set an initial pose by dragging a heading on the map, or start global relocalization. Delivery stations are tied to a selected robot map and can also be positioned and oriented interactively.
+
+| Browser-based localization | Visual station management |
+| --- | --- |
+| [![Robot localization with AMCL health, live pose, and initial pose controls](docs/images/robot-localization.png)](docs/images/robot-localization.png) | [![Station Management with map selection and interactive station placement](docs/images/station-management.png)](docs/images/station-management.png) |
 
 <p align="center"><sub>Captured from the running Gazebo and ROS 2 integration environment.</sub></p>
 
