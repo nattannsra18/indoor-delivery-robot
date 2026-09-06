@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/auth/delivery-robot-logo.png" alt="Delivery Robot" width="360" />
+  <img src="public/auth/delivery-robot-logo.png" alt="Delivery Robot" width="460" />
 </p>
 
 <h1 align="center">Indoor Delivery Robot Platform</h1>
@@ -35,7 +35,13 @@ This project demonstrates an end-to-end autonomous delivery workflow: a user sel
 
 ## System architecture
 
-![Indoor Delivery Robot system architecture](docs/architecture.svg)
+<p align="center">
+  <a href="docs/architecture.svg">
+    <img src="docs/architecture.svg" alt="Indoor Delivery Robot system architecture" width="1200" />
+  </a>
+</p>
+
+<p align="center"><sub>Open the diagram to inspect the full-resolution architecture.</sub></p>
 
 The web platform lives in this repository. Robot-side ROS 2 packages, simulation assets, Nav2 integration, and the WebSocket bridge live in the companion repository: [amr-navigation-vision-diagnostics](https://github.com/nattannsra18/amr-navigation-vision-diagnostics).
 

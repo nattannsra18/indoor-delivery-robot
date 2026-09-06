@@ -1,13 +1,14 @@
 "use client";
 
 import React, { ReactNode } from "react";
+import Image from "next/image";
 import { LanguageSwitcher, useLocale } from "@/context/LocaleContext";
 import { authText } from "@/lib/i18n";
 
 function Brand() {
   const {locale}=useLocale();
   const copy=authText[locale];
-  return <img src="/auth/delivery-robot-logo.png" alt={`${copy.productName} — ${copy.indoorSystem}`} className="h-auto w-[270px] max-w-[68vw]"/>;
+  return <Image src="/auth/delivery-robot-logo.png" alt={`${copy.productName} — ${copy.indoorSystem}`} width={2171} height={724} priority className="h-auto w-[300px] max-w-[72vw]"/>;
 }
 
 function FeatureIcon({kind}:{kind:"delivery"|"realtime"|"people"}) {
