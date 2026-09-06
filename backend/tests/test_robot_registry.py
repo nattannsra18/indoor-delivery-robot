@@ -25,6 +25,7 @@ from app.models import (
 from app.robot_registry import RobotRegistryService
 from app.routers.robot_ws import robot_websocket
 from app.schema import apply_compatibility_migrations
+from app.service import DeliveryService
 from app.websocket_manager import robot_connection_manager
 
 
@@ -119,6 +120,18 @@ def test_agent_hello_is_versioned_bound_to_identity_and_updates_observed_profile
     assert entry.last_boot_id == "boot-1"
     assert entry.readiness_status == RobotReadinessStatus.NOT_READY
 
+    DeliveryService(db).record_robot_connection(claimed.robot_id, True)
+    connected = next(
+        item for item in registry.list_registry() if item.id == claimed.robot_id
+    )
+    assert connected.online is True
+
+    DeliveryService(db).record_robot_connection(claimed.robot_id, False)
+    disconnected = next(
+        item for item in registry.list_registry() if item.id == claimed.robot_id
+    )
+    assert disconnected.online is False
+
     wrong = hello.model_copy(update={"robot_id": "another-robot"})
     with pytest.raises(HTTPException) as mismatch:
         registry.apply_hello(robot, wrong)
@@ -182,6 +195,46 @@ def test_expired_pairing_code_and_revoked_credential_are_rejected():
     assert reclaimed.robot_id == claimed.robot_id
     assert reclaimed.credential_version == 2
     assert registry.authenticate(reclaimed.robot_id, reclaimed.credential) is not None
+
+
+def test_primary_robot_prefers_connected_ready_pair_over_legacy_seed():
+    db = session()
+    db.add(
+        RobotORM(
+            id="robot01",
+            name="Legacy simulator",
+            online=True,
+        )
+    )
+    db.commit()
+    registry = RobotRegistryService(db)
+    created = registry.create_enrollment(enrollment_payload(), ttl_seconds=600)
+    registry.approve(created.enrollment_id, created.pairing_code, "admin")
+    claimed = registry.claim(
+        created.enrollment_id,
+        created.pairing_code,
+        enrollment_payload().hardware_fingerprint,
+    )
+    paired = db.get(RobotORM, claimed.robot_id)
+    registry.apply_readiness(
+        paired,
+        RobotAgentReadiness(
+            type="agent_readiness",
+            protocol_version="1.0",
+            robot_id=claimed.robot_id,
+            status=RobotReadinessStatus.READY,
+            checks={"nav2": True},
+            timestamp=utc_now(),
+        ),
+    )
+    service = DeliveryService(db)
+    service.record_robot_connection(claimed.robot_id, True)
+
+    assert service.primary_robot().id == claimed.robot_id
+    assert service.overview().robot.id == claimed.robot_id
+
+    service.record_robot_connection(claimed.robot_id, False)
+    assert service.primary_robot().id == claimed.robot_id
 
 
 class StubSocket:

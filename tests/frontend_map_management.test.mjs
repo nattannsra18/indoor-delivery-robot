@@ -31,8 +31,9 @@ test("Map Management consumes the robot catalog and reuses the live RobotMap", (
   assert.match(apiSource, /\/api\/map\/catalog\/refresh/);
   assert.match(apiSource, /\/api\/map\/catalog\/\$\{encodeURIComponent\(mapId\)\}\/activate/);
   assert.match(apiSource, /\/api\/map\/operations\/\$\{encodeURIComponent\(commandId\)\}/);
-  assert.match(apiSource, /\/metadata\?robot_id=/);
-  assert.match(apiSource, /\/rename\?robot_id=/);
+  assert.match(apiSource, /\/metadata\$\{robotQuery\(robotId\)\}/);
+  assert.match(apiSource, /\/rename\$\{robotQuery\(robotId\)\}/);
+  assert.match(apiSource, /function robotQuery\(robotId\?: string\)/);
   assert.match(apiSource, /method: "DELETE"/);
   assert.match(apiSource, /\/api\/map\/catalog-operations\//);
 });

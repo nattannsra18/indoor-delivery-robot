@@ -157,7 +157,8 @@ async def preview_task_route(
     user: UserORM = Depends(require_user),
 ):
     authorize_priority(user, payload.priority)
-    if mapping_store.is_active("robot01"):
+    robot = service.primary_robot()
+    if mapping_store.is_active(robot.id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Route preview is unavailable while the robot is mapping",
@@ -170,7 +171,6 @@ async def preview_task_route(
             status_code=status.HTTP_409_CONFLICT,
             detail="Pickup and destination must belong to the active map",
         )
-    robot = service.get_robot("robot01")
     snapshot = map_store.get()
 
     if snapshot is None:
@@ -295,7 +295,8 @@ async def create_task(
     user: UserORM = Depends(require_user),
 ):
     authorize_priority(user, payload.priority)
-    if mapping_store.is_active("robot01"):
+    robot = service.primary_robot()
+    if mapping_store.is_active(robot.id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Delivery creation is unavailable while the robot is mapping",
@@ -306,7 +307,7 @@ async def create_task(
         validation = route_preview_coordinator.consume_validation(
             payload.preview_id,
             owner_id=user.id,
-            robot_id="robot01",
+            robot_id=robot.id,
             pickup_station_id=payload.pickup_station_id,
             destination_station_id=payload.destination_station_id,
             priority=payload.priority,

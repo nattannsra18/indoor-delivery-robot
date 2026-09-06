@@ -4,7 +4,12 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from .db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM, UserORM
-from .models import TaskPriority, TaskStatus
+from .models import (
+    RobotEnrollmentStatus,
+    RobotReadinessStatus,
+    TaskPriority,
+    TaskStatus,
+)
 
 
 def queued_task_ordering():
@@ -89,6 +94,41 @@ class DeliveryRepository:
 
     def get_robot_for_update(self, robot_id: str = "robot01") -> RobotORM | None:
         stmt = select(RobotORM).where(RobotORM.id == robot_id).with_for_update()
+        return self.db.scalar(stmt)
+
+    def preferred_robot(self, *, for_update: bool = False) -> RobotORM | None:
+        """Return the best robot for the current single-dispatch workflow.
+
+        An online robot that already owns a task must remain primary. Otherwise
+        prefer a paired, ready Agent over the seeded legacy simulator record.
+        """
+        rank = case(
+            (
+                RobotORM.current_task_id.is_not(None),
+                0,
+            ),
+            (
+                RobotORM.online.is_(True)
+                & (RobotORM.enrollment_status == RobotEnrollmentStatus.PAIRED)
+                & (RobotORM.readiness_status == RobotReadinessStatus.READY),
+                1,
+            ),
+            (
+                RobotORM.online.is_(True)
+                & (RobotORM.enrollment_status == RobotEnrollmentStatus.PAIRED),
+                2,
+            ),
+            (RobotORM.enrollment_status == RobotEnrollmentStatus.PAIRED, 3),
+            (RobotORM.online.is_(True), 4),
+            else_=5,
+        )
+        stmt = select(RobotORM).order_by(
+            rank,
+            case((RobotORM.id == "robot01", 0), else_=1),
+            RobotORM.id,
+        ).limit(1)
+        if for_update:
+            stmt = stmt.with_for_update()
         return self.db.scalar(stmt)
 
     # Tasks

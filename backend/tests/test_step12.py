@@ -20,6 +20,8 @@ from app.db_models import (
 from app.models import (
     DeliveryTaskCreate,
     EventSource,
+    RobotEnrollmentStatus,
+    RobotReadinessStatus,
     RobotState,
     TaskEvent,
     TaskPriority,
@@ -233,6 +235,26 @@ def test_priority_queue_is_canonical_for_dispatcher_and_eta_without_preemption()
         assert normal.status == TaskStatus.QUEUED
 
 
+def test_task_dispatch_uses_connected_ready_paired_robot():
+    with Session() as db:
+        db.add(
+            RobotORM(
+                id="paired-robot",
+                name="Paired robot",
+                online=True,
+                enrollment_status=RobotEnrollmentStatus.PAIRED,
+                readiness_status=RobotReadinessStatus.READY,
+            )
+        )
+        db.commit()
+
+        service = DeliveryService(db)
+        task = service.create_task(payload(), owner_id="alice")
+
+        assert task.robot_id == "paired-robot"
+        assert service.overview().robot.id == "paired-robot"
+
+
 def test_same_priority_uses_created_at_then_id_as_deterministic_tie_breaker():
     with Session() as db:
         service = DeliveryService(db)
@@ -306,6 +328,28 @@ def test_robot_connection_recovers_a_persisted_navigation_error():
         assert queued.status == TaskStatus.GOING_TO_PICKUP
         assert robot.state == RobotState.GOING_TO_PICKUP
         assert robot.current_task_id == queued.id
+
+
+def test_robot_disconnect_preserves_active_task_for_safe_reconnect():
+    with Session() as db:
+        service = DeliveryService(db)
+        task = service.create_task(payload(), owner_id="alice")
+        robot = db.get(RobotORM, "robot01")
+
+        service.record_robot_connection("robot01", False)
+
+        db.refresh(task)
+        db.refresh(robot)
+        assert task.status == TaskStatus.GOING_TO_PICKUP
+        assert robot.online is False
+        assert robot.state == RobotState.OFFLINE
+        assert robot.current_task_id == task.id
+
+        service.record_robot_connection("robot01", True)
+        db.refresh(robot)
+        assert robot.online is True
+        assert robot.state == RobotState.GOING_TO_PICKUP
+        assert robot.current_task_id == task.id
 
 
 def test_metadata_visibility_follows_existing_task_ownership_filter():

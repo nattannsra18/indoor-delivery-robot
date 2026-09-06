@@ -877,7 +877,7 @@ class MappingSession(BaseModel):
 
 
 class MappingStartRequest(BaseModel):
-    robot_id: str = Field(default="robot01", min_length=1, max_length=100)
+    robot_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
 
 
 class MappingSaveRequest(BaseModel):
@@ -981,7 +981,7 @@ class LocalizationStatus(BaseModel):
 class LocalizationInitialPoseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
-    robot_id: str = Field(default="robot01", min_length=1, max_length=100)
+    robot_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
     pose: LocalizationPose
     position_uncertainty: float = Field(default=0.5, ge=0.05, le=5.0)
     yaw_uncertainty: float = Field(default=0.35, ge=0.05, le=3.141593)
@@ -990,7 +990,7 @@ class LocalizationInitialPoseRequest(BaseModel):
 class LocalizationCommandRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    robot_id: str = Field(default="robot01", min_length=1, max_length=100)
+    robot_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
 
 
 class LocalizationTeleopRequest(BaseModel):

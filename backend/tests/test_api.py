@@ -31,6 +31,7 @@ from app.models import OccupancyGridPayload, TaskPriority, TaskStatus, UserRole,
 from app.main import app
 from app.routers.robot_ws import robot_websocket
 from app.seed import seed_database
+from app.service import DeliveryService
 from app.map_store import map_store
 from app.map_catalog_store import map_catalog_store
 from app.map_switch_store import map_switch_store
@@ -258,6 +259,12 @@ def report_navigation_result(
             == "navigation_result_received"
         )
         assert receipt["accepted"] is True
+
+    # TestClient closes its short-lived WebSocket after each result. The real
+    # Robot Agent keeps the socket open, so restore that persistent connection
+    # state before the next workflow action.
+    with TestingSessionLocal() as db:
+        DeliveryService(db).record_robot_connection("robot01", True)
 
     return client.get(f"/api/tasks/{task_id}")
 

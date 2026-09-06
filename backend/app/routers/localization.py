@@ -93,9 +93,11 @@ async def _send_command(
 
 @router.get("/status", response_model=LocalizationStatus)
 def get_localization_status(
-    robot_id: str = "robot01",
+    robot_id: str | None = None,
+    db: Session = Depends(get_db),
     _: UserORM = Depends(require_admin),
 ) -> LocalizationStatus:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     return localization_store.get(robot_id)
 
 
@@ -109,10 +111,11 @@ async def set_initial_pose(
     db: Session = Depends(get_db),
     user: UserORM = Depends(require_admin),
 ) -> LocalizationStatus:
+    robot_id = payload.robot_id or DeliveryService(db).primary_robot().id
     return await _send_command(
         db,
         user,
-        payload.robot_id,
+        robot_id,
         LocalizationCommandAction.SET_INITIAL_POSE,
         {
             "pose": payload.pose.model_dump(),
@@ -132,10 +135,11 @@ async def global_localization(
     db: Session = Depends(get_db),
     user: UserORM = Depends(require_admin),
 ) -> LocalizationStatus:
+    robot_id = payload.robot_id or DeliveryService(db).primary_robot().id
     return await _send_command(
         db,
         user,
-        payload.robot_id,
+        robot_id,
         LocalizationCommandAction.GLOBAL_LOCALIZATION,
         {},
     )
@@ -144,10 +148,11 @@ async def global_localization(
 @router.post("/recovery/teleop", status_code=status.HTTP_202_ACCEPTED)
 async def localization_recovery_teleop(
     payload: LocalizationTeleopRequest,
-    robot_id: str = "robot01",
+    robot_id: str | None = None,
     db: Session = Depends(get_db),
     _: UserORM = Depends(require_admin),
 ) -> dict[str, bool]:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     _require_localization_ready(db, robot_id)
     current = localization_store.get(robot_id)
     if not current.recovery_active:
@@ -199,17 +204,19 @@ async def _localization_scan_command(
 
 @router.post("/recovery/scan/start", status_code=status.HTTP_202_ACCEPTED)
 async def start_localization_scan(
-    robot_id: str = "robot01",
+    robot_id: str | None = None,
     db: Session = Depends(get_db),
     user: UserORM = Depends(require_admin),
 ) -> dict[str, bool]:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     return await _localization_scan_command(robot_id, "START", db, user)
 
 
 @router.post("/recovery/scan/stop", status_code=status.HTTP_202_ACCEPTED)
 async def stop_localization_scan(
-    robot_id: str = "robot01",
+    robot_id: str | None = None,
     db: Session = Depends(get_db),
     user: UserORM = Depends(require_admin),
 ) -> dict[str, bool]:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     return await _localization_scan_command(robot_id, "STOP", db, user)

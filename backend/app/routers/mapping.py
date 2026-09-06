@@ -54,9 +54,11 @@ async def _deliver(robot_id: str, payload: dict) -> None:
 
 @router.get("/status", response_model=MappingSession)
 def get_mapping_status(
-    robot_id: str = "robot01",
+    robot_id: str | None = None,
+    db: Session = Depends(get_db),
     _: UserORM = Depends(require_admin),
 ) -> MappingSession:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     return mapping_store.get(robot_id)
 
 
@@ -66,18 +68,19 @@ async def start_mapping(
     db: Session = Depends(get_db),
     user: UserORM = Depends(require_admin),
 ) -> MappingSession:
-    _require_robot_ready(db, payload.robot_id)
-    started = mapping_store.start(payload.robot_id)
+    robot_id = payload.robot_id or DeliveryService(db).primary_robot().id
+    _require_robot_ready(db, robot_id)
+    started = mapping_store.start(robot_id)
     if started is None:
         raise HTTPException(status_code=409, detail="A mapping session is already active")
     session, command_id = started
-    AuditService(db).log(user.id, "mapping.start_requested", "robot", payload.robot_id, {"session_id": session.session_id})
+    AuditService(db).log(user.id, "mapping.start_requested", "robot", robot_id, {"session_id": session.session_id})
     db.commit()
-    await _deliver(payload.robot_id, {
+    await _deliver(robot_id, {
         "type": "mapping_command", "action": "START", "command_id": command_id,
-        "robot_id": payload.robot_id, "session_id": session.session_id,
+        "robot_id": robot_id, "session_id": session.session_id,
     })
-    return mapping_store.get(payload.robot_id)
+    return mapping_store.get(robot_id)
 
 
 def _require_phase(robot_id: str, allowed: set[MappingPhase]) -> MappingSession:
@@ -88,7 +91,12 @@ def _require_phase(robot_id: str, allowed: set[MappingPhase]) -> MappingSession:
 
 
 @router.post("/stop", response_model=MappingSession, status_code=status.HTTP_202_ACCEPTED)
-async def stop_mapping(robot_id: str = "robot01", _: UserORM = Depends(require_admin)) -> MappingSession:
+async def stop_mapping(
+    robot_id: str | None = None,
+    db: Session = Depends(get_db),
+    _: UserORM = Depends(require_admin),
+) -> MappingSession:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     session = _require_phase(robot_id, {MappingPhase.MAPPING})
     _, command_id = mapping_store.request(robot_id, MappingPhase.STOPPING)
     await _deliver(robot_id, {"type": "mapping_command", "action": "STOP", "command_id": command_id, "robot_id": robot_id, "session_id": session.session_id})
@@ -98,10 +106,11 @@ async def stop_mapping(robot_id: str = "robot01", _: UserORM = Depends(require_a
 @router.post("/save", response_model=MappingSession, status_code=status.HTTP_202_ACCEPTED)
 async def save_mapping(
     payload: MappingSaveRequest,
-    robot_id: str = "robot01",
+    robot_id: str | None = None,
     db: Session = Depends(get_db),
     user: UserORM = Depends(require_admin),
 ) -> MappingSession:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     session = _require_phase(robot_id, {MappingPhase.REVIEW})
     catalog = map_catalog_store.get(robot_id, robot_online=True)
     if catalog and any(item.id == payload.map_id for item in catalog.maps):
@@ -118,7 +127,12 @@ async def save_mapping(
 
 
 @router.post("/discard", response_model=MappingSession, status_code=status.HTTP_202_ACCEPTED)
-async def discard_mapping(robot_id: str = "robot01", _: UserORM = Depends(require_admin)) -> MappingSession:
+async def discard_mapping(
+    robot_id: str | None = None,
+    db: Session = Depends(get_db),
+    _: UserORM = Depends(require_admin),
+) -> MappingSession:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     session = _require_phase(robot_id, set(ACTIVE_PHASES) - {MappingPhase.STARTING, MappingPhase.SAVING, MappingPhase.RESTORING})
     _, command_id = mapping_store.request(robot_id, MappingPhase.RESTORING)
     await _deliver(robot_id, {"type": "mapping_command", "action": "DISCARD", "command_id": command_id, "robot_id": robot_id, "session_id": session.session_id})
@@ -128,9 +142,11 @@ async def discard_mapping(robot_id: str = "robot01", _: UserORM = Depends(requir
 @router.post("/teleop", status_code=status.HTTP_202_ACCEPTED)
 async def mapping_teleop(
     payload: MappingTeleopRequest,
-    robot_id: str = "robot01",
+    robot_id: str | None = None,
+    db: Session = Depends(get_db),
     _: UserORM = Depends(require_admin),
 ) -> dict[str, bool]:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     session = _require_phase(robot_id, {MappingPhase.MAPPING})
     await _deliver(robot_id, {
         "type": "mapping_teleop", "robot_id": robot_id, "session_id": session.session_id,

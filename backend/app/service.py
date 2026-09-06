@@ -105,6 +105,27 @@ class DeliveryService:
     def record_robot_connection(self, robot_id: str, connected: bool) -> list[str]:
         """Record actual socket lifecycle edges, never telemetry heartbeats."""
         robot = self._robot_or_404(robot_id, lock=True)
+        robot.online = connected
+        if connected:
+            current_task = (
+                self.repo.get_task(robot.current_task_id)
+                if robot.current_task_id is not None
+                else None
+            )
+            if current_task is not None and current_task.status in ACTIVE_STATUSES:
+                robot.state = RobotState(current_task.status.value)
+            elif current_task is not None and current_task.status == TaskStatus.FAILED:
+                robot.state = RobotState.ERROR
+            elif current_task is not None and current_task.status == TaskStatus.CANCELLED:
+                # Keep the assignment until the Agent confirms Nav2 cancellation.
+                robot.state = RobotState.IDLE
+            else:
+                robot.current_task_id = None
+                robot.state = RobotState.IDLE
+        else:
+            robot.state = RobotState.OFFLINE
+            navigation_feedback_store.clear_robot(robot.id)
+        robot.last_seen = utc_now().isoformat()
         action = "robot.connected" if connected else "robot.disconnected"
         AuditService(self.db).log(None, action, "robot", robot.id, {"robot_id": robot.id})
         event_key = f"robot:{robot.id}:{action}:{utc_now().isoformat()}"
@@ -122,11 +143,26 @@ class DeliveryService:
                     failed_task,
                     TrustedActor.robot(robot_id),
                 )
+        elif connected:
+            self.db.flush()
+            self.dispatch_next_queued_task(robot=robot)
         self.db.commit()
         return [item.id for item in notifications] + self.take_pending_notification_ids()
 
-    def _robot_or_404(self, robot_id: str = "robot01", *, lock: bool = False) -> RobotORM:
-        robot = self.repo.get_robot_for_update(robot_id) if lock else self.repo.get_robot(robot_id)
+    def _robot_or_404(
+        self,
+        robot_id: str | None = None,
+        *,
+        lock: bool = False,
+    ) -> RobotORM:
+        if robot_id is None:
+            robot = self.repo.preferred_robot(for_update=lock)
+        else:
+            robot = (
+                self.repo.get_robot_for_update(robot_id)
+                if lock
+                else self.repo.get_robot(robot_id)
+            )
         if not robot:
             raise HTTPException(status_code=404, detail="Robot not found")
         return robot
@@ -164,6 +200,9 @@ class DeliveryService:
 
     def get_robot(self, robot_id: str) -> RobotORM:
         return self._robot_or_404(robot_id)
+
+    def primary_robot(self) -> RobotORM:
+        return self._robot_or_404()
 
     def update_robot_telemetry(
         self,
@@ -258,8 +297,8 @@ class DeliveryService:
         return robot
 
     # Stations
-    @staticmethod
-    def active_map_id(robot_id: str = "robot01") -> str:
+    def active_map_id(self, robot_id: str | None = None) -> str:
+        robot_id = robot_id or self.primary_robot().id
         catalog = map_catalog_store.get(robot_id, robot_online=True)
         return catalog.active_map_id if catalog and catalog.active_map_id else "warehouse_map"
 
@@ -690,7 +729,7 @@ class DeliveryService:
         actor_id: str | None = None,
     ) -> DeliveryTaskORM:
         task = self._task_or_404(task_id, lock=True)
-        robot = self._robot_or_404(task.robot_id or "robot01", lock=True)
+        robot = self._robot_or_404(task.robot_id, lock=True)
 
         if task.status not in ACTIVE_STATUSES:
             raise HTTPException(
@@ -779,7 +818,7 @@ class DeliveryService:
                 detail=f"Cannot cancel task in terminal state {task.status.value}",
             )
 
-        robot = self._robot_or_404(task.robot_id or "robot01", lock=True)
+        robot = self._robot_or_404(task.robot_id, lock=True)
         old_status = task.status
         task.status = TaskStatus.CANCELLED
         task.progress = 0
@@ -817,7 +856,7 @@ class DeliveryService:
             )
 
         previous_robot_id = task.robot_id
-        robot = self._robot_or_404(task.robot_id or "robot01", lock=True)
+        robot = self._robot_or_404(task.robot_id, lock=True)
         old_status = task.status
         task.status = TaskStatus.QUEUED
         task.progress = 0

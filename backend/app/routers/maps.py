@@ -80,9 +80,11 @@ def get_map() -> MapSnapshot:
 
 @router.get("/catalog", response_model=RobotMapCatalog)
 def get_map_catalog(
-    robot_id: str = "robot01",
+    robot_id: str | None = None,
+    db: Session = Depends(get_db),
     _: UserORM = Depends(require_admin),
 ) -> RobotMapCatalog:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     catalog = map_catalog_store.get(
         robot_id,
         robot_online=robot_connection_manager.is_connected(robot_id),
@@ -97,9 +99,11 @@ def get_map_catalog(
 
 @router.post("/catalog/refresh", status_code=status.HTTP_202_ACCEPTED)
 async def refresh_map_catalog(
-    robot_id: str = "robot01",
+    robot_id: str | None = None,
+    db: Session = Depends(get_db),
     _: UserORM = Depends(require_admin),
 ) -> dict[str, bool | str]:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     delivered = await robot_connection_manager.send_json(
         robot_id,
         {"type": "map_catalog_request"},
@@ -208,10 +212,11 @@ async def _send_catalog_operation(
 async def update_catalog_map_metadata(
     map_id: str,
     payload: RobotMapDetailsUpdate,
-    robot_id: str = "robot01",
+    robot_id: str | None = None,
     db: Session = Depends(get_db),
     user: UserORM = Depends(require_admin),
 ) -> MapCatalogOperation:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     _catalog_map(robot_id, map_id)
     return await _send_catalog_operation(
         robot_id=robot_id,
@@ -231,10 +236,11 @@ async def update_catalog_map_metadata(
 async def rename_catalog_map(
     map_id: str,
     payload: RobotMapRenameRequest,
-    robot_id: str = "robot01",
+    robot_id: str | None = None,
     db: Session = Depends(get_db),
     user: UserORM = Depends(require_admin),
 ) -> MapCatalogOperation:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     catalog, selected = _catalog_map(robot_id, map_id)
     if selected.active:
         raise HTTPException(status_code=409, detail="The active map cannot be renamed")
@@ -258,10 +264,11 @@ async def rename_catalog_map(
 )
 async def delete_catalog_map(
     map_id: str,
-    robot_id: str = "robot01",
+    robot_id: str | None = None,
     db: Session = Depends(get_db),
     user: UserORM = Depends(require_admin),
 ) -> MapCatalogOperation:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     _, selected = _catalog_map(robot_id, map_id)
     if selected.active:
         raise HTTPException(status_code=409, detail="The active map cannot be deleted")
@@ -302,10 +309,11 @@ def get_catalog_operation(
 )
 async def activate_map(
     map_id: str,
-    robot_id: str = "robot01",
+    robot_id: str | None = None,
     db: Session = Depends(get_db),
     user: UserORM = Depends(require_admin),
 ) -> MapSwitchOperation:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
     if localization_store.has_pending(robot_id):
         raise HTTPException(status_code=409, detail="A localization command is pending")
     if map_catalog_operation_store.has_pending(robot_id):

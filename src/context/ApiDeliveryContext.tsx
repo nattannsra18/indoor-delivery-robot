@@ -315,7 +315,7 @@ export function ApiDeliveryProvider({
       ]);
       const requestedData = dashboardRequestsForRole(user?.role ?? "USER");
       const stopState = requestedData.includes("emergency-stop")
-        ? await api.getEmergencyStop("robot01")
+        ? await api.getEmergencyStop(overview.robot.id)
         : undefined;
       const estimates = await api.getTaskEstimates();
       if (!mountedRef.current) return;
