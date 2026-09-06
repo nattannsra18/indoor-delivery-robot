@@ -23,14 +23,18 @@ test("signup and reset consume one backend password policy", () => {
   const reset = read("src/app/reset-password/page.tsx");
   assert.match(signup, /getPasswordPolicy/);
   assert.match(reset, /getPasswordPolicy/);
-  assert.match(signup, /passwordPolicyError/);
+  assert.match(signup, /password\.length >= passwordPolicy\.minimumLength/);
+  assert.match(signup, /passwordPolicy\.requireLetter/);
+  assert.match(signup, /passwordPolicy\.requireNumber/);
+  assert.match(signup, /<Requirement met=/);
   assert.match(reset, /passwordPolicyError/);
 });
 
 test("notifications are task-centric with operational filters and grouping", () => {
   const page = read("src/app/notifications/page.tsx");
   assert.match(page, /buildGroups/);
-  assert.match(page, /task:\$\{item\.entityId\}/);
+  assert.match(page, /`\$\{item\.entityType\}:\$\{item\.entityId\}`/);
+  assert.match(page, /`\/tasks\?task=\$\{encodeURIComponent\(group\.taskId\)\}`/);
   assert.match(page, /"action", "critical", "delivery"/);
   assert.match(page, /markGroupRead/);
 });
