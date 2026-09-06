@@ -44,6 +44,19 @@ class RobotState(str, Enum):
     OFFLINE = "OFFLINE"
 
 
+class RobotEnrollmentStatus(str, Enum):
+    UNPAIRED = "UNPAIRED"
+    PENDING = "PENDING"
+    PAIRED = "PAIRED"
+    REVOKED = "REVOKED"
+
+
+class RobotReadinessStatus(str, Enum):
+    NOT_READY = "NOT_READY"
+    READY = "READY"
+    DEGRADED = "DEGRADED"
+
+
 class BatterySource(str, Enum):
     SENSOR = "SENSOR"
     SIMULATED = "SIMULATED"
@@ -252,6 +265,155 @@ class Robot(BaseModel):
     yaw: float
     current_task_id: Optional[str] = None
     last_seen: str
+
+
+class RobotAgentHello(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["agent_hello"]
+    protocol_version: Literal["1.0"]
+    robot_id: str = Field(min_length=1, max_length=40)
+    boot_id: str = Field(min_length=1, max_length=100)
+    agent_version: str = Field(min_length=1, max_length=40)
+    ros_distro: str = Field(min_length=1, max_length=40)
+    profile_version: str = Field(min_length=1, max_length=80)
+    capabilities: list[str] = Field(min_length=1, max_length=32)
+
+    @field_validator("capabilities")
+    @classmethod
+    def validate_capabilities(cls, value: list[str]) -> list[str]:
+        normalized = sorted({item.strip().lower() for item in value if item.strip()})
+        if not normalized or any(len(item) > 80 for item in normalized):
+            raise ValueError("capabilities must contain short non-empty identifiers")
+        return normalized
+
+
+class RobotAgentReadiness(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["agent_readiness"]
+    protocol_version: Literal["1.0"]
+    robot_id: str = Field(min_length=1, max_length=40)
+    status: RobotReadinessStatus
+    checks: dict[str, bool] = Field(default_factory=dict, max_length=32)
+    active_map_id: Optional[str] = Field(default=None, max_length=120)
+    detail: Optional[str] = Field(default=None, max_length=500)
+    timestamp: datetime
+
+
+class RobotEnrollmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    serial_number: str = Field(min_length=3, max_length=120)
+    hardware_fingerprint: str = Field(min_length=16, max_length=255)
+    display_name: str = Field(min_length=1, max_length=100)
+    agent_version: str = Field(min_length=1, max_length=40)
+    ros_distro: str = Field(min_length=1, max_length=40)
+    profile_version: str = Field(min_length=1, max_length=80)
+    capabilities: list[str] = Field(min_length=1, max_length=32)
+
+    @field_validator("serial_number", "hardware_fingerprint", "display_name")
+    @classmethod
+    def strip_identity_fields(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("capabilities")
+    @classmethod
+    def normalize_capabilities(cls, value: list[str]) -> list[str]:
+        return RobotAgentHello.validate_capabilities(value)
+
+
+class RobotEnrollmentCreated(BaseModel):
+    enrollment_id: str
+    pairing_code: str
+    expires_at: datetime
+    poll_after_seconds: int = 3
+
+
+class RobotEnrollmentApproval(BaseModel):
+    pairing_code: str = Field(min_length=6, max_length=12, pattern=r"^[0-9]+$")
+
+
+class RobotEnrollmentClaim(BaseModel):
+    pairing_code: str = Field(min_length=6, max_length=12, pattern=r"^[0-9]+$")
+    hardware_fingerprint: str = Field(min_length=16, max_length=255)
+
+
+class RobotEnrollmentSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    serial_number: str
+    fingerprint_sha256: str = Field(min_length=64, max_length=64)
+    display_name: str
+    agent_version: str
+    ros_distro: str
+    profile_version: str
+    capabilities: list[str]
+    status: RobotEnrollmentStatus
+    expires_at: datetime
+    created_at: datetime
+    approved_at: Optional[datetime] = None
+    claimed_at: Optional[datetime] = None
+    robot_id: Optional[str] = None
+
+
+class RobotCredentialClaimed(BaseModel):
+    robot_id: str
+    credential: str
+    credential_version: int
+    protocol_version: Literal["1.0"] = "1.0"
+
+
+class RobotRegistryEntry(BaseModel):
+    id: str
+    display_name: str
+    serial_number: Optional[str] = None
+    enrollment_status: RobotEnrollmentStatus
+    readiness_status: RobotReadinessStatus
+    online: bool
+    profile_version: Optional[str] = None
+    agent_version: Optional[str] = None
+    ros_distro: Optional[str] = None
+    capabilities: list[str] = Field(default_factory=list)
+    last_boot_id: Optional[str] = None
+    credential_version: Optional[int] = None
+    credential_revoked: bool = False
+
+
+class RobotCommandEnvelope(BaseModel):
+    """Versioned command contract sent from the control plane to an agent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["command"] = "command"
+    protocol_version: Literal["1.0"] = "1.0"
+    command_id: str = Field(min_length=1, max_length=100)
+    robot_id: str = Field(min_length=1, max_length=40)
+    action: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9_.-]+$")
+    issued_at: datetime
+    expires_at: datetime
+    expected_map_revision: Optional[int] = Field(default=None, ge=0)
+    expected_profile_version: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    payload: dict[str, object] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_lifetime(self):
+        if self.expires_at <= self.issued_at:
+            raise ValueError("expires_at must be later than issued_at")
+        return self
+
+
+class RobotCommandAcknowledgement(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["command_status"] = "command_status"
+    protocol_version: Literal["1.0"] = "1.0"
+    command_id: str = Field(min_length=1, max_length=100)
+    robot_id: str = Field(min_length=1, max_length=40)
+    lifecycle: Literal["accepted", "rejected", "started", "succeeded", "failed"]
+    timestamp: datetime
+    detail: Optional[str] = Field(default=None, max_length=500)
 
 
 class EmergencyStop(BaseModel):

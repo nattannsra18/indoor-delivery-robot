@@ -17,6 +17,7 @@ from .routers import (
     mapping,
     localization,
     robot_ws,
+    robot_registry,
     robots,
     stations,
     tasks,
@@ -81,6 +82,7 @@ app.include_router(maps.router)
 app.include_router(mapping.router)
 app.include_router(localization.router)
 app.include_router(robot_ws.router)
+app.include_router(robot_registry.router)
 app.include_router(dashboard_ws.router)
 
 

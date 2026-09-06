@@ -14,8 +14,21 @@ test("admin account approval is available only through the protected user route"
   assert.match(api, /\/api\/auth\/accounts\/\$\{userId\}\/approve/);
   assert.match(
     roles,
-    /ADMIN_ONLY_ROUTES = \["\/maps", "\/stations", "\/users", "\/audit"\]/
+    /ADMIN_ONLY_ROUTES = \["\/maps", "\/stations", "\/robots", "\/users", "\/audit"\]/
   );
+});
+
+test("robot registry uses secure pairing and distinct operational states", () => {
+  const page = read("src/app/robots/page.tsx");
+  const api = read("src/lib/api.ts");
+  const roles = read("src/lib/roleDashboard.ts");
+  assert.match(page, /fingerprintSha256/);
+  assert.match(page, /approveRobotEnrollment/);
+  assert.match(page, /revokeRobotCredential/);
+  assert.match(page, /readinessStatus/);
+  assert.match(api, /\/api\/robot-registry\/enrollments/);
+  assert.match(api, /\/api\/robot-registry\/robots/);
+  assert.match(roles, /href: "\/robots"/);
 });
 
 test("signup and reset consume one backend password policy", () => {

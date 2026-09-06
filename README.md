@@ -231,7 +231,7 @@ backend/.venv/bin/pip install -r backend/requirements.txt
 docker compose up -d postgres
 ```
 
-Set a strong `BOOTSTRAP_ADMIN_PASSWORD` and shared robot token in `backend/.env`. Keep `SESSION_COOKIE_SECURE=false` only for local HTTP development; use `true` behind HTTPS.
+Set a strong `BOOTSTRAP_ADMIN_PASSWORD`, a limited `ROBOT_ENROLLMENT_TOKEN`, and the transitional simulator `ROBOT_WS_TOKEN` in `backend/.env`. Keep `SESSION_COOKIE_SECURE=false` only for local HTTP development; use `true` behind HTTPS. New agents use secure per-robot pairing described in [Robot Agent Protocol v1](docs/agent-protocol-v1.md); disable `ALLOW_LEGACY_ROBOT_TOKEN` after the simulator agent has migrated.
 
 ### 2. Build the Robot Agent
 

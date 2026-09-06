@@ -14,6 +14,8 @@ import type {
   RobotMapCatalog,
   OccupancyGridMap,
   Robot,
+  RobotEnrollment,
+  RobotRegistryEntry,
   Station,
   TaskHistoryEntry,
   TaskStatus,
@@ -293,6 +295,95 @@ export function logout(): Promise<void> {
 
 export function getCurrentUser(): Promise<UserIdentity> {
   return request<UserIdentity>("/api/auth/me");
+}
+
+type ApiRobotEnrollment = {
+  id: string;
+  serial_number: string;
+  fingerprint_sha256: string;
+  display_name: string;
+  agent_version: string;
+  ros_distro: string;
+  profile_version: string;
+  capabilities: string[];
+  status: RobotEnrollment["status"];
+  expires_at: string;
+  created_at: string;
+  approved_at: string | null;
+  claimed_at: string | null;
+  robot_id: string | null;
+};
+
+type ApiRobotRegistryEntry = {
+  id: string;
+  display_name: string;
+  serial_number: string | null;
+  enrollment_status: RobotRegistryEntry["enrollmentStatus"];
+  readiness_status: RobotRegistryEntry["readinessStatus"];
+  online: boolean;
+  profile_version: string | null;
+  agent_version: string | null;
+  ros_distro: string | null;
+  capabilities: string[];
+  last_boot_id: string | null;
+  credential_version: number | null;
+  credential_revoked: boolean;
+};
+
+function toRobotEnrollment(item: ApiRobotEnrollment): RobotEnrollment {
+  return {
+    id: item.id,
+    serialNumber: item.serial_number,
+    fingerprintSha256: item.fingerprint_sha256,
+    displayName: item.display_name,
+    agentVersion: item.agent_version,
+    rosDistro: item.ros_distro,
+    profileVersion: item.profile_version,
+    capabilities: item.capabilities,
+    status: item.status,
+    expiresAt: item.expires_at,
+    createdAt: item.created_at,
+    approvedAt: item.approved_at ?? undefined,
+    claimedAt: item.claimed_at ?? undefined,
+    robotId: item.robot_id ?? undefined,
+  };
+}
+
+function toRobotRegistryEntry(item: ApiRobotRegistryEntry): RobotRegistryEntry {
+  return {
+    id: item.id,
+    displayName: item.display_name,
+    serialNumber: item.serial_number ?? undefined,
+    enrollmentStatus: item.enrollment_status,
+    readinessStatus: item.readiness_status,
+    online: item.online,
+    profileVersion: item.profile_version ?? undefined,
+    agentVersion: item.agent_version ?? undefined,
+    rosDistro: item.ros_distro ?? undefined,
+    capabilities: item.capabilities,
+    lastBootId: item.last_boot_id ?? undefined,
+    credentialVersion: item.credential_version ?? undefined,
+    credentialRevoked: item.credential_revoked,
+  };
+}
+
+export async function getRobotEnrollments(): Promise<RobotEnrollment[]> {
+  return (await request<ApiRobotEnrollment[]>("/api/robot-registry/enrollments")).map(toRobotEnrollment);
+}
+
+export async function approveRobotEnrollment(enrollmentId: string, pairingCode: string): Promise<RobotEnrollment> {
+  return toRobotEnrollment(await request<ApiRobotEnrollment>(`/api/robot-registry/enrollments/${enrollmentId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ pairing_code: pairingCode }),
+  }));
+}
+
+export async function getRobotRegistry(): Promise<RobotRegistryEntry[]> {
+  return (await request<ApiRobotRegistryEntry[]>("/api/robot-registry/robots")).map(toRobotRegistryEntry);
+}
+
+export async function revokeRobotCredential(robotId: string): Promise<RobotRegistryEntry> {
+  return toRobotRegistryEntry(await request<ApiRobotRegistryEntry>(`/api/robot-registry/robots/${robotId}/revoke`, { method: "POST" }));
 }
 
 export function getActiveAlerts(): Promise<Alert[]> {

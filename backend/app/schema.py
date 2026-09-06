@@ -7,7 +7,13 @@ def apply_compatibility_migrations(engine: Engine) -> None:
     # These tables were introduced after early deployments.  Creating only
     # missing tables is idempotent and never modifies existing domain data.
     from .database import Base
-    for name in ("notifications", "audit_records", "password_reset_tokens"):
+    for name in (
+        "notifications",
+        "audit_records",
+        "password_reset_tokens",
+        "robot_enrollments",
+        "robot_credentials",
+    ):
         Base.metadata.tables[name].create(bind=engine, checkfirst=True)
     inspector = inspect(engine)
     if "notifications" in inspector.get_table_names():
@@ -153,12 +159,45 @@ def apply_compatibility_migrations(engine: Engine) -> None:
         robot_columns = {
             column["name"] for column in inspector.get_columns("robots")
         }
-        if "battery_source" not in robot_columns:
-            with engine.begin() as connection:
+        with engine.begin() as connection:
+            if "battery_source" not in robot_columns:
                 connection.execute(text(
                     "ALTER TABLE robots ADD COLUMN battery_source "
                     "VARCHAR(20) NOT NULL DEFAULT 'UNAVAILABLE'"
                 ))
+            if "serial_number" not in robot_columns:
+                connection.execute(text("ALTER TABLE robots ADD COLUMN serial_number VARCHAR(120)"))
+            if "enrollment_status" not in robot_columns:
+                connection.execute(text(
+                    "ALTER TABLE robots ADD COLUMN enrollment_status VARCHAR(20) "
+                    "NOT NULL DEFAULT 'UNPAIRED'"
+                ))
+            if "readiness_status" not in robot_columns:
+                connection.execute(text(
+                    "ALTER TABLE robots ADD COLUMN readiness_status VARCHAR(20) "
+                    "NOT NULL DEFAULT 'NOT_READY'"
+                ))
+            if "profile_version" not in robot_columns:
+                connection.execute(text("ALTER TABLE robots ADD COLUMN profile_version VARCHAR(80)"))
+            if "agent_version" not in robot_columns:
+                connection.execute(text("ALTER TABLE robots ADD COLUMN agent_version VARCHAR(40)"))
+            if "ros_distro" not in robot_columns:
+                connection.execute(text("ALTER TABLE robots ADD COLUMN ros_distro VARCHAR(40)"))
+            if "capabilities_json" not in robot_columns:
+                connection.execute(text(
+                    "ALTER TABLE robots ADD COLUMN capabilities_json TEXT NOT NULL DEFAULT '[]'"
+                ))
+            if "last_boot_id" not in robot_columns:
+                connection.execute(text("ALTER TABLE robots ADD COLUMN last_boot_id VARCHAR(100)"))
+            connection.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_robots_serial_number ON robots (serial_number)"
+            ))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_robots_enrollment_status ON robots (enrollment_status)"
+            ))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_robots_readiness_status ON robots (readiness_status)"
+            ))
 
     if "delivery_tasks" not in inspector.get_table_names():
         return

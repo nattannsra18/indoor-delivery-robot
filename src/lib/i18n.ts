@@ -101,6 +101,25 @@ export const userManagementText: Record<Locale, Record<string, string>> = {
   th: { title:"คำขอสร้างบัญชี", description:"ตรวจสอบคำขอสร้างบัญชีก่อนเปิดสิทธิ์ให้ใช้งานระบบจัดส่ง", pendingTitle:"คำขอที่รออนุมัติ", pendingHelp:"เฉพาะบัญชีที่ได้รับอนุมัติแล้วเท่านั้นที่เข้าสู่ระบบและสร้างงานจัดส่งได้", pendingCount:"รออนุมัติ {count} บัญชี", loading:"กำลังโหลดคำขอสร้างบัญชี…", loadFailed:"ไม่สามารถโหลดคำขอสร้างบัญชีได้", approveFailed:"ไม่สามารถอนุมัติบัญชีนี้ได้", approveFailedTitle:"อนุมัติบัญชีไม่สำเร็จ", approvedTitle:"อนุมัติบัญชีแล้ว", close:"ปิดการแจ้งเตือน", retry:"ลองใหม่", approve:"อนุมัติบัญชี", approving:"กำลังอนุมัติ…", approved:"{username} สามารถเข้าสู่ระบบได้แล้ว ระบบจะส่งอีเมลเมื่อกำหนดค่าบริการอีเมลไว้", requested:"ส่งคำขอเมื่อ", emptyTitle:"ไม่มีบัญชีที่รออนุมัติ", emptyHelp:"คำขอสร้างบัญชีใหม่จะแสดงที่นี่", policyTitle:"นโยบายการอนุมัติ:", policyHelp:"บัญชีที่อนุมัติจะได้รับสิทธิ์ USER เท่านั้น การสมัครด้วยตนเองจะไม่ให้สิทธิ์ผู้ดูแลระบบ" },
 };
 
+export const robotRegistryText = {
+  en: {
+    title: "Robot Registry", description: "Pair robot agents and inspect their independent identity, connection, and readiness states.",
+    pendingTitle: "Pairing requests", pendingHelp: "Verify the code and hardware fingerprint shown locally on the robot before approval.", pendingCount: "{count} awaiting review",
+    robotsTitle: "Registered robots", robotsHelp: "Each robot uses an immutable ID and its own revocable credential.", robotCount: "{count} registered",
+    loading: "Loading robot registry…", loadFailed: "Unable to load the robot registry.", retry: "Retry", emptyPending: "No pairing requests", emptyPendingHelp: "New robot agents will appear here after bootstrap enrollment.", emptyRobots: "No registered robots", emptyRobotsHelp: "Approve and claim a pairing request to register the first robot.",
+    requested: "Requested", expires: "Expires", expired: "Expired", serial: "Serial", fingerprint: "Fingerprint (SHA-256)", agent: "Agent", profile: "Profile", capabilities: "Capabilities", approve: "Verify & approve", approving: "Approving…", code: "Pairing code", codeHelp: "Enter the 8-digit code displayed by this robot.", cancel: "Cancel", confirmApprove: "Approve pairing", approvedTitle: "Pairing approved", approvedBody: "The robot may now claim its individual credential.", approveFailedTitle: "Pairing approval failed",
+    online: "Connected", offline: "Disconnected", enrollment: "Enrollment", readiness: "Readiness", credential: "Credential", version: "Version {value}", noCredential: "Not issued", pending: "Pending approval", awaitingClaim: "Approved · awaiting claim", paired: "Paired", revoked: "Revoked", ready: "Ready", notReady: "Not ready", degraded: "Degraded", revoke: "Revoke credential", revoking: "Revoking…", revokeTitle: "Revoke this robot credential?", revokeBody: "The robot will disconnect and cannot reconnect until it is enrolled and paired again.", confirmRevoke: "Revoke access", revokedTitle: "Robot access revoked", revokedBody: "The credential is no longer accepted by the control plane.", revokeFailedTitle: "Credential revocation failed", close: "Close notification", protocolNote: "Security boundary: the bootstrap token can request pairing only. Operational connections require a unique per-robot credential and Agent Protocol v1 handshake.", unknown: "Not reported",
+  },
+  th: {
+    title: "ทะเบียนหุ่นยนต์", description: "จับคู่ Robot Agent และตรวจสอบสถานะตัวตน การเชื่อมต่อ และความพร้อมแยกจากกัน",
+    pendingTitle: "คำขอจับคู่", pendingHelp: "ตรวจสอบรหัสและ hardware fingerprint ที่แสดงบนหุ่นยนต์จริงก่อนอนุมัติ", pendingCount: "รอตรวจสอบ {count} รายการ",
+    robotsTitle: "หุ่นยนต์ที่ลงทะเบียน", robotsHelp: "หุ่นยนต์แต่ละตัวมี ID ถาวรและ credential ที่เพิกถอนได้เป็นของตนเอง", robotCount: "ลงทะเบียนแล้ว {count} ตัว",
+    loading: "กำลังโหลดทะเบียนหุ่นยนต์…", loadFailed: "ไม่สามารถโหลดทะเบียนหุ่นยนต์ได้", retry: "ลองใหม่", emptyPending: "ไม่มีคำขอจับคู่", emptyPendingHelp: "Robot Agent ใหม่จะแสดงที่นี่หลังส่งคำขอลงทะเบียนด้วย bootstrap credential", emptyRobots: "ยังไม่มีหุ่นยนต์ที่ลงทะเบียน", emptyRobotsHelp: "อนุมัติและให้ Agent รับ credential เพื่อเพิ่มหุ่นยนต์ตัวแรก",
+    requested: "ส่งคำขอเมื่อ", expires: "หมดอายุ", expired: "หมดอายุแล้ว", serial: "หมายเลขเครื่อง", fingerprint: "Fingerprint (SHA-256)", agent: "Agent", profile: "โปรไฟล์", capabilities: "ความสามารถ", approve: "ตรวจสอบและอนุมัติ", approving: "กำลังอนุมัติ…", code: "รหัสจับคู่", codeHelp: "กรอกรหัส 8 หลักที่แสดงอยู่บนหุ่นยนต์ตัวนี้", cancel: "ยกเลิก", confirmApprove: "อนุมัติการจับคู่", approvedTitle: "อนุมัติการจับคู่แล้ว", approvedBody: "Robot Agent สามารถรับ credential เฉพาะเครื่องได้แล้ว", approveFailedTitle: "อนุมัติการจับคู่ไม่สำเร็จ",
+    online: "เชื่อมต่อ", offline: "ไม่ได้เชื่อมต่อ", enrollment: "การลงทะเบียน", readiness: "ความพร้อม", credential: "Credential", version: "เวอร์ชัน {value}", noCredential: "ยังไม่ออกให้", pending: "รออนุมัติ", awaitingClaim: "อนุมัติแล้ว · รอ Agent รับสิทธิ์", paired: "จับคู่แล้ว", revoked: "เพิกถอนแล้ว", ready: "พร้อม", notReady: "ยังไม่พร้อม", degraded: "ประสิทธิภาพลดลง", revoke: "เพิกถอน credential", revoking: "กำลังเพิกถอน…", revokeTitle: "เพิกถอน credential ของหุ่นยนต์หรือไม่", revokeBody: "หุ่นยนต์จะหลุดการเชื่อมต่อและเชื่อมใหม่ไม่ได้จนกว่าจะลงทะเบียนและจับคู่อีกครั้ง", confirmRevoke: "เพิกถอนสิทธิ์", revokedTitle: "เพิกถอนสิทธิ์หุ่นยนต์แล้ว", revokedBody: "Control plane จะไม่ยอมรับ credential นี้อีก", revokeFailedTitle: "เพิกถอน credential ไม่สำเร็จ", close: "ปิดการแจ้งเตือน", protocolNote: "ขอบเขตความปลอดภัย: bootstrap token ใช้ส่งคำขอจับคู่เท่านั้น การเชื่อมต่อทำงานต้องใช้ credential แยกต่อหุ่นและผ่าน Agent Protocol v1 handshake", unknown: "ยังไม่รายงาน",
+  },
+} as const;
+
 export const accountRequestNoticeText: Record<Locale, Record<string, string>> = {
   en: {
     title: "{count} account request(s) waiting for approval",
@@ -185,12 +204,14 @@ const navigationLabels: Record<Locale, Record<string, string>> = {
     "/stations": "Station Management",
     "/maps": "Map Management",
     "/users": "Account Requests",
+    "/robots": "Robot Registry",
   },
   th: {
     "/delivery": "สร้างงานจัดส่ง",
     "/stations": "จัดการสถานี",
     "/maps": "จัดการแผนที่",
     "/users": "คำขอสร้างบัญชี",
+    "/robots": "ทะเบียนหุ่นยนต์",
   },
 };
 

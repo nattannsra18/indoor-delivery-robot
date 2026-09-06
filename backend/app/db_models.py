@@ -10,6 +10,8 @@ from .models import (
     AlertSeverity,
     EmergencyStopState,
     RobotState,
+    RobotEnrollmentStatus,
+    RobotReadinessStatus,
     TaskPriority,
     TaskStatus,
     NotificationCategory,
@@ -121,6 +123,66 @@ class RobotORM(Base):
     last_seen: Mapped[str] = mapped_column(
         String(100), nullable=False, default=lambda: utc_now().isoformat()
     )
+    serial_number: Mapped[str | None] = mapped_column(String(120), unique=True, index=True, nullable=True)
+    enrollment_status: Mapped[RobotEnrollmentStatus] = mapped_column(
+        enum_column(RobotEnrollmentStatus, "robot_enrollment_status"),
+        nullable=False,
+        default=RobotEnrollmentStatus.UNPAIRED,
+        server_default=RobotEnrollmentStatus.UNPAIRED.value,
+        index=True,
+    )
+    readiness_status: Mapped[RobotReadinessStatus] = mapped_column(
+        enum_column(RobotReadinessStatus, "robot_readiness_status"),
+        nullable=False,
+        default=RobotReadinessStatus.NOT_READY,
+        server_default=RobotReadinessStatus.NOT_READY.value,
+        index=True,
+    )
+    profile_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    agent_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    ros_distro: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    capabilities_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    last_boot_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class RobotEnrollmentORM(Base):
+    __tablename__ = "robot_enrollments"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    serial_number: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
+    hardware_fingerprint_hash: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    agent_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    ros_distro: Mapped[str] = mapped_column(String(40), nullable=False)
+    profile_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    capabilities_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    pairing_code_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[RobotEnrollmentStatus] = mapped_column(
+        enum_column(RobotEnrollmentStatus, "robot_enrollment_request_status"),
+        nullable=False,
+        default=RobotEnrollmentStatus.PENDING,
+        index=True,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    robot_id: Mapped[str | None] = mapped_column(ForeignKey("robots.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class RobotCredentialORM(Base):
+    __tablename__ = "robot_credentials"
+    __table_args__ = (UniqueConstraint("robot_id", "version", name="uq_robot_credential_version"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    robot_id: Mapped[str] = mapped_column(ForeignKey("robots.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
 
 class DeliveryTaskORM(Base):

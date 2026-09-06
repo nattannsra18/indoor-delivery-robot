@@ -201,6 +201,42 @@ export interface Robot {
   lastSeen: string;
 }
 
+export type RobotEnrollmentStatus = "UNPAIRED" | "PENDING" | "PAIRED" | "REVOKED";
+export type RobotReadinessStatus = "NOT_READY" | "READY" | "DEGRADED";
+
+export interface RobotEnrollment {
+  id: string;
+  serialNumber: string;
+  fingerprintSha256: string;
+  displayName: string;
+  agentVersion: string;
+  rosDistro: string;
+  profileVersion: string;
+  capabilities: string[];
+  status: RobotEnrollmentStatus;
+  expiresAt: string;
+  createdAt: string;
+  approvedAt?: string;
+  claimedAt?: string;
+  robotId?: string;
+}
+
+export interface RobotRegistryEntry {
+  id: string;
+  displayName: string;
+  serialNumber?: string;
+  enrollmentStatus: RobotEnrollmentStatus;
+  readinessStatus: RobotReadinessStatus;
+  online: boolean;
+  profileVersion?: string;
+  agentVersion?: string;
+  rosDistro?: string;
+  capabilities: string[];
+  lastBootId?: string;
+  credentialVersion?: number;
+  credentialRevoked: boolean;
+}
+
 export interface NavigationFeedbackPose {
   frameId: string;
   x: number;

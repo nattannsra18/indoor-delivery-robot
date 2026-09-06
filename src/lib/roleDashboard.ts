@@ -32,12 +32,13 @@ const ADMIN_NAVIGATION: NavigationItem[] = [
   { href: "/tasks", label: "All Tasks", icon: "≡" },
   { href: "/maps", label: "Map Management", icon: "◇" },
   { href: "/stations", label: "Station Management", icon: "⌖" },
+  { href: "/robots", label: "Robot Registry", icon: "◉" },
   { href: "/users", label: "Account Requests", icon: "◎" },
   { href: "/notifications", label: "Notifications", icon: "●" }
   , { href: "/audit", label: "Audit Log", icon: "▤" }
 ];
 
-const ADMIN_ONLY_ROUTES = ["/maps", "/stations", "/users", "/audit"];
+const ADMIN_ONLY_ROUTES = ["/maps", "/stations", "/robots", "/users", "/audit"];
 
 export function navigationForRole(
   role: UserIdentity["role"]

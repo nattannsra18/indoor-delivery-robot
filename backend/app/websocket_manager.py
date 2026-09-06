@@ -14,8 +14,11 @@ class RobotConnectionManager:
         self,
         robot_id: str,
         websocket: WebSocket,
+        *,
+        accepted: bool = False,
     ) -> None:
-        await websocket.accept()
+        if not accepted:
+            await websocket.accept()
 
         previous_connection = self._connections.get(robot_id)
 

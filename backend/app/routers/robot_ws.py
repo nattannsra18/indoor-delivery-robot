@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -31,6 +32,8 @@ from ..models import (
     NavigationResultMessage,
     RoutePreviewResultMessage,
     RobotTelemetry,
+    RobotAgentHello,
+    RobotAgentReadiness,
     TaskEvent,
 )
 from ..service import DeliveryService
@@ -48,6 +51,7 @@ from ..config import security_settings
 from ..emergency_service import EmergencyStopService
 from ..models import Alert, AlertSeverity, EmergencyStop
 from ..auth import require_admin, robot_authorization_valid
+from ..robot_registry import RobotRegistryService, bearer_value
 from ..navigation_feedback_store import (
     LatestNavigationEstimate,
     navigation_feedback_store,
@@ -172,11 +176,24 @@ async def robot_websocket(
     service = DeliveryService(db)
     settings = security_settings()
     authorization = websocket.headers.get("authorization", "")
-    if not robot_authorization_valid(
-        authorization,
-        settings.robot_ws_token,
-        settings.robot_ws_auth_required,
-    ):
+    registry = RobotRegistryService(db)
+    supplied_credential = bearer_value(authorization)
+    credential = (
+        registry.authenticate(robot_id, supplied_credential)
+        if supplied_credential is not None
+        else None
+    )
+    has_robot_credential = registry.has_active_credentials(robot_id)
+    legacy_valid = (
+        not has_robot_credential
+        and settings.allow_legacy_robot_token
+        and robot_authorization_valid(
+            authorization,
+            settings.robot_ws_token,
+            settings.robot_ws_auth_required,
+        )
+    )
+    if credential is None and not legacy_valid:
         await websocket.close(code=1008, reason="Robot authentication failed")
         return
 
@@ -193,9 +210,29 @@ async def robot_websocket(
         )
         return
 
+    hello: RobotAgentHello | None = None
+    if credential is not None:
+        await websocket.accept()
+        try:
+            first_message = await asyncio.wait_for(websocket.receive_json(), timeout=5.0)
+            hello = RobotAgentHello.model_validate(first_message)
+            registry.apply_hello(robot, hello)
+        except (asyncio.TimeoutError, ValidationError, HTTPException, WebSocketDisconnect):
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "code": "INVALID_AGENT_HELLO",
+                    "detail": "A valid Agent Protocol v1 hello is required",
+                    "server_time": current_utc_time(),
+                }
+            )
+            await websocket.close(code=1008, reason="Invalid Agent Protocol handshake")
+            return
+
     await robot_connection_manager.connect(
         robot_id,
         websocket,
+        accepted=credential is not None,
     )
     diagnostics_store.clear_robot(robot_id)
     publish_committed_notifications(
@@ -208,6 +245,9 @@ async def robot_websocket(
             "robot_id": robot.id,
             "robot_name": robot.name,
             "connected": True,
+            "protocol_version": "1.0",
+            "authentication": "robot_credential" if credential is not None else "legacy_transition",
+            "capabilities": hello.capabilities if hello is not None else [],
             "server_time": current_utc_time(),
         }
     )
@@ -302,6 +342,26 @@ async def robot_websocket(
                         "server_time": (
                             current_utc_time()
                         ),
+                    }
+                )
+            elif message_type == "agent_readiness":
+                try:
+                    readiness = RobotAgentReadiness.model_validate(message)
+                    registry.apply_readiness(robot, readiness)
+                except (ValidationError, HTTPException) as error:
+                    detail = (
+                        error.detail
+                        if isinstance(error, HTTPException)
+                        else "; ".join(item["msg"] for item in error.errors(include_url=False))
+                    )
+                    await send_error(websocket, "INVALID_AGENT_READINESS", str(detail))
+                    continue
+                await websocket.send_json(
+                    {
+                        "type": "agent_readiness_ack",
+                        "robot_id": robot_id,
+                        "status": readiness.status.value,
+                        "server_time": current_utc_time(),
                     }
                 )
             elif message_type == "diagnostics":
