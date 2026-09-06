@@ -33,6 +33,38 @@ This project demonstrates an end-to-end autonomous delivery workflow: a user sel
 | Operational safety | Role-based controls, a software emergency stop, dead-man teleoperation, alerts, task recovery, and a persistent audit log. |
 | Full-stack engineering | Next.js and TypeScript on the frontend, FastAPI and SQLAlchemy on the backend, and PostgreSQL for durable operational state. |
 
+## Product tour
+
+### One operational view
+
+The control center brings safety, robot availability, simulated charge, live pose, mission control, and the ROS occupancy grid into one screen.
+
+<p align="center">
+  <a href="docs/images/admin-dashboard.jpg">
+    <img src="docs/images/admin-dashboard.jpg" alt="Admin operations dashboard with robot status, mission controls, and live map" width="1200" />
+  </a>
+</p>
+
+### Maps and localization from the browser
+
+Administrators can inspect the robot-hosted map inventory and manage AMCL localization without switching to RViz for routine operations.
+
+| Robot-backed map management | Browser-based localization |
+| --- | --- |
+| [![Map management showing the active ROS map and robot-backed inventory](docs/images/map-management.jpg)](docs/images/map-management.jpg) | [![Robot localization showing AMCL health, pose, and interactive initial-pose controls](docs/images/localization.jpg)](docs/images/localization.jpg) |
+
+### Actionable operational history
+
+Delivery events, robot connectivity, and account requests are grouped into a filterable notification timeline instead of appearing as an unstructured event feed.
+
+<p align="center">
+  <a href="docs/images/notifications.jpg">
+    <img src="docs/images/notifications.jpg" alt="Grouped admin notification timeline with delivery and account events" width="1200" />
+  </a>
+</p>
+
+<p align="center"><sub>Captured from the running Gazebo and ROS 2 integration environment.</sub></p>
+
 ## System architecture
 
 <p align="center">
