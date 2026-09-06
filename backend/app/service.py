@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -26,6 +27,8 @@ from .models import (
 )
 from .navigation_path_store import navigation_path_store
 from .navigation_feedback_store import navigation_feedback_store
+from .map_catalog_store import map_catalog_store
+from .map_store import map_store
 from .repository import DeliveryRepository
 from .notification_service import NotificationService
 from .audit_service import AuditService
@@ -254,8 +257,13 @@ class DeliveryService:
         return robot
 
     # Stations
-    def list_stations(self) -> list[StationORM]:
-        return self.repo.list_stations()
+    @staticmethod
+    def active_map_id(robot_id: str = "robot01") -> str:
+        catalog = map_catalog_store.get(robot_id, robot_online=True)
+        return catalog.active_map_id if catalog and catalog.active_map_id else "warehouse_map"
+
+    def list_stations(self, map_id: str | None = None) -> list[StationORM]:
+        return self.repo.list_stations(map_id or self.active_map_id())
 
     def get_station(self, station_id: str) -> StationORM:
         station = self.repo.get_station(station_id)
@@ -264,6 +272,7 @@ class DeliveryService:
         return station
 
     def add_station(self, payload: StationCreate, actor_id: str | None = None) -> StationORM:
+        self._validate_station_pose(payload)
         station = StationORM(id=self.repo.next_station_id(), **payload.model_dump())
         self.repo.add_station(station)
         AuditService(self.db).log(actor_id, "station.created", "station", station.id)
@@ -275,12 +284,46 @@ class DeliveryService:
         self, station_id: str, payload: StationCreate, actor_id: str | None = None
     ) -> StationORM:
         station = self.get_station(station_id)
+        self._validate_station_pose(payload)
         for field, value in payload.model_dump().items():
             setattr(station, field, value)
         AuditService(self.db).log(actor_id, "station.updated", "station", station.id)
         self.db.commit()
         self.db.refresh(station)
         return station
+
+    def _validate_station_pose(self, payload: StationCreate) -> None:
+        active_map_id = self.active_map_id()
+        if payload.map_id != active_map_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Activate the map before editing its stations",
+            )
+        snapshot = map_store.get()
+        if snapshot is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="The active ROS map is not available",
+            )
+        dx = payload.x - snapshot.origin_x
+        dy = payload.y - snapshot.origin_y
+        cosine = math.cos(snapshot.origin_yaw)
+        sine = math.sin(snapshot.origin_yaw)
+        local_x = cosine * dx + sine * dy
+        local_y = -sine * dx + cosine * dy
+        column = math.floor(local_x / snapshot.resolution)
+        row = math.floor(local_y / snapshot.resolution)
+        if not (0 <= column < snapshot.width and 0 <= row < snapshot.height):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Station position is outside the active map",
+            )
+        occupancy = snapshot.data[row * snapshot.width + column]
+        if occupancy < 0 or occupancy >= 50:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Station must be placed in known free space",
+            )
 
     def delete_station(self, station_id: str, actor_id: str | None = None) -> None:
         station = self.get_station(station_id)
@@ -490,8 +533,14 @@ class DeliveryService:
         pickup_distance_meters: float | None = None,
         delivery_distance_meters: float | None = None,
     ) -> DeliveryTaskORM:
-        self.get_station(payload.pickup_station_id)
-        self.get_station(payload.destination_station_id)
+        pickup = self.get_station(payload.pickup_station_id)
+        destination = self.get_station(payload.destination_station_id)
+        active_map_id = self.active_map_id()
+        if pickup.map_id != active_map_id or destination.map_id != active_map_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Pickup and destination must belong to the active map",
+            )
         robot = self._robot_or_404(lock=True)
 
         task = DeliveryTaskORM(

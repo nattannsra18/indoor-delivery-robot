@@ -56,6 +56,7 @@ export interface TaskRoutePreview {
 
 export interface Station {
   id: string;
+  mapId: string;
   name: string;
   x: number;
   y: number;

@@ -13,10 +13,11 @@ from .db_models import (
 from .models import RobotState, TaskStatus, utc_now
 
 INITIAL_STATIONS = [
-    dict(id="A", name="Station A", x=1.2, y=3.7, yaw=0.0, description="Main Office", location="Main warehouse · Ground floor · Front office", instructions="Use the marked handoff point beside the reception desk."),
-    dict(id="B", name="Station B", x=4.7, y=1.8, yaw=1.57, description="Storage Area", location="Main warehouse · Ground floor · Storage zone", instructions="Meet the robot at the aisle entrance and keep the route clear."),
+    dict(id="A", map_id="warehouse_map", name="Station A", x=1.2, y=3.7, yaw=0.0, description="Main Office", location="Main warehouse · Ground floor · Front office", instructions="Use the marked handoff point beside the reception desk."),
+    dict(id="B", map_id="warehouse_map", name="Station B", x=4.7, y=1.8, yaw=1.57, description="Storage Area", location="Main warehouse · Ground floor · Storage zone", instructions="Meet the robot at the aisle entrance and keep the route clear."),
     dict(
         id="C",
+        map_id="warehouse_map",
         name="Station C",
         x=6.9853339195251465,
         y=-3.3482987880706787,
@@ -27,6 +28,7 @@ INITIAL_STATIONS = [
     ),
     dict(
         id="D",
+        map_id="warehouse_map",
         name="Station D",
         x=6.696059703826904,
         y=4.6371917724609375,

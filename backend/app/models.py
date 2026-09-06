@@ -191,9 +191,10 @@ class GoogleAuthConfiguration(BaseModel):
 
 
 class Station(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, allow_inf_nan=False)
 
     id: str
+    map_id: str
     name: str
     x: float
     y: float
@@ -204,6 +205,9 @@ class Station(BaseModel):
 
 
 class StationCreate(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    map_id: str = Field(min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_.-]+$")
     name: str = Field(min_length=1, max_length=100)
     x: float
     y: float

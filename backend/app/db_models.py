@@ -71,6 +71,9 @@ class StationORM(Base):
     __tablename__ = "stations"
 
     id: Mapped[str] = mapped_column(String(20), primary_key=True)
+    map_id: Mapped[str] = mapped_column(
+        String(120), nullable=False, default="warehouse_map", index=True
+    )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     x: Mapped[float] = mapped_column(Float, nullable=False)
     y: Mapped[float] = mapped_column(Float, nullable=False)

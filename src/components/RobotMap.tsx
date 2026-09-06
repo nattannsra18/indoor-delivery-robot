@@ -25,6 +25,7 @@ type RobotMapProps = {
   showStations?: boolean;
   showStationButtons?: boolean;
   showTechnicalDetails?: boolean;
+  stationsOverride?: Station[];
   draftPose?: { x: number; y: number; yaw: number };
   draftPoseLabel?: string;
   onMapPointSelect?: (point: { x: number; y: number }) => void;
@@ -52,6 +53,7 @@ export default function RobotMap({
   showStations = true,
   showStationButtons = true,
   showTechnicalDetails = true,
+  stationsOverride,
   draftPose,
   draftPoseLabel,
   onMapPointSelect,
@@ -71,8 +73,9 @@ export default function RobotMap({
   });
   const {
     occupancyMap, navigationPath, navigationPathStatus, robot: liveRobot,
-    stations, activeTask, stationName
+    stations: contextStations, activeTask, stationName
   } = useDeliveryApi();
+  const stations = stationsOverride ?? contextStations;
   const robot = useSmoothRobotPose(liveRobot, smoothMotion);
 
   useEffect(() => {

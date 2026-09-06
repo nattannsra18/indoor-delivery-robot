@@ -24,8 +24,22 @@ class DeliveryRepository:
         self.db = db
 
     # Stations
-    def list_stations(self) -> list[StationORM]:
-        return list(self.db.scalars(select(StationORM).order_by(StationORM.id)).all())
+    def list_stations(self, map_id: str | None = None) -> list[StationORM]:
+        statement = select(StationORM)
+        if map_id is not None:
+            statement = statement.where(StationORM.map_id == map_id)
+        return list(self.db.scalars(statement.order_by(StationORM.id)).all())
+
+    def stations_exist_for_map(self, map_id: str) -> bool:
+        statement = select(func.count()).select_from(StationORM).where(
+            StationORM.map_id == map_id
+        )
+        return bool(self.db.scalar(statement))
+
+    def rename_station_map(self, old_map_id: str, new_map_id: str) -> None:
+        for station in self.list_stations(old_map_id):
+            station.map_id = new_map_id
+        self.db.flush()
 
     def get_station(self, station_id: str) -> StationORM | None:
         return self.db.get(StationORM, station_id)

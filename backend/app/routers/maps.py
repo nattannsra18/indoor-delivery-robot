@@ -138,6 +138,7 @@ def _require_idle_robot(db: Session, robot_id: str) -> None:
         or robot.state != RobotState.IDLE
         or robot.current_task_id is not None
         or service.active_task_for_robot(robot_id) is not None
+        or service.repo.queued_tasks()
     ):
         raise HTTPException(
             status_code=409,
@@ -264,6 +265,11 @@ async def delete_catalog_map(
     _, selected = _catalog_map(robot_id, map_id)
     if selected.active:
         raise HTTPException(status_code=409, detail="The active map cannot be deleted")
+    if DeliveryService(db).repo.stations_exist_for_map(map_id):
+        raise HTTPException(
+            status_code=409,
+            detail="Remove this map's stations before deleting the map",
+        )
     _require_idle_robot(db, robot_id)
     return await _send_catalog_operation(
         robot_id=robot_id,
@@ -329,6 +335,7 @@ async def activate_map(
         or robot.state != RobotState.IDLE
         or robot.current_task_id is not None
         or service.active_task_for_robot(robot_id) is not None
+        or service.repo.queued_tasks()
     ):
         raise HTTPException(
             status_code=409,

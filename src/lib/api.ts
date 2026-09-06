@@ -332,8 +332,15 @@ export async function getOverview() {
   };
 }
 
-export async function getStations(): Promise<Station[]> {
-  return request<Station[]>("/api/stations");
+type ApiStation = Omit<Station, "mapId"> & { map_id: string };
+
+function toStation(station: ApiStation): Station {
+  return { ...station, mapId: station.map_id };
+}
+
+export async function getStations(mapId?: string): Promise<Station[]> {
+  const query = mapId ? `?map_id=${encodeURIComponent(mapId)}` : "";
+  return (await request<ApiStation[]>(`/api/stations${query}`)).map(toStation);
 }
 
 export async function getMap(): Promise<OccupancyGridMap> {
@@ -820,20 +827,22 @@ export async function recoverRobot(robotId: string): Promise<Robot> {
 }
 
 export async function addStation(station: Omit<Station, "id">): Promise<Station> {
-  return request<Station>("/api/stations", {
+  const { mapId, ...fields } = station;
+  return toStation(await request<ApiStation>("/api/stations", {
     method: "POST",
-    body: JSON.stringify(station)
-  });
+    body: JSON.stringify({ ...fields, map_id: mapId })
+  }));
 }
 
 export async function updateStation(
   stationId: string,
   station: Omit<Station, "id">
 ): Promise<Station> {
-  return request<Station>(`/api/stations/${stationId}`, {
+  const { mapId, ...fields } = station;
+  return toStation(await request<ApiStation>(`/api/stations/${stationId}`, {
     method: "PUT",
-    body: JSON.stringify(station)
-  });
+    body: JSON.stringify({ ...fields, map_id: mapId })
+  }));
 }
 
 export async function deleteStation(stationId: string): Promise<void> {

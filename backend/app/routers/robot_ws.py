@@ -654,6 +654,14 @@ async def robot_websocket(
                     detail=result.detail,
                 )
                 if matched and operation is not None:
+                    if (
+                        result.accepted
+                        and result.action.value == "RENAME"
+                        and result.result_map_id
+                    ):
+                        DeliveryService(db).repo.rename_station_map(
+                            result.map_id, result.result_map_id
+                        )
                     suffix = "succeeded" if result.accepted else "failed"
                     AuditService(db).log(
                         TrustedActor.robot(robot_id),

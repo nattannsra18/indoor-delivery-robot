@@ -164,6 +164,12 @@ async def preview_task_route(
         )
     pickup = service.get_station(payload.pickup_station_id)
     destination = service.get_station(payload.destination_station_id)
+    active_map_id = service.active_map_id()
+    if pickup.map_id != active_map_id or destination.map_id != active_map_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Pickup and destination must belong to the active map",
+        )
     robot = service.get_robot("robot01")
     snapshot = map_store.get()
 

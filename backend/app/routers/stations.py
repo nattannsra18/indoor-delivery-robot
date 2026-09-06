@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from ..dependencies import get_service
-from ..models import Station, StationCreate, StationUpdate
+from ..models import Station, StationCreate, StationUpdate, UserRole
 from ..service import DeliveryService
 from ..auth import require_admin, require_user
 from ..db_models import UserORM
@@ -10,8 +10,18 @@ router = APIRouter(prefix="/api/stations", tags=["stations"])
 
 
 @router.get("", response_model=list[Station])
-def list_stations(service: DeliveryService = Depends(get_service), _: UserORM = Depends(require_user)):
-    return service.list_stations()
+def list_stations(
+    map_id: str | None = Query(default=None, min_length=1, max_length=120),
+    service: DeliveryService = Depends(get_service),
+    user: UserORM = Depends(require_user),
+):
+    if (
+        map_id is not None
+        and user.role != UserRole.ADMIN
+        and map_id != service.active_map_id()
+    ):
+        return service.list_stations()
+    return service.list_stations(map_id)
 
 
 @router.get("/{station_id}", response_model=Station)
