@@ -231,6 +231,7 @@ function Modal({ open, title, subtitle, closeLabel, onClose, restoreRef, childre
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
+    const restoreTarget = restoreRef?.current ?? previous;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const frame = requestAnimationFrame(() => (panel.current?.querySelector<HTMLElement>("[data-autofocus]") ?? panel.current?.querySelector<HTMLElement>("button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled])"))?.focus());
@@ -244,7 +245,7 @@ function Modal({ open, title, subtitle, closeLabel, onClose, restoreRef, childre
       else if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0].focus(); }
     }
     addEventListener("keydown", keys);
-    return () => { cancelAnimationFrame(frame); removeEventListener("keydown", keys); document.body.style.overflow = overflow; (restoreRef?.current ?? previous)?.focus(); };
+    return () => { cancelAnimationFrame(frame); removeEventListener("keydown", keys); document.body.style.overflow = overflow; restoreTarget?.focus(); };
   }, [open, restoreRef]);
   if (!open) return null;
   return <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/55 backdrop-blur-sm sm:items-center sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>

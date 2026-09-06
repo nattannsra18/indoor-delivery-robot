@@ -227,7 +227,7 @@ async def preview_task_route(
         or not result.delivery_path
     ):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=result.detail or "Pickup or destination is unreachable",
         )
     if result.frame_id.lstrip("/") != snapshot.frame_id.lstrip("/"):

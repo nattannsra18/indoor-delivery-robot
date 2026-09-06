@@ -5,6 +5,8 @@ out
 .env.local
 .DS_Store
 *.log
+playwright-report/
+test-results/
 /AGENTS.md
 
 # Python / FastAPI

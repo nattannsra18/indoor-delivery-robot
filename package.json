@@ -2,12 +2,15 @@
   "name": "indoor-delivery-robot-web",
   "version": "0.4.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:ci": "next build --webpack",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings=0",
     "test": "node --test tests/*.test.mjs",
+    "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit --incremental false",
     "check": "npm run test && npm run typecheck && npm run lint"
   },
@@ -17,6 +20,7 @@
     "react-dom": "latest"
   },
   "devDependencies": {
+    "@playwright/test": "latest",
     "@tailwindcss/postcss": "latest",
     "@types/node": "latest",
     "@types/react": "latest",

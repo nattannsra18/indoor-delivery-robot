@@ -9,6 +9,9 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/nattannsra18/indoor-delivery-robot/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nattannsra18/indoor-delivery-robot/actions/workflows/ci.yml/badge.svg" /></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-D22128?style=flat-square" /></a>
+  <a href="https://github.com/nattannsra18/indoor-delivery-robot/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/nattannsra18/indoor-delivery-robot?style=flat-square" /></a>
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-000000?style=flat-square&amp;logo=nextdotjs&amp;logoColor=white" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&amp;logo=typescript&amp;logoColor=white" />
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&amp;logo=fastapi&amp;logoColor=white" />
@@ -20,8 +23,6 @@
 This project demonstrates an end-to-end autonomous delivery workflow: a user selects pickup and destination stations on a live map, the backend validates and queues the request, and a ROS-connected robot executes the mission while both users and operators receive real-time progress, telemetry, alerts, and audit history.
 
 > **Project status:** feature-complete for the current Gazebo simulation scope. The latest acceptance run covered account approval, sign-in, route planning, queueing, pickup/loading, delivery/unloading, notifications, history, and audit records.
-
-![Indoor delivery robot in a campus environment](public/auth/campus-delivery-illustration.png)
 
 ## Why this project stands out
 
@@ -59,9 +60,21 @@ Pickup and destination selection, the Nav2 route preview, distance, travel time,
 
 Operators can search and filter the complete delivery history, perform stage-specific actions, open task details, and inspect an event-by-event timeline with source attribution and stage durations.
 
-| Delivery operations | Event history |
-| --- | --- |
-| [![All Delivery Tasks with mission control, filters, task status, and owner](docs/images/all-tasks.png)](docs/images/all-tasks.png) | [![Completed delivery event timeline with sources and stage durations](docs/images/task-event-history.png)](docs/images/task-event-history.png) |
+<p align="center">
+  <a href="docs/images/all-tasks.png">
+    <img src="docs/images/all-tasks.png" alt="All Delivery Tasks with mission control, filters, task status, and owner" width="1200" />
+  </a>
+</p>
+
+<details>
+  <summary><strong>Open a completed delivery event timeline</strong></summary>
+  <br />
+  <p align="center">
+    <a href="docs/images/task-event-history.png">
+      <img src="docs/images/task-event-history.png" alt="Completed delivery event timeline with sources and stage durations" width="1200" />
+    </a>
+  </p>
+</details>
 
 ### ROS diagnostics and integration health
 
@@ -85,11 +98,29 @@ The map library reflects the robot filesystem as its source of truth. A new occu
 
 Routine AMCL localization can be managed without RViz: inspect localization health, set an initial pose by dragging a heading on the map, or start global relocalization. Delivery stations are tied to a selected robot map and can also be positioned and oriented interactively.
 
-| Browser-based localization | Visual station management |
-| --- | --- |
-| [![Robot localization with AMCL health, live pose, and initial pose controls](docs/images/robot-localization.png)](docs/images/robot-localization.png) | [![Station Management with map selection and interactive station placement](docs/images/station-management.png)](docs/images/station-management.png) |
+<p align="center">
+  <a href="docs/images/robot-localization.png">
+    <img src="docs/images/robot-localization.png" alt="Robot localization with AMCL health, live pose, and initial pose controls" width="1200" />
+  </a>
+</p>
+
+<details>
+  <summary><strong>Open visual station management</strong></summary>
+  <br />
+  <p align="center">
+    <a href="docs/images/station-management.png">
+      <img src="docs/images/station-management.png" alt="Station Management with map selection and interactive station placement" width="1200" />
+    </a>
+  </p>
+</details>
 
 <p align="center"><sub>Captured from the running Gazebo and ROS 2 integration environment.</sub></p>
+
+### Product vision
+
+<p align="center">
+  <img src="public/auth/campus-delivery-illustration.png" alt="Indoor delivery robot in a campus environment" width="900" />
+</p>
 
 ## System architecture
 
@@ -214,12 +245,14 @@ See [Development guide](docs/DEVELOPMENT.md) for configuration, individual servi
 
 ```bash
 npm run check
+npm run build:ci
+npm run test:e2e
 
 cd backend
 PYTHONPATH=. PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python -m pytest -q
 ```
 
-The current suite contains 73 frontend contract/UX checks and 136 backend tests. Continuous integration runs both suites, TypeScript validation, and ESLint on every pull request.
+The current suite contains 73 frontend contract/UX checks and 136 backend tests. Continuous integration runs both suites, zero-warning TypeScript/ESLint validation, a production build, and Chromium smoke tests against a real FastAPI/PostgreSQL stack on every pull request.
 
 ## Repository layout
 
@@ -233,7 +266,7 @@ indoor-delivery-robot/
 ├── src/app/             # Next.js routes for user and admin experiences
 ├── src/components/      # Shared maps, navigation, dialogs, and controls
 ├── src/lib/             # API client, localization, policy, and presentation logic
-└── tests/               # Frontend contract and UX regression tests
+└── tests/               # Frontend contract, UX regression, and Playwright E2E tests
 ```
 
 ## Technology
@@ -253,3 +286,7 @@ indoor-delivery-robot/
 ## Author
 
 Designed and developed by [nattannsra18](https://github.com/nattannsra18).
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).

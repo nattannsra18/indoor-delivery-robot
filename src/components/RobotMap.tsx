@@ -336,9 +336,22 @@ function useSmoothRobotPose(robot: Robot, enabled: boolean): Robot {
   const [displayed, setDisplayed] = useState(robot);
 
   useEffect(() => {
+    const target: Robot = {
+      id: robot.id,
+      name: robot.name,
+      online: robot.online,
+      battery: robot.battery,
+      batterySource: robot.batterySource,
+      state: robot.state,
+      x: robot.x,
+      y: robot.y,
+      yaw: robot.yaw,
+      currentTaskId: robot.currentTaskId,
+      lastSeen: robot.lastSeen
+    };
     if (!enabled) {
-      poseRef.current = robot;
-      setDisplayed(robot);
+      poseRef.current = target;
+      setDisplayed(target);
       return;
     }
 
@@ -346,8 +359,8 @@ function useSmoothRobotPose(robot: Robot, enabled: boolean): Robot {
     const startedAt = performance.now();
     const duration = 900;
     const yawDelta = Math.atan2(
-      Math.sin(robot.yaw - from.yaw),
-      Math.cos(robot.yaw - from.yaw)
+      Math.sin(target.yaw - from.yaw),
+      Math.cos(target.yaw - from.yaw)
     );
     let frame = 0;
 
@@ -355,9 +368,9 @@ function useSmoothRobotPose(robot: Robot, enabled: boolean): Robot {
       const progress = Math.min(1, (now - startedAt) / duration);
       const eased = 1 - Math.pow(1 - progress, 3);
       const next = {
-        ...robot,
-        x: from.x + (robot.x - from.x) * eased,
-        y: from.y + (robot.y - from.y) * eased,
+        ...target,
+        x: from.x + (target.x - from.x) * eased,
+        y: from.y + (target.y - from.y) * eased,
         yaw: from.yaw + yawDelta * eased
       };
       poseRef.current = next;
@@ -370,6 +383,7 @@ function useSmoothRobotPose(robot: Robot, enabled: boolean): Robot {
   }, [
     enabled,
     robot.battery,
+    robot.batterySource,
     robot.currentTaskId,
     robot.id,
     robot.lastSeen,

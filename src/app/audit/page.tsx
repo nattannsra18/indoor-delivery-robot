@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useLocale } from "@/context/LocaleContext";
 import { getAudit } from "@/lib/api";
@@ -16,8 +16,9 @@ export default function AuditPage() {
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [action, setAction] = useState("");
+  const backendOffline = t("backendOffline");
 
-  const load = async (next = action) => {
+  const loadAudit = useCallback(async (next: string) => {
     setLoading(true);
     try {
       const page = await getAudit(0, 30, next || undefined);
@@ -25,13 +26,13 @@ export default function AuditPage() {
       setNextOffset(page.nextOffset);
       setError(undefined);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("backendOffline"));
+      setError(reason instanceof Error ? reason.message : backendOffline);
     } finally {
       setLoading(false);
     }
-  };
+  }, [backendOffline]);
 
-  useEffect(() => { void load(""); }, []);
+  useEffect(() => { void loadAudit(""); }, [loadAudit]);
 
   const loadMore = async () => {
     if (nextOffset === undefined) return;
@@ -54,11 +55,11 @@ export default function AuditPage() {
       <p className="mb-5 text-sm text-slate-500">{t("auditDescription")}</p>
       <label className="mb-4 block text-sm font-semibold">
         {t("auditActionFilter")}
-        <select value={action} onChange={(event) => { setAction(event.target.value); void load(event.target.value); }} className="ml-2 min-h-10 rounded border p-2">
+        <select value={action} onChange={(event) => { setAction(event.target.value); void loadAudit(event.target.value); }} className="ml-2 min-h-10 rounded border p-2">
           {actions.map((value) => <option key={value} value={value}>{value ? auditActionLabel(value, locale) : t("allActions")}</option>)}
         </select>
       </label>
-      {loading ? <p>{t("loading")}</p> : error ? <p role="alert">{error} <button onClick={() => void load()} className="underline">{t("retry")}</button></p> : !items.length ? <p className="rounded-xl border p-5 text-slate-500">{t("auditNoRecords")}</p> : (
+      {loading ? <p>{t("loading")}</p> : error ? <p role="alert">{error} <button onClick={() => void loadAudit(action)} className="underline">{t("retry")}</button></p> : !items.length ? <p className="rounded-xl border p-5 text-slate-500">{t("auditNoRecords")}</p> : (
         <div className="overflow-x-auto rounded-xl border">
           <table className="min-w-[650px] w-full text-left text-sm">
             <thead><tr className="bg-slate-50"><th className="p-3">{t("auditTime")}</th><th>{t("auditAction")}</th><th>{t("auditActor")}</th><th>{t("auditEntity")}</th><th>{t("auditResult")}</th></tr></thead>

@@ -28,6 +28,9 @@ jobs:
       - name: Run tests, type checking, and lint
         run: npm run check
 
+      - name: Build production application
+        run: npm run build:ci
+
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
@@ -72,3 +75,89 @@ jobs:
           PYTHONPATH: .
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
         run: python -m pytest -q
+
+  e2e:
+    name: Playwright smoke E2E
+    needs: [frontend, backend]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: indoor_delivery_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d indoor_delivery_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/indoor_delivery_e2e
+      ROBOT_WS_AUTH_REQUIRED: "false"
+      SESSION_COOKIE_SECURE: "false"
+      FRONTEND_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+      BOOTSTRAP_ADMIN_USERNAME: admin
+      BOOTSTRAP_ADMIN_PASSWORD: E2E-Admin-Password-2026
+      E2E_ADMIN_USERNAME: admin
+      E2E_ADMIN_PASSWORD: E2E-Admin-Password-2026
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          python -m pip install -r backend/requirements.txt
+          npx playwright install --with-deps chromium
+
+      - name: Build production application
+        run: npm run build:ci
+
+      - name: Start web stack
+        run: |
+          PYTHONPATH=backend python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > backend-e2e.log 2>&1 &
+          npm run start -- --hostname 127.0.0.1 > frontend-e2e.log 2>&1 &
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8000/health >/dev/null \
+              && curl --fail --silent http://127.0.0.1:3000/login >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Web stack did not become ready"
+          exit 1
+
+      - name: Run browser smoke tests
+        run: npm run test:e2e
+
+      - name: Upload browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-diagnostics
+          path: |
+            playwright-report/
+            test-results/
+            backend-e2e.log
+            frontend-e2e.log
+          if-no-files-found: ignore
+          retention-days: 7
