@@ -45,6 +45,7 @@ from app.route_preview import route_preview_coordinator
 from app.browser_websocket_manager import (
     browser_connection_manager,
 )
+from app.diagnostics_store import diagnostics_store
 
 if TEST_DB.exists():
     TEST_DB.unlink()
@@ -162,6 +163,7 @@ class StubWebSocket:
 
 def setup_function():
     browser_connection_manager.clear()
+    diagnostics_store.clear()
     route_preview_coordinator.clear()
     navigation_path_store.clear_all()
     navigation_feedback_store.clear()
@@ -765,6 +767,69 @@ def test_robot_diagnostics_broadcasts_dashboard_update(
     }
     assert dashboard_event["statuses"][1]["level"] == "STALE"
     assert dashboard_event["server_time"]
+
+
+def test_robot_diagnostics_merge_independent_publishers(
+    monkeypatch,
+):
+    dashboard_events: list[dict] = []
+    common_status = {
+        "level": "OK",
+        "message": "Healthy",
+        "hardware_id": "turtlebot3_waffle_sim",
+        "values": [],
+    }
+    websocket = StubWebSocket(
+        [
+            {
+                "type": "diagnostics",
+                "timestamp": None,
+                "statuses": [
+                    {"name": "AMR/LiDAR", **common_status},
+                    {"name": "AMR/Odometry", **common_status},
+                ],
+            },
+            {
+                "type": "diagnostics",
+                "timestamp": None,
+                "statuses": [
+                    {
+                        "name": "lifecycle_manager_navigation: Nav2 Health",
+                        "level": "OK",
+                        "message": "Managed nodes are active",
+                        "hardware_id": "Nav2",
+                        "values": [],
+                    }
+                ],
+            },
+        ]
+    )
+
+    async def capture_dashboard_event(
+        message: dict, **_kwargs,
+    ) -> None:
+        if message.get("type") == "robot_diagnostics":
+            dashboard_events.append(message)
+
+    monkeypatch.setattr(
+        browser_connection_manager,
+        "broadcast_json",
+        capture_dashboard_event,
+    )
+
+    with TestingSessionLocal() as db:
+        asyncio.run(robot_websocket(websocket, "robot01", db))
+
+    assert len(dashboard_events) == 2
+    assert [
+        status["name"]
+        for status in dashboard_events[-1]["statuses"]
+    ] == [
+        "AMR/LiDAR",
+        "AMR/Odometry",
+        "lifecycle_manager_navigation: Nav2 Health",
+    ]
+    assert dashboard_events[-1]["overall_level"] == "OK"
 
 
 def test_robot_websocket_rejects_invalid_diagnostics():

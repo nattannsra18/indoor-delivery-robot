@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@keyframes toast-progress {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
 :root { --background:#f6f8fb; --foreground:#172033; }
 * { box-sizing:border-box; }
 html { background:var(--background); overflow-x:clip; }

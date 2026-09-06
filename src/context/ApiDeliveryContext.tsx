@@ -805,10 +805,7 @@ export function ApiDeliveryProvider({
       try {
         await api.deleteStation(stationId);
         await refreshAll();
-        return {
-          ok: true,
-          message: `${stationName(stationId)} removed from FastAPI.`
-        };
+        return { ok: true, message: "" };
       } catch (err) {
         const message =
           err instanceof Error
@@ -818,7 +815,7 @@ export function ApiDeliveryProvider({
         return { ok: false, message };
       }
     },
-    [refreshAll, stationName]
+    [refreshAll]
   );
 
   const advanceRobotWorkflow = useCallback(async () => {

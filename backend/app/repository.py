@@ -24,20 +24,31 @@ class DeliveryRepository:
         self.db = db
 
     # Stations
-    def list_stations(self, map_id: str | None = None) -> list[StationORM]:
+    def list_stations(
+        self,
+        map_id: str | None = None,
+        *,
+        include_inactive: bool = False,
+    ) -> list[StationORM]:
         statement = select(StationORM)
+        if not include_inactive:
+            statement = statement.where(StationORM.active.is_(True))
         if map_id is not None:
             statement = statement.where(StationORM.map_id == map_id)
         return list(self.db.scalars(statement.order_by(StationORM.id)).all())
 
     def stations_exist_for_map(self, map_id: str) -> bool:
         statement = select(func.count()).select_from(StationORM).where(
-            StationORM.map_id == map_id
+            StationORM.map_id == map_id,
+            StationORM.active.is_(True),
         )
         return bool(self.db.scalar(statement))
 
     def rename_station_map(self, old_map_id: str, new_map_id: str) -> None:
-        for station in self.list_stations(old_map_id):
+        for station in self.list_stations(
+            old_map_id,
+            include_inactive=True,
+        ):
             station.map_id = new_map_id
         self.db.flush()
 
@@ -50,13 +61,22 @@ class DeliveryRepository:
         return station
 
     def delete_station(self, station: StationORM) -> None:
-        self.db.delete(station)
+        station.active = False
         self.db.flush()
 
-    def station_is_referenced(self, station_id: str) -> bool:
+    def station_has_open_task(self, station_id: str) -> bool:
         stmt = select(func.count()).select_from(DeliveryTaskORM).where(
-            (DeliveryTaskORM.pickup_station_id == station_id)
-            | (DeliveryTaskORM.destination_station_id == station_id)
+            (
+                (DeliveryTaskORM.pickup_station_id == station_id)
+                | (DeliveryTaskORM.destination_station_id == station_id)
+            ),
+            DeliveryTaskORM.status.not_in(
+                (
+                    TaskStatus.COMPLETED,
+                    TaskStatus.FAILED,
+                    TaskStatus.CANCELLED,
+                )
+            ),
         )
         return bool(self.db.scalar(stmt))
 

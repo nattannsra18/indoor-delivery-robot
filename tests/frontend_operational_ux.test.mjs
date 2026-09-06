@@ -51,6 +51,20 @@ test("tasks use a compact primary table and a details drawer", () => {
 test("detailed dashboard telemetry is progressively disclosed", () => {
   const page = read("src/app/page.tsx");
   assert.match(page, /<details className="group mt-6/);
-  assert.match(page, /<DiagnosticsCards/);
+  assert.match(page, /<DiagnosticsCards diagnostics=\{sensorDiagnostics\}/);
+  assert.match(page, /const nav2Diagnostic = diagnostics\?\.statuses\.find\(isNav2Diagnostic\)/);
+  assert.match(page, /state=\{nav2Diagnostic\?\.message/);
   assert.ok(page.indexOf("recentActivity") < page.indexOf("diagnosticsDetails"));
+});
+
+test("station mutations use prominent accessible feedback", () => {
+  const stationPage = read("src/app/stations/page.tsx");
+  const accountPage = read("src/app/users/page.tsx");
+  const toast = read("src/components/ActionToast.tsx");
+  assert.match(stationPage, /<ActionToast/);
+  assert.match(stationPage, /copy\.stationInUse/);
+  assert.match(accountPage, /<ActionToast/);
+  assert.match(toast, /role=\{success \? "status" : "alert"\}/);
+  assert.match(toast, /aria-live=\{success \? "polite" : "assertive"\}/);
+  assert.match(toast, /window\.setTimeout\(onClose, durationMs\)/);
 });

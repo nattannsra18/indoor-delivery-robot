@@ -1,6 +1,6 @@
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
@@ -9,6 +9,7 @@ from app.map_catalog_store import map_catalog_store
 from app.map_store import map_store
 from app.models import DeliveryTaskCreate, OccupancyGridPayload, StationCreate
 from app.seed import seed_database
+from app.schema import apply_compatibility_migrations
 from app.service import DeliveryService
 
 
@@ -94,3 +95,64 @@ def test_station_edit_and_delivery_cannot_cross_the_active_map(service):
         ))
     assert caught.value.status_code == 409
     assert caught.value.detail == "Pickup and destination must belong to the active map"
+
+
+def test_station_with_completed_history_is_soft_deleted(service):
+    historical_task = service.get_task("TASK-001")
+
+    service.delete_station("A")
+
+    assert "A" not in {station.id for station in service.list_stations()}
+    assert service.repo.get_station("A").active is False
+    assert service.get_task("TASK-001").id == historical_task.id
+
+
+def test_station_used_by_open_delivery_cannot_be_deleted(service):
+    task = service.create_task(DeliveryTaskCreate(
+        pickup_station_id="A",
+        destination_station_id="B",
+    ))
+
+    with pytest.raises(HTTPException) as caught:
+        service.delete_station("B")
+
+    assert task.status.value in {"QUEUED", "GOING_TO_PICKUP"}
+    assert caught.value.status_code == 409
+    assert caught.value.detail == (
+        "Station is used by an active or queued delivery task"
+    )
+    assert service.get_station("B").active is True
+
+
+def test_compatibility_migration_adds_station_active_column():
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("""
+            CREATE TABLE stations (
+                id VARCHAR(20) PRIMARY KEY,
+                map_id VARCHAR(120) NOT NULL DEFAULT 'warehouse_map',
+                name VARCHAR(100) NOT NULL,
+                x FLOAT NOT NULL,
+                y FLOAT NOT NULL,
+                yaw FLOAT NOT NULL,
+                description VARCHAR(200),
+                location VARCHAR(200),
+                instructions VARCHAR(400)
+            )
+        """))
+        connection.execute(text("""
+            INSERT INTO stations (id, name, x, y, yaw)
+            VALUES ('LEGACY', 'Legacy station', 0, 0, 0)
+        """))
+
+    apply_compatibility_migrations(engine)
+    apply_compatibility_migrations(engine)
+
+    columns = {item["name"] for item in inspect(engine).get_columns("stations")}
+    with engine.connect() as connection:
+        active = connection.scalar(text(
+            "SELECT active FROM stations WHERE id = 'LEGACY'"
+        ))
+    assert "active" in columns
+    assert bool(active) is True
+    engine.dispose()
