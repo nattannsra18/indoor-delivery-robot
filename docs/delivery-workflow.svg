@@ -1,11 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="450" viewBox="0 0 1600 450" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="675" viewBox="0 0 1600 450" role="img" aria-labelledby="title desc">
   <title id="title">Autonomous delivery workflow</title><desc id="desc">Seven steps from selecting stations to completing a delivery.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f8fbff"/><stop offset="1" stop-color="#eaf4ff"/></linearGradient>
     <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2563eb"/><stop offset="1" stop-color="#0ea5e9"/></linearGradient>
     <filter id="shadow"><feDropShadow dy="7" stdDeviation="8" flood-color="#1e3a5f" flood-opacity=".13"/></filter>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0l10 5-10 5z" fill="#60a5fa"/></marker>
-    <style>.heading{font:700 32px system-ui,sans-serif;fill:#0f2347}.sub{font:400 17px system-ui,sans-serif;fill:#5b6f92}.num{font:700 17px system-ui,sans-serif;fill:#fff}.name{font:700 17px system-ui,sans-serif;fill:#102347}.copy{font:400 13px system-ui,sans-serif;fill:#64748b}.line{stroke:#60a5fa;stroke-width:4;fill:none;marker-end:url(#arrow)}</style>
+    <style>.heading{font:700 38px system-ui,sans-serif;fill:#0f2347}.sub{font:500 20px system-ui,sans-serif;fill:#52698f}.num{font:700 19px system-ui,sans-serif;fill:#fff}.name{font:700 19px system-ui,sans-serif;fill:#102347}.copy{font:500 14px system-ui,sans-serif;fill:#52647f}.line{stroke:#60a5fa;stroke-width:5;fill:none;marker-end:url(#arrow)}</style>
   </defs>
   <rect width="1600" height="450" rx="28" fill="url(#bg)"/><text x="55" y="65" class="heading">From request to arrival</text><text x="55" y="98" class="sub">One authoritative workflow keeps the user portal, operator controls, and robot mission in sync.</text>
   <path d="M240 265h28m-4 0h28m158 0h32m-4 0h28m158 0h32m-4 0h28m158 0h32m-4 0h28m158 0h32m-4 0h28" class="line"/>

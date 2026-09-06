@@ -71,7 +71,13 @@ The web platform lives in this repository. Robot-side ROS 2 packages, simulation
 
 ## Delivery lifecycle
 
-![Delivery workflow](docs/delivery-workflow.svg)
+<p align="center">
+  <a href="docs/delivery-workflow.svg">
+    <img src="docs/delivery-workflow.svg" alt="Delivery workflow" width="1200" />
+  </a>
+</p>
+
+<p align="center"><sub>Open the diagram to inspect the full-resolution delivery lifecycle.</sub></p>
 
 The backend owns the delivery state machine and queue. Browser clients receive authoritative updates through WebSocket events, while the Robot Agent is the only client allowed to publish navigation feedback, map data, telemetry, and mission results.
 
