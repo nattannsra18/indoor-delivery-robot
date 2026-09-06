@@ -24,7 +24,7 @@ This project demonstrates an end-to-end autonomous delivery workflow: a user sel
 
 > **Project status:** feature-complete for the current Gazebo simulation scope. The latest acceptance run covered account approval, sign-in, route planning, queueing, pickup/loading, delivery/unloading, notifications, history, and audit records.
 
-## Why this project stands out
+## Engineering highlights
 
 | Capability | What it demonstrates |
 | --- | --- |
@@ -116,7 +116,9 @@ Routine AMCL localization can be managed without RViz: inspect localization heal
 
 <p align="center"><sub>Captured from the running Gazebo and ROS 2 integration environment.</sub></p>
 
-### Product vision
+## Product vision
+
+The platform is designed for campus and facility delivery scenarios; `v0.4.0` demonstrates that workflow in the Gazebo simulation environment.
 
 <p align="center">
   <img src="public/auth/campus-delivery-illustration.png" alt="Indoor delivery robot in a campus environment" width="900" />
@@ -243,9 +245,12 @@ See [Development guide](docs/DEVELOPMENT.md) for configuration, individual servi
 
 ## Quality checks
 
+Run the development stack before the browser smoke tests. Install the Chromium runtime once with `npx playwright install chromium`.
+
 ```bash
 npm run check
 npm run build:ci
+npx playwright install chromium
 npm run test:e2e
 
 cd backend
