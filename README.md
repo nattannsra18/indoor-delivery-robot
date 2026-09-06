@@ -24,6 +24,22 @@ This project demonstrates an end-to-end autonomous delivery workflow: a user sel
 
 > **Project status:** feature-complete for the current Gazebo simulation scope. The latest acceptance run covered account approval, sign-in, route planning, queueing, pickup/loading, delivery/unloading, notifications, history, and audit records.
 
+## Video demo
+
+Watch the complete four-minute workflow, including live operations, delivery creation, autonomous Nav2 navigation in Gazebo, task history, station placement, browser-based SLAM mapping, map management, and AMCL localization. The video includes English on-screen explanations and a clearly labeled `17x` mapping time-lapse.
+
+<p align="center">
+  <a href="https://youtu.be/Shvci3hzZfk" title="Watch the Indoor Delivery Robot platform demo on YouTube">
+    <img src="https://img.youtube.com/vi/Shvci3hzZfk/maxresdefault.jpg" alt="Indoor Delivery Robot platform video demo with ROS 2, Nav2, Gazebo, FastAPI, and Next.js" width="1000" />
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="https://youtu.be/Shvci3hzZfk">Watch the full demo on YouTube →</a></strong>
+</p>
+
+<p align="center"><sub>Recorded from the live Gazebo and ROS 2 simulation environment. No hardware telemetry is simulated as physical sensor data.</sub></p>
+
 ## Engineering highlights
 
 | Capability | What it demonstrates |
