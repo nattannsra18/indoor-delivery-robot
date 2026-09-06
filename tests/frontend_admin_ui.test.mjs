@@ -54,9 +54,14 @@ test("task drawer traps focus, locks scrolling and supports notification deep li
 
 test("notification filters consume backend semantics and deep-link to a task", () => {
   const source = read("src/app/notifications/page.tsx");
+  const sidebar = read("src/components/Sidebar.tsx");
   assert.match(source, /item\.category === "CRITICAL"/);
   assert.match(source, /unreadByCategory\.CRITICAL/);
   assert.match(source, /\/tasks\?task=/);
+  assert.match(source, /getCachedNotificationPage/);
+  assert.match(source, /sameNotificationPage/);
+  assert.match(source, /requestSequence/);
+  assert.match(sidebar, /setCachedNotificationPage/);
   assert.doesNotMatch(source, /eventType\.includes\("failed"\)/);
 });
 

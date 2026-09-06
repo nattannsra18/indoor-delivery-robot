@@ -8,6 +8,7 @@ import { navigationForRole } from "@/lib/roleDashboard";
 import { LanguageSwitcher, useLocale } from "@/context/LocaleContext";
 import { getNotifications } from "@/lib/api";
 import { navigationLabel } from "@/lib/i18n";
+import { setCachedNotificationPage } from "@/lib/notificationCache";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -18,7 +19,7 @@ export default function Sidebar() {
   const [unread, setUnread] = useState(0);
   useEffect(() => { setOpen(false); }, [pathname]);
   useEffect(() => { const close = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); }; window.addEventListener("keydown", close); return () => window.removeEventListener("keydown", close); }, []);
-  useEffect(() => { let active = true; const refresh = () => { getNotifications(0, 1).then((page) => { if (active) setUnread(page.unreadCount); }).catch(() => {}); }; refresh(); window.addEventListener("idr:notification", refresh); return () => { active = false; window.removeEventListener("idr:notification", refresh); }; }, [pathname]);
+  useEffect(() => { let active = true; const refresh = () => { getNotifications(0, 30).then((page) => { if (active) { setUnread(page.unreadCount); if (user?.id) setCachedNotificationPage(user.id, "all", page); } }).catch(() => {}); }; refresh(); window.addEventListener("idr:notification", refresh); return () => { active = false; window.removeEventListener("idr:notification", refresh); }; }, [pathname, user?.id]);
 
   return (
     <aside className="border-b border-slate-200 bg-[#071126] text-white lg:sticky lg:top-0 lg:flex lg:h-screen lg:min-h-0 lg:w-64 lg:shrink-0 lg:self-start lg:flex-col lg:border-b-0 lg:border-r lg:border-slate-800">

@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
 import { useLocale } from "@/context/LocaleContext";
 import { getNotifications, markAllNotificationsRead, markNotificationsRead } from "@/lib/api";
 import { notificationCopy, notificationPageText } from "@/lib/i18n";
+import { getCachedNotificationPage, sameNotificationPage, setCachedNotificationPage } from "@/lib/notificationCache";
 import type { Locale } from "@/lib/i18n";
 import type { Notification, NotificationPage } from "@/types";
 
@@ -59,28 +61,57 @@ function timeLabel(value: string, locale: Locale) {
 }
 
 export default function NotificationsPage() {
+  const { user } = useAuth();
   const { locale, t } = useLocale();
   const copy = notificationPageText[locale];
-  const [page, setPage] = useState<NotificationPage>();
+  const userId = user?.id ?? "anonymous";
+  const [page, setPage] = useState<NotificationPage | undefined>(() => getCachedNotificationPage(userId, "all"));
   const [filter, setFilter] = useState<Filter>("all");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !getCachedNotificationPage(userId, "all"));
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [marking, setMarking] = useState(false);
+  const requestSequence = useRef(0);
+  const loadError = t("notificationsLoadError");
 
   const load = useCallback(async (showLoading = true) => {
+    const request = ++requestSequence.current;
     if (showLoading) setLoading(true);
-    try { setPage(await getNotifications(0, 30, requestFilter(filter))); setError(""); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : t("notificationsLoadError")); }
-    finally { if (showLoading) setLoading(false); }
-  }, [filter, t]);
+    try {
+      const next = await getNotifications(0, 30, requestFilter(filter));
+      if (request !== requestSequence.current) return;
+      setCachedNotificationPage(userId, filter, next);
+      setPage((current) => sameNotificationPage(current, next) ? current : next);
+      setError("");
+    } catch (reason) {
+      if (request === requestSequence.current) setError(reason instanceof Error ? reason.message : loadError);
+    } finally {
+      if (showLoading && request === requestSequence.current) setLoading(false);
+    }
+  }, [filter, loadError, userId]);
 
   useEffect(() => {
-    void load();
-    const refresh = (event: Event) => { if (!(event instanceof CustomEvent && event.detail?.source === "notifications-page")) void load(false); };
+    const cached = getCachedNotificationPage(userId, filter);
+    if (cached) {
+      setPage((current) => sameNotificationPage(current, cached) ? current : cached);
+      setLoading(false);
+    } else {
+      setPage(undefined);
+    }
+    void load(!cached);
+    let refreshTimer: number | undefined;
+    const refresh = (event: Event) => {
+      if (event instanceof CustomEvent && event.detail?.source === "notifications-page") return;
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => void load(false), 120);
+    };
     window.addEventListener("idr:notification", refresh);
-    return () => window.removeEventListener("idr:notification", refresh);
-  }, [load]);
+    return () => {
+      requestSequence.current += 1;
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      window.removeEventListener("idr:notification", refresh);
+    };
+  }, [filter, load, userId]);
 
   const groups = useMemo(() => buildGroups(page?.items ?? []), [page?.items]);
   const criticalCount = page?.unreadByCategory.CRITICAL ?? 0;
@@ -102,7 +133,8 @@ export default function NotificationsPage() {
     try {
       await markAllNotificationsRead();
       const readAt = new Date().toISOString();
-      setPage((current) => current && ({ ...current, unreadCount: 0, unreadByCategory: {}, items: current.items.map((item) => ({ ...item, readAt: item.readAt ?? readAt })) }));
+      const next = page && ({ ...page, unreadCount: 0, unreadByCategory: {}, items: page.items.map((item) => ({ ...item, readAt: item.readAt ?? readAt })) });
+      if (next) { setCachedNotificationPage(userId, filter, next); setPage(next); }
       window.dispatchEvent(new CustomEvent("idr:notification", { detail: { source: "notifications-page" } }));
     } catch (reason) { setError(reason instanceof Error ? reason.message : t("notificationsLoadError")); }
     finally { setMarking(false); }
@@ -111,7 +143,7 @@ export default function NotificationsPage() {
   async function loadMore() {
     if (page?.nextOffset === undefined) return;
     setLoadingMore(true);
-    try { const next = await getNotifications(page.nextOffset, 30, requestFilter(filter)); setPage({ ...next, items: [...page.items, ...next.items] }); }
+    try { const next = await getNotifications(page.nextOffset, 30, requestFilter(filter)); const combined = { ...next, items: [...page.items, ...next.items] }; setCachedNotificationPage(userId, filter, combined); setPage(combined); }
     catch (reason) { setError(reason instanceof Error ? reason.message : t("notificationsLoadError")); }
     finally { setLoadingMore(false); }
   }
