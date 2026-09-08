@@ -167,6 +167,8 @@ The web platform lives in this repository. Robot-side ROS 2 packages, simulation
 ### Admin control center
 
 - Monitor robot availability, current mission, queue health, alerts, diagnostics, and integrations from one operations dashboard.
+- Inspect each registered robot's connection, readiness, active map, current state, and delivery queue from the Robot Registry.
+- Let the fleet dispatcher assign the best eligible robot automatically, or select a specific compatible robot when creating a delivery.
 - Manage all deliveries with search, filters, task details, cancellation, and retry controls.
 - Review account requests and approve access before a new user can command the robot.
 - Manage robot-hosted map inventory, metadata, active-map switching, rename, and deletion.
@@ -186,7 +188,7 @@ The web platform lives in this repository. Robot-side ROS 2 packages, simulation
 
 <p align="center"><sub>Open the diagram to inspect the full-resolution delivery lifecycle.</sub></p>
 
-The backend owns the delivery state machine and queue. Browser clients receive authoritative updates through WebSocket events, while the Robot Agent is the only client allowed to publish navigation feedback, map data, telemetry, and mission results.
+The backend owns the delivery state machine, robot eligibility rules, and per-robot queues. Browser clients receive authoritative updates through WebSocket events, while each Robot Agent is the only client allowed to publish navigation feedback, map data, telemetry, and mission results for its robot identity.
 
 ## Live data and simulation boundaries
 
@@ -279,7 +281,7 @@ cd backend
 PYTHONPATH=. PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python -m pytest -q
 ```
 
-The current suite contains 73 frontend contract/UX checks and 136 backend tests. Continuous integration runs both suites, zero-warning TypeScript/ESLint validation, a production build, and Chromium smoke tests against a real FastAPI/PostgreSQL stack on every pull request.
+The current suite contains 78 frontend contract/UX checks and 157 backend tests. Continuous integration runs both suites, zero-warning TypeScript/ESLint validation, a production build, and Chromium smoke tests against a real FastAPI/PostgreSQL stack on every pull request.
 
 ## Repository layout
 
@@ -307,7 +309,7 @@ indoor-delivery-robot/
 
 - Validate safety and telemetry semantics on physical hardware.
 - Add production identity providers, email delivery, and session administration.
-- Extend scheduling and fleet coordination to multiple robots.
+- Validate multi-robot dispatch, map isolation, and queue behavior with multiple physical Robot Agents.
 - Add production observability, deployment automation, and long-duration reliability testing.
 
 ## Author

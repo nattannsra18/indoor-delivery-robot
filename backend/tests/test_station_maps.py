@@ -94,7 +94,7 @@ def test_station_edit_and_delivery_cannot_cross_the_active_map(service):
             destination_station_id="B",
         ))
     assert caught.value.status_code == 409
-    assert caught.value.detail == "Pickup and destination must belong to the active map"
+    assert caught.value.detail == "Pickup and destination must belong to the same map"
 
 
 def test_station_with_completed_history_is_soft_deleted(service):

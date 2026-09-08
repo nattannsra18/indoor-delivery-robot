@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ActionToast from "@/components/ActionToast";
 import PageHeader from "@/components/PageHeader";
 import { useLocale } from "@/context/LocaleContext";
-import { approveRobotEnrollment, getRobotEnrollments, getRobotRegistry, revokeRobotCredential } from "@/lib/api";
-import { formatDate, robotRegistryText } from "@/lib/i18n";
-import type { RobotEnrollment, RobotRegistryEntry } from "@/types";
+import { approveRobotEnrollment, getFleet, getRobotEnrollments, getRobotRegistry, revokeRobotCredential } from "@/lib/api";
+import { formatDate, robotRegistryText, robotStateLabel } from "@/lib/i18n";
+import type { FleetRobot, RobotEnrollment, RobotRegistryEntry } from "@/types";
 
 type Dialog = { kind: "approve"; enrollment: RobotEnrollment } | { kind: "revoke"; robot: RobotRegistryEntry };
 
@@ -15,6 +15,7 @@ export default function RobotRegistryPage() {
   const copy = robotRegistryText[locale];
   const [enrollments, setEnrollments] = useState<RobotEnrollment[]>([]);
   const [robots, setRobots] = useState<RobotRegistryEntry[]>([]);
+  const [fleet, setFleet] = useState<FleetRobot[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [dialog, setDialog] = useState<Dialog>();
@@ -27,9 +28,10 @@ export default function RobotRegistryPage() {
   const load = useCallback(async (initial = false) => {
     if (initial) setLoading(true);
     try {
-      const [nextEnrollments, nextRobots] = await Promise.all([getRobotEnrollments(), getRobotRegistry()]);
+      const [nextEnrollments, nextRobots, nextFleet] = await Promise.all([getRobotEnrollments(), getRobotRegistry(), getFleet()]);
       setEnrollments(nextEnrollments);
       setRobots(nextRobots);
+      setFleet(nextFleet);
       setLoadError("");
     } catch (reason) {
       setLoadError(reason instanceof Error ? reason.message : copy.loadFailed);
@@ -139,7 +141,9 @@ export default function RobotRegistryPage() {
 
           <RegistrySection title={copy.robotsTitle} help={copy.robotsHelp} count={copy.robotCount.replace("{count}", String(robots.length))}>
             {robots.length === 0 ? <Empty title={copy.emptyRobots} help={copy.emptyRobotsHelp} /> : <ul className="grid gap-4 p-5 md:grid-cols-2 md:p-6">
-              {robots.map((robot) => <li key={robot.id} className="rounded-2xl border border-slate-200 p-5">
+              {robots.map((robot) => {
+                const operational = fleet.find((item) => item.id === robot.id);
+                return <li key={robot.id} className="rounded-2xl border border-slate-200 p-5">
                 <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-950">{robot.displayName}</h3><p className="mt-1 truncate font-mono text-xs text-slate-400">{robot.id}</p></div><StatusBadge value={robot.online ? copy.online : copy.offline} tone={robot.online ? "green" : "slate"} /></div>
                 <dl className="mt-5 grid grid-cols-2 gap-3">
                   <Detail label={copy.enrollment} value={enrollmentLabel(robot.enrollmentStatus, copy)} />
@@ -150,8 +154,15 @@ export default function RobotRegistryPage() {
                   <Detail label={copy.profile} value={robot.profileVersion ?? copy.unknown} />
                 </dl>
                 {robot.capabilities.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{robot.capabilities.map((capability) => <span key={capability} className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{capability}</span>)}</div>}
+                {operational && <dl className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4">
+                  <FleetDetail label={copy.operationalState} value={robotStateLabel(operational.state, locale)} />
+                  <FleetDetail label={copy.activeMap} value={operational.activeMapId ?? copy.unknown} />
+                  <FleetDetail label={copy.deliveryQueue} value={String(operational.queuedCount)} />
+                  <FleetDetail label={copy.acceptingDeliveries} value={operational.acceptsDeliveries ? copy.acceptingDeliveries : copy.notAcceptingDeliveries} tone={operational.acceptsDeliveries ? "green" : "slate"} />
+                </dl>}
                 {robot.credentialVersion && !robot.credentialRevoked && <button type="button" onClick={() => setDialog({ kind: "revoke", robot })} className="mt-5 min-h-10 rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50">{copy.revoke}</button>}
-              </li>)}
+              </li>;
+              })}
             </ul>}
           </RegistrySection>
           <aside className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4 text-sm leading-6 text-blue-900">{copy.protocolNote}</aside>
@@ -180,6 +191,7 @@ function RegistrySection({ title, help, count, children }: { title: string; help
 
 function Empty({ title, help }: { title: string; help: string }) { return <div className="px-6 py-12 text-center"><div className="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-100 text-xl">◇</div><h3 className="mt-3 font-bold text-slate-900">{title}</h3><p className="mt-1 text-sm text-slate-500">{help}</p></div>; }
 function Detail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) { return <div className="min-w-0"><dt className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</dt><dd title={value} className={`mt-1 truncate text-sm font-semibold text-slate-700 ${mono ? "font-mono" : ""}`}>{value}</dd></div>; }
+function FleetDetail({ label, value, tone = "slate" }: { label: string; value: string; tone?: "green" | "slate" }) { return <div className="min-w-0"><dt className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</dt><dd title={value} className={`mt-1 truncate text-xs font-bold ${tone === "green" ? "text-emerald-700" : "text-slate-700"}`}>{value}</dd></div>; }
 function StatusBadge({ value, tone }: { value: string; tone: "green" | "amber" | "blue" | "slate" }) { const styles = { green: "bg-emerald-50 text-emerald-700", amber: "bg-amber-50 text-amber-700", blue: "bg-blue-50 text-blue-700", slate: "bg-slate-100 text-slate-600" }; return <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${styles[tone]}`}>{value}</span>; }
 type StatusCopy = Record<"paired" | "revoked" | "pending" | "awaitingClaim" | "ready" | "degraded" | "notReady", string>;
 function enrollmentLabel(status: RobotRegistryEntry["enrollmentStatus"], copy: StatusCopy) { return status === "PAIRED" ? copy.paired : status === "REVOKED" ? copy.revoked : status === "PENDING" ? copy.pending : copy.awaitingClaim; }

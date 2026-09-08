@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import timedelta
 
 import pytest
@@ -203,6 +204,36 @@ def test_user_cannot_create_high_but_admin_can_and_metadata_round_trips():
         assert created.owner_id == "admin"
 
 
+def test_user_can_confirm_the_robot_bound_to_an_automatic_preview():
+    with Session() as db:
+        service = DeliveryService(db)
+        alice = db.get(UserORM, "alice")
+        snapshot = map_store.get()
+        assert snapshot is not None
+        preview_id = route_preview_coordinator.issue_validation(
+            owner_id="alice",
+            robot_id="robot01",
+            pickup_station_id="A",
+            destination_station_id="B",
+            priority=TaskPriority.NORMAL,
+            map_revision=snapshot.revision,
+        )
+        created = asyncio.run(create_task_endpoint(
+            DeliveryTaskCreate(
+                pickup_station_id="A",
+                destination_station_id="B",
+                preview_id=preview_id,
+                robot_id="robot01",
+            ),
+            BackgroundTasks(),
+            service,
+            alice,
+        ))
+
+        assert created.owner_id == "alice"
+        assert created.robot_id == "robot01"
+
+
 def test_priority_queue_is_canonical_for_dispatcher_and_eta_without_preemption():
     with Session() as db:
         service = DeliveryService(db)
@@ -244,6 +275,7 @@ def test_task_dispatch_uses_connected_ready_paired_robot():
                 online=True,
                 enrollment_status=RobotEnrollmentStatus.PAIRED,
                 readiness_status=RobotReadinessStatus.READY,
+                capabilities_json=json.dumps(["navigation"]),
             )
         )
         db.commit()
@@ -253,6 +285,99 @@ def test_task_dispatch_uses_connected_ready_paired_robot():
 
         assert task.robot_id == "paired-robot"
         assert service.overview().robot.id == "paired-robot"
+        fleet = {item.id: item for item in service.list_fleet()}
+        assert fleet["paired-robot"].accepts_deliveries is True
+        assert fleet["robot01"].accepts_deliveries is False
+        assert fleet["robot01"].unavailable_reason == "ROBOT_NOT_PAIRED"
+
+
+def test_selected_robots_keep_independent_active_missions_and_queues():
+    with Session() as db:
+        for robot_id in ("fleet-a", "fleet-b"):
+            db.add(RobotORM(
+                id=robot_id,
+                name=robot_id.upper(),
+                online=True,
+                enrollment_status=RobotEnrollmentStatus.PAIRED,
+                readiness_status=RobotReadinessStatus.READY,
+                capabilities_json=json.dumps(["navigation", "diagnostics"]),
+            ))
+        db.commit()
+
+        service = DeliveryService(db)
+        first_a = service.create_task(
+            payload(), owner_id="alice", robot_id="fleet-a"
+        )
+        queued_a = service.create_task(
+            payload("B", "C"), owner_id="alice", robot_id="fleet-a"
+        )
+        first_b = service.create_task(
+            payload("C", "D"), owner_id="bob", robot_id="fleet-b"
+        )
+        queued_b = service.create_task(
+            payload("A", "D"), owner_id="bob", robot_id="fleet-b"
+        )
+
+        assert first_a.status == first_b.status == TaskStatus.GOING_TO_PICKUP
+        assert queued_a.status == queued_b.status == TaskStatus.QUEUED
+        assert queued_a.robot_id == "fleet-a"
+        assert queued_b.robot_id == "fleet-b"
+        assert service.active_task_for_robot("fleet-a").id == first_a.id
+        assert service.active_task_for_robot("fleet-b").id == first_b.id
+        fleet = {item.id: item for item in service.list_fleet()}
+        assert fleet["fleet-a"].queued_count == 1
+        assert fleet["fleet-b"].queued_count == 1
+        assert service.robot_queue_projection("fleet-a")[0] == 2
+        assert service.robot_queue_projection("fleet-b")[0] == 2
+
+
+def test_idle_robot_with_reserved_queue_is_not_reported_as_immediately_available():
+    with Session() as db:
+        db.add(RobotORM(
+            id="fleet-idle",
+            name="Fleet idle",
+            online=True,
+            enrollment_status=RobotEnrollmentStatus.PAIRED,
+            readiness_status=RobotReadinessStatus.READY,
+            capabilities_json=json.dumps(["navigation"]),
+        ))
+        db.commit()
+
+        service = DeliveryService(db)
+        task = service.create_task(payload(), owner_id="alice", robot_id="fleet-idle")
+        robot = service.get_robot("fleet-idle")
+        task.status = TaskStatus.QUEUED
+        robot.state = RobotState.IDLE
+        robot.current_task_id = None
+        db.commit()
+
+        fleet_robot = next(item for item in service.list_fleet() if item.id == robot.id)
+        queue_position, estimated_start = service.robot_queue_projection(robot.id)
+
+        assert fleet_robot.queued_count == 1
+        assert fleet_robot.available_now is False
+        assert queue_position == 2
+        assert estimated_start is not None and estimated_start > 0
+
+
+def test_selected_robot_must_be_ready_navigation_capable_and_on_map():
+    with Session() as db:
+        db.add(RobotORM(
+            id="not-ready",
+            name="Not ready",
+            online=True,
+            enrollment_status=RobotEnrollmentStatus.PAIRED,
+            readiness_status=RobotReadinessStatus.NOT_READY,
+            capabilities_json=json.dumps(["navigation"]),
+        ))
+        db.commit()
+
+        service = DeliveryService(db)
+        with pytest.raises(HTTPException) as rejected:
+            service.create_task(payload(), robot_id="not-ready")
+
+        assert rejected.value.status_code == 409
+        assert "ROBOT_NOT_READY" in rejected.value.detail
 
 
 def test_same_priority_uses_created_at_then_id_as_deterministic_tie_breaker():
@@ -355,10 +480,6 @@ def test_robot_disconnect_preserves_active_task_for_safe_reconnect():
 def test_metadata_visibility_follows_existing_task_ownership_filter():
     with Session() as db:
         service = DeliveryService(db)
-        robot = db.get(RobotORM, "robot01")
-        robot.online = False
-        robot.state = RobotState.OFFLINE
-        db.commit()
         alice_task = service.create_task(payload(
             recipient_name="Alice recipient",
             delivery_note="Alice private note",

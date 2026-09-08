@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends
 
 from ..command_dispatch import schedule_navigation_path_clear
 from ..dependencies import get_service
-from ..models import Robot
+from ..models import FleetRobot, Robot
 from ..service import DeliveryService
 from ..auth import require_admin, require_user
 from ..db_models import UserORM
@@ -13,6 +13,14 @@ router = APIRouter(prefix="/api/robots", tags=["robots"])
 @router.get("", response_model=list[Robot])
 def list_robots(service: DeliveryService = Depends(get_service), _: UserORM = Depends(require_user)):
     return service.list_robots()
+
+
+@router.get("/fleet", response_model=list[FleetRobot])
+def list_fleet(
+    service: DeliveryService = Depends(get_service),
+    _: UserORM = Depends(require_admin),
+):
+    return service.list_fleet()
 
 
 @router.get("/{robot_id}", response_model=Robot)

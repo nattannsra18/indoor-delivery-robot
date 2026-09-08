@@ -27,12 +27,14 @@ export interface TaskCreateInput {
   recipientName?: string;
   deliveryNote?: string;
   previewId: string;
+  robotId?: string;
 }
 
 export interface TaskRoutePreviewInput {
   pickupStationId: string;
   destinationStationId: string;
   priority: TaskPriority;
+  robotId?: string;
 }
 
 export interface TaskRoutePreview {
@@ -50,6 +52,8 @@ export interface TaskRoutePreview {
   pickupEtaSeconds: number;
   destinationEtaSeconds: number;
   completionEtaSeconds: number;
+  queuePosition: number;
+  estimatedStartSeconds?: number;
   generatedAt: string;
   expiresAt: string;
 }
@@ -199,6 +203,32 @@ export interface Robot {
   yaw: number;
   currentTaskId?: string;
   lastSeen: string;
+}
+
+export type FleetUnavailableReason =
+  | "ROBOT_OFFLINE"
+  | "ROBOT_NOT_PAIRED"
+  | "ROBOT_NOT_READY"
+  | "NAVIGATION_UNAVAILABLE"
+  | "EMERGENCY_STOP_ACTIVE"
+  | "MAPPING_ACTIVE";
+
+export interface FleetRobot {
+  id: string;
+  name: string;
+  online: boolean;
+  state: RobotState;
+  battery: number;
+  batterySource: BatterySource;
+  enrollmentStatus: RobotEnrollmentStatus;
+  readinessStatus: RobotReadinessStatus;
+  capabilities: string[];
+  activeMapId?: string;
+  currentTaskId?: string;
+  queuedCount: number;
+  availableNow: boolean;
+  acceptsDeliveries: boolean;
+  unavailableReason?: FleetUnavailableReason;
 }
 
 export type RobotEnrollmentStatus = "UNPAIRED" | "PENDING" | "PAIRED" | "REVOKED";

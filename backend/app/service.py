@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 from datetime import timedelta
 from uuid import uuid4
@@ -18,7 +19,10 @@ from .models import (
     DeliveryTask,
     DeliveryTaskCreate,
     EventSource,
+    FleetRobot,
     Robot,
+    RobotEnrollmentStatus,
+    RobotReadinessStatus,
     RobotState,
     RobotTelemetry,
     StationCreate,
@@ -198,8 +202,141 @@ class DeliveryService:
     def list_robots(self) -> list[RobotORM]:
         return self.repo.list_robots()
 
+    def list_fleet(self) -> list[FleetRobot]:
+        robots = self.repo.list_robots()
+        allow_legacy = not any(
+            robot.enrollment_status == RobotEnrollmentStatus.PAIRED
+            for robot in robots
+        )
+        return [
+            self._fleet_robot(robot, allow_legacy=allow_legacy)
+            for robot in robots
+        ]
+
+    def _fleet_robot(
+        self,
+        robot: RobotORM,
+        *,
+        allow_legacy: bool = True,
+    ) -> FleetRobot:
+        from .emergency_service import EmergencyStopService
+        from .mapping_store import mapping_store
+
+        try:
+            decoded_capabilities = json.loads(robot.capabilities_json)
+        except (TypeError, json.JSONDecodeError):
+            decoded_capabilities = []
+        capabilities = (
+            [item for item in decoded_capabilities if isinstance(item, str)]
+            if isinstance(decoded_capabilities, list)
+            else []
+        )
+        is_legacy = (
+            allow_legacy
+            and robot.enrollment_status == RobotEnrollmentStatus.UNPAIRED
+            and robot.serial_number is None
+        )
+        reason = None
+        if not robot.online:
+            reason = "ROBOT_OFFLINE"
+        elif not is_legacy and robot.enrollment_status != RobotEnrollmentStatus.PAIRED:
+            reason = "ROBOT_NOT_PAIRED"
+        elif not is_legacy and robot.readiness_status != RobotReadinessStatus.READY:
+            reason = "ROBOT_NOT_READY"
+        elif not is_legacy and "navigation" not in capabilities:
+            reason = "NAVIGATION_UNAVAILABLE"
+        elif EmergencyStopService(self.db).is_latched(robot.id):
+            reason = "EMERGENCY_STOP_ACTIVE"
+        elif mapping_store.is_active(robot.id):
+            reason = "MAPPING_ACTIVE"
+
+        queued_count = len(self.repo.queued_tasks_for_robot(robot.id))
+        return FleetRobot(
+            id=robot.id,
+            name=robot.name,
+            online=robot.online,
+            state=robot.state,
+            battery=robot.battery,
+            battery_source=robot.battery_source,
+            enrollment_status=robot.enrollment_status,
+            readiness_status=robot.readiness_status,
+            capabilities=capabilities,
+            active_map_id=self.active_map_id(robot.id),
+            current_task_id=robot.current_task_id,
+            queued_count=queued_count,
+            available_now=self._robot_available(robot) and queued_count == 0,
+            accepts_deliveries=reason is None,
+            unavailable_reason=reason,
+        )
+
+    def select_delivery_robot(
+        self,
+        requested_robot_id: str | None,
+        map_id: str,
+        *,
+        lock: bool = False,
+    ) -> RobotORM:
+        robots = self.repo.list_robots()
+        allow_legacy = not any(
+            robot.enrollment_status == RobotEnrollmentStatus.PAIRED
+            for robot in robots
+        )
+        if requested_robot_id:
+            robot = self._robot_or_404(requested_robot_id, lock=lock)
+            fleet = self._fleet_robot(robot, allow_legacy=allow_legacy)
+            if not fleet.accepts_deliveries:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Selected robot cannot accept deliveries: {fleet.unavailable_reason}",
+                )
+            if fleet.active_map_id != map_id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Selected robot is not using the stations' map",
+                )
+            return robot
+
+        candidates = [
+            (robot, self._fleet_robot(robot, allow_legacy=allow_legacy))
+            for robot in robots
+        ]
+        eligible = [
+            (robot, fleet)
+            for robot, fleet in candidates
+            if fleet.accepts_deliveries and fleet.active_map_id == map_id
+        ]
+        if not eligible:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No connected and ready robot is available on this map",
+            )
+        eligible.sort(
+            key=lambda item: (
+                0 if item[1].available_now else 1,
+                item[1].queued_count,
+                item[0].id,
+            )
+        )
+        selected = eligible[0][0]
+        return self._robot_or_404(selected.id, lock=lock) if lock else selected
+
     def get_robot(self, robot_id: str) -> RobotORM:
         return self._robot_or_404(robot_id)
+
+    def robot_queue_projection(self, robot_id: str) -> tuple[int, float | None]:
+        """Return the next task's position and wait for one robot's queue."""
+        from .queue_estimate_service import QueueEstimateService
+
+        robot = self._robot_or_404(robot_id)
+        queued = self.repo.queued_tasks_for_robot(robot_id)
+        if self._robot_available(robot) and not queued:
+            return 0, 0.0
+        active = self.active_task_for_robot(robot_id)
+        remaining = QueueEstimateService(self.db)._active_remaining(active)
+        if remaining is None:
+            return len(queued) + 1, None
+        wait_seconds = remaining + QueueEstimateService(self.db).total_queued_seconds(queued)
+        return len(queued) + 1, wait_seconds
 
     def primary_robot(self) -> RobotORM:
         return self._robot_or_404()
@@ -584,19 +721,24 @@ class DeliveryService:
         *,
         pickup_distance_meters: float | None = None,
         delivery_distance_meters: float | None = None,
+        robot_id: str | None = None,
     ) -> DeliveryTaskORM:
         pickup = self.get_station(payload.pickup_station_id)
         destination = self.get_station(payload.destination_station_id)
-        active_map_id = self.active_map_id()
-        if pickup.map_id != active_map_id or destination.map_id != active_map_id:
+        if pickup.map_id != destination.map_id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Pickup and destination must belong to the active map",
+                detail="Pickup and destination must belong to the same map",
             )
-        robot = self._robot_or_404(lock=True)
+        robot = self.select_delivery_robot(
+            robot_id or payload.robot_id,
+            pickup.map_id,
+            lock=True,
+        )
 
         task = DeliveryTaskORM(
             id=self.repo.next_task_id(),
+            robot_id=robot.id,
             pickup_station_id=payload.pickup_station_id,
             destination_station_id=payload.destination_station_id,
             status=TaskStatus.QUEUED,
@@ -679,7 +821,10 @@ class DeliveryService:
         if not self._robot_available(robot):
             return None
 
-        queued = self.repo.next_queued_task_for_update()
+        queued = self.repo.next_queued_task_for_update(
+            robot.id,
+            include_unassigned=(robot.id == self.primary_robot().id),
+        )
         if not queued:
             return None
         return self._assign_task(queued, robot)
@@ -860,7 +1005,9 @@ class DeliveryService:
         old_status = task.status
         task.status = TaskStatus.QUEUED
         task.progress = 0
-        task.robot_id = None
+        # Keep the original fleet reservation. A retry must not silently move
+        # a mission to a different robot or map.
+        task.robot_id = robot.id
         task.started_at = None
         task.completed_at = None
 
@@ -896,7 +1043,7 @@ class DeliveryService:
 
     def overview(self, owner_id: str | None = None) -> DashboardOverview:
         robot = self._robot_or_404()
-        global_active = self.active_task()
+        global_active = self.active_task_for_robot(robot.id)
         active = global_active
         robot_view = Robot.model_validate(robot)
         if active is not None and owner_id is not None and active.owner_id != owner_id:
@@ -906,10 +1053,10 @@ class DeliveryService:
         from .queue_estimate_service import QueueEstimateService
         estimate_service = QueueEstimateService(self.db)
         remaining = estimate_service._active_remaining(global_active)
-        global_queue = self.repo.queued_tasks()
-        global_queued_count = len(global_queue)
+        robot_queue = self.repo.queued_tasks_for_robot(robot.id)
+        global_queued_count = len(self.repo.queued_tasks())
         available = (
-            remaining + estimate_service.total_queued_seconds(global_queue)
+            remaining + estimate_service.total_queued_seconds(robot_queue)
             if remaining is not None
             and robot.online
             and robot.state not in (RobotState.ERROR, RobotState.OFFLINE)

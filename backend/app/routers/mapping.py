@@ -33,7 +33,7 @@ def _require_robot_ready(db: Session, robot_id: str) -> None:
         or robot.state != RobotState.IDLE
         or robot.current_task_id is not None
         or service.active_task_for_robot(robot_id) is not None
-        or service.repo.queued_tasks()
+        or service.repo.queued_tasks_for_robot(robot_id)
         or EmergencyStopService(db).is_latched(robot_id)
     ):
         raise HTTPException(

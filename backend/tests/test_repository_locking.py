@@ -15,7 +15,7 @@ class CapturingSession:
 def test_queue_lock_targets_only_delivery_tasks_without_owner_outer_join():
     session = CapturingSession()
 
-    assert DeliveryRepository(session).next_queued_task_for_update() is None
+    assert DeliveryRepository(session).next_queued_task_for_update("robot01") is None
     assert session.statement is not None
 
     sql = str(

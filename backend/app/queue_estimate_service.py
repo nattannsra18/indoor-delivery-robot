@@ -41,11 +41,18 @@ class QueueEstimateService:
     def list_for_owner(self, owner_id: str | None) -> list[TaskEstimate]:
         tasks = self.repo.list_tasks(owner_id=owner_id)
         global_queue = self.repo.queued_tasks()
+        queue_by_robot = {}
+        for queued in global_queue:
+            queue_by_robot.setdefault(queued.robot_id, []).append(queued)
         position_by_id = {
-            task.id: index + 1 for index, task in enumerate(global_queue)
+            task.id: index + 1
+            for queue in queue_by_robot.values()
+            for index, task in enumerate(queue)
         }
-        active = self.repo.active_task(ACTIVE_STATUSES)
-        active_remaining = self._active_remaining(active)
+        active_by_robot = {
+            robot.id: self.repo.active_task_for_robot(robot.id, ACTIVE_STATUSES)
+            for robot in self.repo.list_robots()
+        }
         generated_at = utc_now()
         estimates = []
         for task in tasks:
@@ -54,8 +61,12 @@ class QueueEstimateService:
             position = None
             if task.status == TaskStatus.QUEUED:
                 position = position_by_id.get(task.id)
+                robot_queue = queue_by_robot.get(task.robot_id, [])
+                active_remaining = self._active_remaining(
+                    active_by_robot.get(task.robot_id)
+                )
                 if position is not None and active_remaining is not None:
-                    tasks_ahead = global_queue[:position - 1]
+                    tasks_ahead = robot_queue[:position - 1]
                     starts = active_remaining + sum(
                         self._estimated_task_seconds(queued)
                         for queued in tasks_ahead

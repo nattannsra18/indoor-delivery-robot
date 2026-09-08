@@ -294,7 +294,7 @@ async def robot_websocket(
     else:
         # Resend the current navigation command
         # when the Robot Agent reconnects.
-        active_task = service.active_task()
+        active_task = service.active_task_for_robot(robot_id)
 
         if (
             active_task is not None
@@ -1311,7 +1311,7 @@ async def robot_websocket(
                         {"type": "alert_changed", "event": event, "alert": Alert.model_validate(alert).model_dump(mode="json")},
                         admin_only=True,
                     )
-                    next_task = service.active_task()
+                    next_task = service.active_task_for_robot(robot_id)
                     if (
                         next_task is not None
                         and next_task.robot_id == robot_id
@@ -1452,7 +1452,7 @@ async def robot_websocket(
                     }
                 )
 
-                next_task = service.active_task()
+                next_task = service.active_task_for_robot(robot_id)
 
                 if (
                     next_task is not None

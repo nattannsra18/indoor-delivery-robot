@@ -11,7 +11,8 @@ import { useLocale } from "@/context/LocaleContext";
 import { deliveryFlowText, deliveryText } from "@/lib/i18n";
 import { routePreviewIsFresh } from "@/lib/routePreview";
 import { allowedPriority } from "@/lib/taskCreation";
-import { Station, TaskPriority, TaskRoutePreview } from "@/types";
+import { getFleet } from "@/lib/api";
+import { FleetRobot, Station, TaskPriority, TaskRoutePreview } from "@/types";
 
 const NOTE_MAX_LENGTH = 500;
 const inputClass = "w-full min-h-11 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
@@ -25,7 +26,7 @@ export default function CreateDeliveryPage() {
   const router = useRouter();
   const { user } = useAuth();
   const {
-    stations, createTask, previewTaskRoute, robot, activeTask, backendOnline,
+    stations, createTask, previewTaskRoute, robot, backendOnline,
     loading, occupancyMap, mapMetadata, emergencyStop, globalQueuedCount,
     robotAvailableSeconds
   } = useDeliveryApi();
@@ -34,6 +35,9 @@ export default function CreateDeliveryPage() {
   const [recipient, setRecipient] = useState("");
   const [note, setNote] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("NORMAL");
+  const [robotId, setRobotId] = useState("");
+  const [fleet, setFleet] = useState<FleetRobot[]>([]);
+  const [fleetLoading, setFleetLoading] = useState(false);
   const [selectionMode, setSelectionMode] = useState<StationSelectionMode>("pickup");
   const [selectedStation, setSelectedStation] = useState<Station>();
   const [step, setStep] = useState<ModalStep>(null);
@@ -50,6 +54,21 @@ export default function CreateDeliveryPage() {
     if (user?.role !== "ADMIN") setPriority("NORMAL");
   }, [user?.role]);
 
+  useEffect(() => {
+    if (user?.role !== "ADMIN") {
+      setFleet([]);
+      setRobotId("");
+      return;
+    }
+    let cancelled = false;
+    setFleetLoading(true);
+    getFleet()
+      .then((items) => { if (!cancelled) setFleet(items); })
+      .catch(() => { if (!cancelled) setFleet([]); })
+      .finally(() => { if (!cancelled) setFleetLoading(false); });
+    return () => { cancelled = true; };
+  }, [user?.role]);
+
   const pickupStation = useMemo(() => stations.find((item) => item.id === pickup), [pickup, stations]);
   const destinationStation = useMemo(() => stations.find((item) => item.id === destination), [destination, stations]);
   const canPlan = Boolean(pickup && destination && pickup !== destination && backendOnline && occupancyMap && !emergencyStop?.latched);
@@ -64,7 +83,8 @@ export default function CreateDeliveryPage() {
       try {
         const result = await previewTaskRoute({
           pickupStationId: pickup, destinationStationId: destination,
-          priority: allowedPriority(user?.role, priority)
+          priority: allowedPriority(user?.role, priority),
+          robotId: user?.role === "ADMIN" && robotId ? robotId : undefined,
         });
         if (!cancelled) setPreview(result);
       } catch (error) {
@@ -74,11 +94,16 @@ export default function CreateDeliveryPage() {
       }
     }, 250);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [canPlan, copy.routeUnavailable, destination, occupancyMap?.revision, pickup, previewAttempt, previewTaskRoute, priority, user?.role]);
+  }, [canPlan, copy.routeUnavailable, destination, occupancyMap?.revision, pickup, previewAttempt, previewTaskRoute, priority, robotId, user?.role]);
 
-  const busy = !backendOnline || !robot.online || robot.state !== "IDLE";
-  const ahead = globalQueuedCount + (backendOnline && robot.online && robot.state !== "IDLE" ? 1 : 0);
-  const start = busy ? robotAvailableSeconds : 0;
+  const primaryBusy = !backendOnline || !robot.online || robot.state !== "IDLE";
+  const busy = preview ? preview.queuePosition > 0 : primaryBusy;
+  const ahead = preview
+    ? preview.queuePosition
+    : globalQueuedCount + (backendOnline && robot.online && robot.state !== "IDLE" ? 1 : 0);
+  const start = preview
+    ? preview.estimatedStartSeconds
+    : primaryBusy ? robotAvailableSeconds : 0;
   const travel = preview?.travelTimeSeconds;
   const completion = preview && start !== undefined ? start + preview.completionEtaSeconds : undefined;
   const routeReady = Boolean(preview && routePreviewIsFresh(preview.expiresAt));
@@ -100,12 +125,13 @@ export default function CreateDeliveryPage() {
       setSubmitError(flow.routeExpired); setStep(null); setPreviewAttempt((value) => value + 1); return;
     }
     setSubmitting(true); setSubmitError("");
-    const queuePosition = !activeTask && robot.state === "IDLE" && globalQueuedCount === 0 ? 0 : globalQueuedCount + 1;
+    const queuePosition = preview.queuePosition;
     try {
       const task = await createTask({
         pickupStationId: pickup, destinationStationId: destination,
         priority: allowedPriority(user?.role, priority), recipientName: recipient,
-        deliveryNote: note, previewId: preview.previewId
+        deliveryNote: note, previewId: preview.previewId,
+        robotId: preview.robotId,
       });
       setSuccess({ taskId: task.id, queuePosition, start, completion });
       setStep("success");
@@ -155,6 +181,25 @@ export default function CreateDeliveryPage() {
           </div>
           <p className="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-600">{flow.deliveriesAhead.replace("{count}", String(ahead))}</p>
         </section>
+
+        {user?.role === "ADMIN" && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <label className="block text-sm font-semibold text-slate-700" htmlFor="robot-assignment">{flow.robotAssignment}</label>
+          <select id="robot-assignment" value={robotId} disabled={fleetLoading} onChange={(event) => { setRobotId(event.target.value); setPreview(undefined); }} className={`${inputClass} mt-2`}>
+            <option value="">{fleetLoading ? flow.fleetLoading : flow.automaticAssignment}</option>
+            {fleet.map((item) => {
+              const mapMismatch = Boolean(pickupStation && item.activeMapId !== pickupStation.mapId);
+              const unavailable = !item.acceptsDeliveries || mapMismatch;
+              const suffix = mapMismatch
+                ? flow.differentMap
+                : !item.acceptsDeliveries
+                  ? flow.robotUnavailable
+                  : flow.queueForRobot.replace("{count}", String(item.queuedCount));
+              return <option key={item.id} value={item.id} disabled={unavailable}>{item.name} · {suffix}</option>;
+            })}
+          </select>
+          <p className="mt-2 text-xs leading-5 text-slate-500">{flow.assignmentHelp}</p>
+          {preview && <div className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-xs text-blue-800"><span className="font-semibold">{flow.selectedRobot}:</span> {fleet.find((item) => item.id === preview.robotId)?.name ?? preview.robotId}</div>}
+        </section>}
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="font-semibold text-slate-900">{flow.selectedStations}</h2>
@@ -207,6 +252,7 @@ export default function CreateDeliveryPage() {
         <ReviewRow label={copy.pickup} value={stationLabel(pickupStation)} /><ReviewRow label={copy.destination} value={stationLabel(destinationStation)} />
         <ReviewRow label={flow.routeDistance} value={preview ? `${preview.totalDistanceMeters.toFixed(1)} m` : flow.unavailable} /><ReviewRow label={flow.travelTime} value={formatDuration(travel, locale)} />
         <ReviewRow label={flow.estimatedStart} value={formatDuration(start, locale)} /><ReviewRow label={flow.estimatedCompletion} value={formatDuration(completion, locale)} />
+        <ReviewRow label={flow.selectedRobot} value={fleet.find((item) => item.id === preview?.robotId)?.name ?? preview?.robotId ?? flow.automaticAssignment} />
         <div className="my-1 border-t border-slate-200" /><ReviewRow label={copy.recipient} value={recipient.trim() || copy.notSpecified} /><ReviewRow label={copy.deliveryNote} value={note.trim() || copy.noNote} /><ReviewRow label={copy.priority} value={priority === "HIGH" ? copy.highPriority : copy.normalPriority} />
       </dl>
       {submitError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">{submitError}</p>}

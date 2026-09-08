@@ -1495,6 +1495,7 @@ def test_localization_command_rejects_invalid_pose_and_queued_delivery():
     with TestingSessionLocal() as db:
         db.add(DeliveryTaskORM(
             id="TASK-LOCALIZATION-BLOCK",
+            robot_id="robot01",
             pickup_station_id="A",
             destination_station_id="B",
             status=TaskStatus.QUEUED,

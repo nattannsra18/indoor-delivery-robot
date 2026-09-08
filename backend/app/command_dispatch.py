@@ -33,8 +33,9 @@ def schedule_navigation_command(
 def schedule_active_navigation_command(
     background_tasks: BackgroundTasks,
     service: DeliveryService,
+    robot_id: str,
 ) -> None:
-    active_task = service.active_task()
+    active_task = service.active_task_for_robot(robot_id)
 
     if active_task is None:
         return

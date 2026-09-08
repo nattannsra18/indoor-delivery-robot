@@ -267,6 +267,26 @@ class Robot(BaseModel):
     last_seen: str
 
 
+class FleetRobot(BaseModel):
+    """Operational robot summary used for assignment decisions."""
+
+    id: str
+    name: str
+    online: bool
+    state: RobotState
+    battery: int = Field(ge=0, le=100)
+    battery_source: BatterySource
+    enrollment_status: RobotEnrollmentStatus
+    readiness_status: RobotReadinessStatus
+    capabilities: list[str] = Field(default_factory=list)
+    active_map_id: Optional[str] = None
+    current_task_id: Optional[str] = None
+    queued_count: int = Field(default=0, ge=0)
+    available_now: bool
+    accepts_deliveries: bool
+    unavailable_reason: Optional[str] = None
+
+
 class RobotAgentHello(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1137,6 +1157,7 @@ class DeliveryTaskCreate(BaseModel):
     recipient_name: Optional[str] = Field(default=None, max_length=100)
     delivery_note: Optional[str] = Field(default=None, max_length=500)
     preview_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    robot_id: Optional[str] = Field(default=None, min_length=1, max_length=40)
 
     @field_validator("recipient_name", "delivery_note", mode="before")
     @classmethod
@@ -1159,6 +1180,7 @@ class TaskRoutePreviewRequest(BaseModel):
     pickup_station_id: str
     destination_station_id: str
     priority: TaskPriority = TaskPriority.NORMAL
+    robot_id: Optional[str] = Field(default=None, min_length=1, max_length=40)
 
     @model_validator(mode="after")
     def validate_stations(self):
@@ -1182,6 +1204,8 @@ class TaskRoutePreview(BaseModel):
     pickup_eta_seconds: float = Field(ge=0.0)
     destination_eta_seconds: float = Field(ge=0.0)
     completion_eta_seconds: float = Field(ge=0.0)
+    queue_position: int = Field(ge=0)
+    estimated_start_seconds: Optional[float] = Field(default=None, ge=0.0)
     generated_at: datetime
     expires_at: datetime
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from .db_models import DeliveryTaskORM, RobotORM, StationORM, TaskEventORM, UserORM
@@ -228,10 +228,46 @@ class DeliveryRepository:
         )
         return list(self.db.scalars(stmt).all())
 
-    def next_queued_task_for_update(self) -> DeliveryTaskORM | None:
+    def queued_tasks_for_robot(
+        self,
+        robot_id: str,
+        *,
+        include_unassigned: bool = False,
+    ) -> list[DeliveryTaskORM]:
+        assignment_filter = DeliveryTaskORM.robot_id == robot_id
+        if include_unassigned:
+            assignment_filter = or_(
+                assignment_filter,
+                DeliveryTaskORM.robot_id.is_(None),
+            )
         stmt = (
             select(DeliveryTaskORM)
-            .where(DeliveryTaskORM.status == TaskStatus.QUEUED)
+            .where(
+                DeliveryTaskORM.status == TaskStatus.QUEUED,
+                assignment_filter,
+            )
+            .order_by(*queued_task_ordering())
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def next_queued_task_for_update(
+        self,
+        robot_id: str,
+        *,
+        include_unassigned: bool = False,
+    ) -> DeliveryTaskORM | None:
+        assignment_filter = DeliveryTaskORM.robot_id == robot_id
+        if include_unassigned:
+            assignment_filter = or_(
+                assignment_filter,
+                DeliveryTaskORM.robot_id.is_(None),
+            )
+        stmt = (
+            select(DeliveryTaskORM)
+            .where(
+                DeliveryTaskORM.status == TaskStatus.QUEUED,
+                assignment_filter,
+            )
             .order_by(*queued_task_ordering())
             .limit(1)
             # Lock only the delivery task row. This remains valid if a loader

@@ -10,6 +10,7 @@ import type {
   MapCatalogOperation,
   MappingMapDetails,
   MappingSession,
+  FleetRobot,
   RobotMapDetails,
   RobotMapCatalog,
   OccupancyGridMap,
@@ -64,6 +65,24 @@ type ApiRobot = {
   yaw: number;
   current_task_id: string | null;
   last_seen: string;
+};
+
+type ApiFleetRobot = {
+  id: string;
+  name: string;
+  online: boolean;
+  state: FleetRobot["state"];
+  battery: number;
+  battery_source: FleetRobot["batterySource"];
+  enrollment_status: FleetRobot["enrollmentStatus"];
+  readiness_status: FleetRobot["readinessStatus"];
+  capabilities: string[];
+  active_map_id: string | null;
+  current_task_id: string | null;
+  queued_count: number;
+  available_now: boolean;
+  accepts_deliveries: boolean;
+  unavailable_reason: FleetRobot["unavailableReason"] | null;
 };
 
 type ApiDeliveryTask = {
@@ -123,6 +142,8 @@ type ApiTaskRoutePreview = {
   pickup_eta_seconds: number;
   destination_eta_seconds: number;
   completion_eta_seconds: number;
+  queue_position: number;
+  estimated_start_seconds: number | null;
   generated_at: string;
   expires_at: string;
 };
@@ -380,6 +401,27 @@ export async function approveRobotEnrollment(enrollmentId: string, pairingCode: 
 
 export async function getRobotRegistry(): Promise<RobotRegistryEntry[]> {
   return (await request<ApiRobotRegistryEntry[]>("/api/robot-registry/robots")).map(toRobotRegistryEntry);
+}
+
+export async function getFleet(): Promise<FleetRobot[]> {
+  const robots = await request<ApiFleetRobot[]>("/api/robots/fleet");
+  return robots.map((robot) => ({
+    id: robot.id,
+    name: robot.name,
+    online: robot.online,
+    state: robot.state,
+    battery: robot.battery,
+    batterySource: robot.battery_source,
+    enrollmentStatus: robot.enrollment_status,
+    readinessStatus: robot.readiness_status,
+    capabilities: robot.capabilities,
+    activeMapId: robot.active_map_id ?? undefined,
+    currentTaskId: robot.current_task_id ?? undefined,
+    queuedCount: robot.queued_count,
+    availableNow: robot.available_now,
+    acceptsDeliveries: robot.accepts_deliveries,
+    unavailableReason: robot.unavailable_reason ?? undefined,
+  }));
 }
 
 export async function revokeRobotCredential(robotId: string): Promise<RobotRegistryEntry> {
@@ -847,7 +889,8 @@ export async function createTask(
       priority: input.priority,
       recipient_name: input.recipientName?.trim() || null,
       delivery_note: input.deliveryNote?.trim() || null,
-      preview_id: input.previewId
+      preview_id: input.previewId,
+      ...(input.robotId ? { robot_id: input.robotId } : {})
     })
   });
   return toTask(task);
@@ -861,7 +904,8 @@ export async function previewTaskRoute(
     body: JSON.stringify({
       pickup_station_id: input.pickupStationId,
       destination_station_id: input.destinationStationId,
-      priority: input.priority
+      priority: input.priority,
+      ...(input.robotId ? { robot_id: input.robotId } : {})
     })
   });
   return {
@@ -879,6 +923,8 @@ export async function previewTaskRoute(
     pickupEtaSeconds: preview.pickup_eta_seconds,
     destinationEtaSeconds: preview.destination_eta_seconds,
     completionEtaSeconds: preview.completion_eta_seconds,
+    queuePosition: preview.queue_position,
+    estimatedStartSeconds: preview.estimated_start_seconds ?? undefined,
     generatedAt: preview.generated_at,
     expiresAt: preview.expires_at
   };

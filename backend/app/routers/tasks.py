@@ -72,6 +72,14 @@ def authorize_priority(user: UserORM, priority: TaskPriority) -> None:
         )
 
 
+def authorize_robot_selection(user: UserORM, robot_id: str | None) -> None:
+    if robot_id is not None and user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can select a specific robot",
+        )
+
+
 @router.get("/estimates", response_model=list[TaskEstimate])
 def list_task_estimates(
     service: DeliveryService = Depends(get_service),
@@ -157,19 +165,19 @@ async def preview_task_route(
     user: UserORM = Depends(require_user),
 ):
     authorize_priority(user, payload.priority)
-    robot = service.primary_robot()
+    authorize_robot_selection(user, payload.robot_id)
+    pickup = service.get_station(payload.pickup_station_id)
+    destination = service.get_station(payload.destination_station_id)
+    if pickup.map_id != destination.map_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Pickup and destination must belong to the same map",
+        )
+    robot = service.select_delivery_robot(payload.robot_id, pickup.map_id)
     if mapping_store.is_active(robot.id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Route preview is unavailable while the robot is mapping",
-        )
-    pickup = service.get_station(payload.pickup_station_id)
-    destination = service.get_station(payload.destination_station_id)
-    active_map_id = service.active_map_id()
-    if pickup.map_id != active_map_id or destination.map_id != active_map_id:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Pickup and destination must belong to the active map",
         )
     snapshot = map_store.get()
 
@@ -251,6 +259,7 @@ async def preview_task_route(
         + delivery_distance / PREVIEW_NOMINAL_SPEED_METERS_PER_SECOND
     )
     generated_at = utc_now()
+    queue_position, estimated_start_seconds = service.robot_queue_projection(robot.id)
     preview_id = route_preview_coordinator.issue_validation(
         owner_id=user.id,
         robot_id=robot.id,
@@ -278,6 +287,8 @@ async def preview_task_route(
         pickup_eta_seconds=pickup_eta,
         destination_eta_seconds=destination_eta,
         completion_eta_seconds=destination_eta + PREVIEW_UNLOADING_SECONDS,
+        queue_position=queue_position,
+        estimated_start_seconds=estimated_start_seconds,
         generated_at=generated_at,
         expires_at=generated_at + timedelta(seconds=PREVIEW_VALIDITY_SECONDS),
     )
@@ -295,7 +306,14 @@ async def create_task(
     user: UserORM = Depends(require_user),
 ):
     authorize_priority(user, payload.priority)
-    robot = service.primary_robot()
+    pickup = service.get_station(payload.pickup_station_id)
+    destination = service.get_station(payload.destination_station_id)
+    if pickup.map_id != destination.map_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Pickup and destination must belong to the same map",
+        )
+    robot = service.select_delivery_robot(payload.robot_id, pickup.map_id)
     if mapping_store.is_active(robot.id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -324,6 +342,7 @@ async def create_task(
         actor=TrustedActor.user(user),
         pickup_distance_meters=validation.pickup_distance_meters,
         delivery_distance_meters=validation.delivery_distance_meters,
+        robot_id=robot.id,
     )
     publish_committed_notifications(
         service.db, service.take_pending_notification_ids()
@@ -379,6 +398,7 @@ async def apply_operator_event(
         schedule_active_navigation_command(
             background_tasks,
             service,
+            task.robot_id,
         )
 
     return task

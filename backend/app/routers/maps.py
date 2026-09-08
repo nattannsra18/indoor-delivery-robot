@@ -142,7 +142,7 @@ def _require_idle_robot(db: Session, robot_id: str) -> None:
         or robot.state != RobotState.IDLE
         or robot.current_task_id is not None
         or service.active_task_for_robot(robot_id) is not None
-        or service.repo.queued_tasks()
+        or service.repo.queued_tasks_for_robot(robot_id)
     ):
         raise HTTPException(
             status_code=409,
@@ -343,7 +343,7 @@ async def activate_map(
         or robot.state != RobotState.IDLE
         or robot.current_task_id is not None
         or service.active_task_for_robot(robot_id) is not None
-        or service.repo.queued_tasks()
+        or service.repo.queued_tasks_for_robot(robot_id)
     ):
         raise HTTPException(
             status_code=409,
