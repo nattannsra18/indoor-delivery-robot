@@ -265,6 +265,22 @@ outside the repository and is reused automatically on later starts.
 ./scripts/run_dev_stack.sh stop
 ```
 
+To validate fleet behavior before physical SBC testing, the companion ROS
+repository includes a three-agent headless Fleet Lab. It creates independent
+serial numbers, credentials, profiles, ROS namespaces, maps, and capability
+sets while using the real FastAPI pairing and WebSocket protocol:
+
+```bash
+cd ../amr-navigation-vision-diagnostics
+./scripts/fleet_lab.sh start
+./scripts/fleet_lab.sh status
+```
+
+Approve the requests in **Robot Registry**, then use `sim01` and `sim02` for
+automatic or explicit dispatch tests. Stop and restart an individual agent to
+exercise offline recovery; revoke its credential from the registry to verify
+that its active connection is terminated immediately.
+
 See [Development guide](docs/DEVELOPMENT.md) for configuration, individual service commands, testing, and troubleshooting.
 
 ## Quality checks
@@ -281,7 +297,7 @@ cd backend
 PYTHONPATH=. PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python -m pytest -q
 ```
 
-The current suite contains 78 frontend contract/UX checks and 157 backend tests. Continuous integration runs both suites, zero-warning TypeScript/ESLint validation, a production build, and Chromium smoke tests against a real FastAPI/PostgreSQL stack on every pull request.
+The current suite contains 78 frontend contract/UX checks and 158 backend tests. Continuous integration runs both suites, zero-warning TypeScript/ESLint validation, a production build, and Chromium smoke tests against a real FastAPI/PostgreSQL stack on every pull request.
 
 ## Repository layout
 

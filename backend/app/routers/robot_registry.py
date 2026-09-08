@@ -21,6 +21,8 @@ from ..models import (
     RobotRegistryEntry,
 )
 from ..robot_registry import RobotRegistryService, bearer_value
+from ..service import DeliveryService
+from ..websocket_manager import robot_connection_manager
 
 router = APIRouter(prefix="/api/robot-registry", tags=["robot-registry"])
 
@@ -108,14 +110,21 @@ def list_registry(_: UserORM = Depends(require_admin), db: Session = Depends(get
 
 
 @router.post("/robots/{robot_id}/revoke", response_model=RobotRegistryEntry)
-def revoke_robot(
+async def revoke_robot(
     robot_id: str,
     user: UserORM = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    result = RobotRegistryService(db).revoke(robot_id)
+    registry = RobotRegistryService(db)
+    registry.revoke(robot_id)
     AuditService(db).log(
         TrustedActor.user(user), "robot.credential_revoked", "robot", robot_id
     )
     db.commit()
-    return result
+    disconnected = await robot_connection_manager.close(
+        robot_id,
+        reason="Robot credential revoked by administrator",
+    )
+    if disconnected:
+        DeliveryService(db).record_robot_connection(robot_id, False)
+    return next(item for item in registry.list_registry() if item.id == robot_id)

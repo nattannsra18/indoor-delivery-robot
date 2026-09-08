@@ -55,6 +55,22 @@ class RobotConnectionManager:
     def connected_robot_ids(self) -> list[str]:
         return sorted(self._connections)
 
+    async def close(
+        self,
+        robot_id: str,
+        *,
+        code: int = 1008,
+        reason: str = "Robot connection revoked",
+    ) -> bool:
+        websocket = self._connections.pop(robot_id, None)
+        if websocket is None:
+            return False
+        try:
+            await websocket.close(code=code, reason=reason)
+        except (RuntimeError, ClosedResourceError):
+            pass
+        return True
+
     async def send_json(
         self,
         robot_id: str,

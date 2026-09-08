@@ -261,6 +261,22 @@ class StubSocket:
         self.closed = (code, reason)
 
 
+def test_connection_manager_closes_active_socket_when_credential_is_revoked():
+    socket = StubSocket("credential", [])
+
+    async def scenario():
+        await robot_connection_manager.connect("revoked-robot", socket)
+        closed = await robot_connection_manager.close(
+            "revoked-robot",
+            reason="Robot credential revoked by administrator",
+        )
+        return closed
+
+    assert asyncio.run(scenario()) is True
+    assert socket.closed == (1008, "Robot credential revoked by administrator")
+    assert robot_connection_manager.is_connected("revoked-robot") is False
+
+
 def test_paired_websocket_rejects_shared_token_and_requires_protocol_hello(monkeypatch):
     monkeypatch.setenv("ROBOT_WS_TOKEN", "legacy-shared-token")
     monkeypatch.setenv("ROBOT_WS_AUTH_REQUIRED", "true")
