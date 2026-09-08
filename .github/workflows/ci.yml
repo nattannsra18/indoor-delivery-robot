@@ -98,6 +98,7 @@ jobs:
       APP_ENV: test
       DATABASE_URL: postgresql+psycopg://postgres:postgres@127.0.0.1:5432/indoor_delivery_e2e
       ROBOT_WS_AUTH_REQUIRED: "false"
+      ROBOT_ENROLLMENT_TOKEN: E2E-Robot-Enrollment-Token-2026
       SESSION_COOKIE_SECURE: "false"
       FRONTEND_URL: http://127.0.0.1:3000
       NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:8000

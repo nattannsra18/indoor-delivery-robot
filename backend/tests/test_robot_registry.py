@@ -10,8 +10,10 @@ from sqlalchemy.orm import sessionmaker
 
 from app.auth import token_digest, verify_password
 from app.database import Base
-from app.db_models import RobotCredentialORM, RobotEnrollmentORM, RobotORM, UserORM
+from app.alert_service import AlertService
+from app.db_models import RobotCredentialORM, RobotEnrollmentORM, RobotORM, StationORM, UserORM
 from app.models import (
+    DeliveryTaskCreate,
     RobotAgentHello,
     RobotAgentReadiness,
     RobotCommandAcknowledgement,
@@ -19,11 +21,13 @@ from app.models import (
     RobotEnrollmentRequest,
     RobotEnrollmentStatus,
     RobotReadinessStatus,
+    TaskStatus,
     UserRole,
     utc_now,
 )
 from app.robot_registry import RobotRegistryService
 from app.routers.robot_ws import robot_websocket
+from app.routers.robot_registry import revoke_robot
 from app.schema import apply_compatibility_migrations
 from app.service import DeliveryService
 from app.websocket_manager import robot_connection_manager
@@ -261,6 +265,78 @@ class StubSocket:
         self.closed = (code, reason)
 
 
+class QueueSocket:
+    _disconnect = object()
+
+    def __init__(self, token: str, hello: RobotAgentHello):
+        self.headers = {"authorization": f"Bearer {token}"}
+        self.incoming: asyncio.Queue = asyncio.Queue()
+        self.incoming.put_nowait(hello.model_dump(mode="json"))
+        self.sent: list[dict] = []
+        self.accepted = False
+        self.closed: tuple[int, str] | None = None
+        self.changed = asyncio.Event()
+
+    async def accept(self):
+        self.accepted = True
+
+    async def receive_json(self):
+        message = await self.incoming.get()
+        if message is self._disconnect:
+            raise WebSocketDisconnect()
+        return message
+
+    async def send_json(self, value):
+        self.sent.append(value)
+        self.changed.set()
+
+    async def close(self, code=1000, reason=""):
+        self.closed = (code, reason)
+        self.incoming.put_nowait(self._disconnect)
+
+    def disconnect(self):
+        self.incoming.put_nowait(self._disconnect)
+
+    async def wait_for(self, message_type: str, timeout: float = 1.0) -> dict:
+        async def find_message():
+            while True:
+                match = next(
+                    (message for message in self.sent if message.get("type") == message_type),
+                    None,
+                )
+                if match is not None:
+                    return match
+                self.changed.clear()
+                await self.changed.wait()
+
+        return await asyncio.wait_for(find_message(), timeout=timeout)
+
+
+def paired_robot(db):
+    registry = RobotRegistryService(db)
+    created = registry.create_enrollment(enrollment_payload(), ttl_seconds=600)
+    registry.approve(created.enrollment_id, created.pairing_code, "admin")
+    claimed = registry.claim(
+        created.enrollment_id,
+        created.pairing_code,
+        enrollment_payload().hardware_fingerprint,
+    )
+    return registry, claimed
+
+
+def agent_hello(robot_id: str, boot_id: str) -> RobotAgentHello:
+    return RobotAgentHello(
+        type="agent_hello",
+        protocol_version="1.0",
+        robot_id=robot_id,
+        boot_id=boot_id,
+        agent_version="0.5.0",
+        ros_distro="jazzy",
+        profile_version="turtlebot3-sim-v1",
+        capabilities=["navigation", "diagnostics"],
+    )
+
+
 def test_connection_manager_closes_active_socket_when_credential_is_revoked():
     socket = StubSocket("credential", [])
 
@@ -275,6 +351,99 @@ def test_connection_manager_closes_active_socket_when_credential_is_revoked():
     assert asyncio.run(scenario()) is True
     assert socket.closed == (1008, "Robot credential revoked by administrator")
     assert robot_connection_manager.is_connected("revoked-robot") is False
+
+
+def test_active_mission_survives_disconnect_alerts_and_resends_on_reconnect():
+    async def scenario():
+        db = session()
+        db.add_all([
+            StationORM(id="A", map_id="warehouse_map", name="A", x=0, y=0, yaw=0),
+            StationORM(id="B", map_id="warehouse_map", name="B", x=1, y=0, yaw=0),
+        ])
+        db.commit()
+        _, claimed = paired_robot(db)
+        robot = db.get(RobotORM, claimed.robot_id)
+        robot.readiness_status = RobotReadinessStatus.READY
+        db.commit()
+
+        first = QueueSocket(claimed.credential, agent_hello(claimed.robot_id, "boot-1"))
+        first_run = asyncio.create_task(robot_websocket(first, claimed.robot_id, db))
+        await first.wait_for("connection_ack")
+        first.incoming.put_nowait(RobotAgentReadiness(
+            type="agent_readiness",
+            protocol_version="1.0",
+            robot_id=claimed.robot_id,
+            status=RobotReadinessStatus.READY,
+            checks={"nav2": True, "localization": True, "map": True},
+            active_map_id="warehouse_map",
+            timestamp=utc_now(),
+        ).model_dump(mode="json"))
+        await first.wait_for("agent_readiness_ack")
+
+        service = DeliveryService(db)
+        task = service.create_task(
+            DeliveryTaskCreate(pickup_station_id="A", destination_station_id="B"),
+            owner_id="admin",
+            robot_id=claimed.robot_id,
+        )
+        assert task.status == TaskStatus.GOING_TO_PICKUP
+
+        first.disconnect()
+        await asyncio.wait_for(first_run, timeout=1.0)
+        db.expire_all()
+        disconnected_robot = db.get(RobotORM, claimed.robot_id)
+        disconnected_task = service.get_task(task.id)
+        assert disconnected_robot.online is False
+        assert disconnected_robot.current_task_id == task.id
+        assert disconnected_task.status == TaskStatus.GOING_TO_PICKUP
+        alert = AlertService(db).get_by_key(f"robot-offline:{claimed.robot_id}")
+        assert alert is not None
+        assert alert.active is True
+        assert alert.severity.value == "CRITICAL"
+
+        second = QueueSocket(claimed.credential, agent_hello(claimed.robot_id, "boot-2"))
+        second_run = asyncio.create_task(robot_websocket(second, claimed.robot_id, db))
+        await second.wait_for("connection_ack")
+        resent = await second.wait_for("command")
+        assert resent["command"] == "navigate_to_pose"
+        assert resent["task_id"] == task.id
+        assert resent["robot_id"] == claimed.robot_id
+        assert resent["stage"] == "pickup"
+        db.expire_all()
+        assert db.get(RobotORM, claimed.robot_id).online is True
+        assert AlertService(db).get_by_key(f"robot-offline:{claimed.robot_id}").active is False
+
+        second.disconnect()
+        await asyncio.wait_for(second_run, timeout=1.0)
+        db.close()
+
+    asyncio.run(scenario())
+
+
+def test_admin_revoke_endpoint_closes_runtime_socket_immediately():
+    async def scenario():
+        db = session()
+        registry, claimed = paired_robot(db)
+        socket = QueueSocket(claimed.credential, agent_hello(claimed.robot_id, "boot-revoke"))
+        websocket_run = asyncio.create_task(robot_websocket(socket, claimed.robot_id, db))
+        await socket.wait_for("connection_ack")
+        assert robot_connection_manager.is_connected(claimed.robot_id) is True
+
+        result = await revoke_robot(
+            claimed.robot_id,
+            db.get(UserORM, "admin"),
+            db,
+        )
+
+        assert result.enrollment_status == RobotEnrollmentStatus.REVOKED
+        assert result.online is False
+        assert socket.closed == (1008, "Robot credential revoked by administrator")
+        assert robot_connection_manager.is_connected(claimed.robot_id) is False
+        assert registry.authenticate(claimed.robot_id, claimed.credential) is None
+        await asyncio.wait_for(websocket_run, timeout=1.0)
+        db.close()
+
+    asyncio.run(scenario())
 
 
 def test_paired_websocket_rejects_shared_token_and_requires_protocol_hello(monkeypatch):

@@ -39,6 +39,7 @@ from app.seed import seed_database
 from app.service import DeliveryService
 from app.map_store import map_store
 from app.route_preview import route_preview_coordinator
+from app.websocket_manager import robot_connection_manager
 
 
 engine = create_engine(
@@ -331,6 +332,83 @@ def test_selected_robots_keep_independent_active_missions_and_queues():
         assert service.robot_queue_projection("fleet-b")[0] == 2
 
 
+def test_task_api_dispatches_navigation_commands_to_two_selected_robots():
+    class CommandSocket:
+        def __init__(self):
+            self.sent: list[dict] = []
+
+        async def accept(self):
+            return None
+
+        async def send_json(self, message):
+            self.sent.append(message)
+
+        async def close(self, code=1000, reason=""):
+            return None
+
+    async def scenario():
+        sockets = {robot_id: CommandSocket() for robot_id in ("fleet-a", "fleet-b")}
+        with Session() as db:
+            for robot_id in sockets:
+                db.add(RobotORM(
+                    id=robot_id,
+                    name=robot_id.upper(),
+                    online=True,
+                    enrollment_status=RobotEnrollmentStatus.PAIRED,
+                    readiness_status=RobotReadinessStatus.READY,
+                    capabilities_json=json.dumps(["navigation", "diagnostics"]),
+                ))
+            db.commit()
+            service = DeliveryService(db)
+            admin = db.get(UserORM, "admin")
+            snapshot = map_store.get()
+            assert snapshot is not None
+
+            for robot_id, socket in sockets.items():
+                await robot_connection_manager.connect(robot_id, socket)
+                preview_id = route_preview_coordinator.issue_validation(
+                    owner_id=admin.id,
+                    robot_id=robot_id,
+                    pickup_station_id="A",
+                    destination_station_id="B",
+                    priority=TaskPriority.NORMAL,
+                    map_revision=snapshot.revision,
+                )
+                background = BackgroundTasks()
+                created = await create_task_endpoint(
+                    DeliveryTaskCreate(
+                        pickup_station_id="A",
+                        destination_station_id="B",
+                        preview_id=preview_id,
+                        robot_id=robot_id,
+                    ),
+                    background,
+                    service,
+                    admin,
+                )
+                await background()
+                assert created.robot_id == robot_id
+                assert created.status == TaskStatus.GOING_TO_PICKUP
+
+            assert len(sockets["fleet-a"].sent) == 1
+            assert len(sockets["fleet-b"].sent) == 1
+            for robot_id, socket in sockets.items():
+                command = socket.sent[0]
+                assert command["type"] == "command"
+                assert command["command"] == "navigate_to_pose"
+                assert command["robot_id"] == robot_id
+                assert command["stage"] == "pickup"
+
+            tasks = service.list_tasks()
+            active = [task for task in tasks if task.status == TaskStatus.GOING_TO_PICKUP]
+            assert {task.robot_id for task in active} == {"fleet-a", "fleet-b"}
+
+        for robot_id, socket in sockets.items():
+            robot_connection_manager.disconnect(robot_id, socket)
+
+    asyncio.run(scenario())
+
+
 def test_idle_robot_with_reserved_queue_is_not_reported_as_immediately_available():
     with Session() as db:
         db.add(RobotORM(
@@ -378,6 +456,28 @@ def test_selected_robot_must_be_ready_navigation_capable_and_on_map():
 
         assert rejected.value.status_code == 409
         assert "ROBOT_NOT_READY" in rejected.value.detail
+
+
+def test_robot_without_navigation_capability_is_rejected_from_delivery():
+    with Session() as db:
+        db.add(RobotORM(
+            id="robot-test01",
+            name="Incompatible test robot",
+            online=True,
+            enrollment_status=RobotEnrollmentStatus.PAIRED,
+            readiness_status=RobotReadinessStatus.READY,
+            capabilities_json=json.dumps(["localization", "diagnostics"]),
+        ))
+        db.commit()
+
+        with pytest.raises(HTTPException) as rejected:
+            DeliveryService(db).select_delivery_robot(
+                "robot-test01",
+                "warehouse_map",
+            )
+
+        assert rejected.value.status_code == 409
+        assert "NAVIGATION_UNAVAILABLE" in rejected.value.detail
 
 
 def test_same_priority_uses_created_at_then_id_as_deterministic_tie_breaker():
