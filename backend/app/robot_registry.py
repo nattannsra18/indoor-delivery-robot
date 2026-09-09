@@ -12,8 +12,10 @@ from sqlalchemy.orm import Session
 
 from .auth import hash_password, token_digest, verify_password
 from .db_models import RobotCredentialORM, RobotEnrollmentORM, RobotORM
+from .alert_service import AlertService
 from .models import (
     BatterySource,
+    AlertSeverity,
     RobotAgentHello,
     RobotAgentReadiness,
     RobotCredentialClaimed,
@@ -85,7 +87,34 @@ class RobotRegistryService:
             select(RobotORM).where(RobotORM.serial_number == payload.serial_number)
         )
         if existing_robot is not None and existing_robot.enrollment_status == RobotEnrollmentStatus.PAIRED:
+            if (
+                existing_robot.identity_fingerprint_hash is not None
+                and not hmac.compare_digest(
+                    existing_robot.identity_fingerprint_hash, fingerprint_hash
+                )
+            ):
+                self._record_identity_anomaly(
+                    existing_robot,
+                    "SERIAL_REUSED",
+                    "A pairing request reused this robot serial from a different hardware fingerprint",
+                )
             raise HTTPException(status.HTTP_409_CONFLICT, "Robot serial number is already paired")
+        fingerprint_robot = self.db.scalar(
+            select(RobotORM).where(
+                RobotORM.identity_fingerprint_hash == fingerprint_hash,
+                RobotORM.enrollment_status == RobotEnrollmentStatus.PAIRED,
+            )
+        )
+        if fingerprint_robot is not None and fingerprint_robot.serial_number != payload.serial_number:
+            self._record_identity_anomaly(
+                fingerprint_robot,
+                "FINGERPRINT_REUSED",
+                "A pairing request reused this robot fingerprint with a different serial number",
+            )
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Robot hardware fingerprint is already paired",
+            )
 
         previous = list(
             self.db.scalars(
@@ -188,6 +217,9 @@ class RobotRegistryService:
         robot.agent_version = item.agent_version
         robot.ros_distro = item.ros_distro
         robot.capabilities_json = item.capabilities_json
+        robot.identity_fingerprint_hash = item.hardware_fingerprint_hash
+        robot.identity_anomaly_code = None
+        robot.identity_anomaly_detected_at = None
         latest_version = self.db.scalar(
             select(RobotCredentialORM.version)
             .where(RobotCredentialORM.robot_id == robot_id)
@@ -230,16 +262,39 @@ class RobotRegistryService:
         return item
 
     def has_active_credentials(self, robot_id: str) -> bool:
+        now = utc_now()
         return self.db.scalar(
             select(RobotCredentialORM.id).where(
                 RobotCredentialORM.robot_id == robot_id,
                 RobotCredentialORM.revoked_at.is_(None),
+                (
+                    RobotCredentialORM.expires_at.is_(None)
+                    | (RobotCredentialORM.expires_at > now)
+                ),
             ).limit(1)
         ) is not None
 
     def apply_hello(self, robot: RobotORM, hello: RobotAgentHello) -> None:
         if hello.robot_id != robot.id:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "agent_hello robot_id mismatch")
+        if robot.serial_number != hello.serial_number:
+            self._record_identity_anomaly(
+                robot,
+                "SERIAL_MISMATCH",
+                "The authenticated Agent reported a serial number that does not match the paired robot",
+            )
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Robot identity mismatch")
+        reported_hash = token_digest(hello.hardware_fingerprint)
+        if (
+            robot.identity_fingerprint_hash is not None
+            and not hmac.compare_digest(robot.identity_fingerprint_hash, reported_hash)
+        ):
+            self._record_identity_anomaly(
+                robot,
+                "FINGERPRINT_MISMATCH",
+                "The authenticated Agent reported a hardware fingerprint that does not match the paired robot",
+            )
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Robot identity mismatch")
         robot.last_boot_id = hello.boot_id
         robot.agent_version = hello.agent_version
         robot.ros_distro = hello.ros_distro
@@ -272,11 +327,22 @@ class RobotRegistryService:
         robots = self.db.scalars(select(RobotORM).order_by(RobotORM.name, RobotORM.id)).all()
         result: list[RobotRegistryEntry] = []
         for robot in robots:
-            credential = self.db.scalar(
+            credentials = list(self.db.scalars(
                 select(RobotCredentialORM)
                 .where(RobotCredentialORM.robot_id == robot.id)
                 .order_by(RobotCredentialORM.version.desc())
-                .limit(1)
+            ).all())
+            active_credentials = [
+                item for item in credentials
+                if item.revoked_at is None
+                and (item.expires_at is None or _aware(item.expires_at) > utc_now())
+            ]
+            credential = active_credentials[0] if active_credentials else (
+                credentials[0] if credentials else None
+            )
+            last_authenticated_at = max(
+                (_aware(item.last_used_at) for item in credentials if item.last_used_at is not None),
+                default=None,
             )
             result.append(
                 RobotRegistryEntry(
@@ -293,12 +359,125 @@ class RobotRegistryService:
                     last_boot_id=robot.last_boot_id,
                     credential_version=credential.version if credential else None,
                     credential_revoked=bool(credential and credential.revoked_at),
+                    credential_rotation_pending=len(active_credentials) > 1,
+                    last_authenticated_at=last_authenticated_at,
+                    identity_verified=robot.identity_fingerprint_hash is not None,
+                    identity_anomaly_code=robot.identity_anomaly_code,
+                    identity_anomaly_detected_at=robot.identity_anomaly_detected_at,
                     readiness_detail=robot.readiness_detail,
                     readiness_updated_at=robot.readiness_updated_at,
                     validation_results=_validation_results(robot.readiness_checks_json),
                 )
             )
         return result
+
+    def prepare_rotation(
+        self,
+        robot_id: str,
+        *,
+        grace_seconds: int = 300,
+    ) -> RobotCredentialClaimed:
+        robot = self.db.get(RobotORM, robot_id)
+        if robot is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Robot not found")
+        if robot.enrollment_status != RobotEnrollmentStatus.PAIRED:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Robot is not paired")
+        now = utc_now()
+        active = list(self.db.scalars(
+            select(RobotCredentialORM)
+            .where(
+                RobotCredentialORM.robot_id == robot_id,
+                RobotCredentialORM.revoked_at.is_(None),
+                (
+                    RobotCredentialORM.expires_at.is_(None)
+                    | (RobotCredentialORM.expires_at > now)
+                ),
+            )
+            .order_by(RobotCredentialORM.version.desc())
+        ).all())
+        if len(active) != 1:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "A credential rotation is already pending",
+            )
+        latest_version = self.db.scalar(
+            select(RobotCredentialORM.version)
+            .where(RobotCredentialORM.robot_id == robot_id)
+            .order_by(RobotCredentialORM.version.desc())
+            .limit(1)
+        ) or 0
+        credential_value = secrets.token_urlsafe(48)
+        replacement = RobotCredentialORM(
+            id=str(uuid4()),
+            robot_id=robot_id,
+            token_hash=token_digest(credential_value),
+            version=latest_version + 1,
+        )
+        active[0].expires_at = now + timedelta(seconds=grace_seconds)
+        self.db.add(replacement)
+        self.db.flush()
+        return RobotCredentialClaimed(
+            robot_id=robot_id,
+            credential=credential_value,
+            credential_version=replacement.version,
+        )
+
+    def cancel_rotation(self, robot_id: str, credential_version: int) -> None:
+        replacement = self._credential(robot_id, credential_version)
+        replacement.revoked_at = utc_now()
+        for credential in self.db.scalars(
+            select(RobotCredentialORM).where(
+                RobotCredentialORM.robot_id == robot_id,
+                RobotCredentialORM.revoked_at.is_(None),
+            )
+        ).all():
+            if credential.version < credential_version:
+                credential.expires_at = None
+        self.db.flush()
+
+    def complete_rotation(self, robot_id: str, credential_version: int) -> None:
+        replacement = self._credential(robot_id, credential_version)
+        if replacement.revoked_at is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Replacement credential is revoked")
+        now = utc_now()
+        replacement.expires_at = None
+        for credential in self.db.scalars(
+            select(RobotCredentialORM).where(
+                RobotCredentialORM.robot_id == robot_id,
+                RobotCredentialORM.version < credential_version,
+                RobotCredentialORM.revoked_at.is_(None),
+            )
+        ).all():
+            credential.revoked_at = now
+        self.db.flush()
+
+    def reconcile_authenticated_credential(
+        self,
+        robot_id: str,
+        credential_version: int,
+    ) -> None:
+        """Finish or roll back an interrupted rotation after reconnect."""
+        authenticated = self._credential(robot_id, credential_version)
+        newer = list(self.db.scalars(
+            select(RobotCredentialORM).where(
+                RobotCredentialORM.robot_id == robot_id,
+                RobotCredentialORM.version > credential_version,
+                RobotCredentialORM.revoked_at.is_(None),
+            )
+        ).all())
+        if newer:
+            now = utc_now()
+            for credential in newer:
+                if credential.last_used_at is not None:
+                    raise HTTPException(
+                        status.HTTP_409_CONFLICT,
+                        "Credential rotation state is inconsistent",
+                    )
+                credential.revoked_at = now
+            authenticated.expires_at = None
+        else:
+            self.complete_rotation(robot_id, credential_version)
+        self.db.commit()
 
     def revoke(self, robot_id: str) -> RobotRegistryEntry:
         robot = self.db.get(RobotORM, robot_id)
@@ -326,6 +505,29 @@ class RobotRegistryService:
         if item is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Enrollment not found")
         return item
+
+    def _credential(self, robot_id: str, version: int) -> RobotCredentialORM:
+        credential = self.db.scalar(
+            select(RobotCredentialORM).where(
+                RobotCredentialORM.robot_id == robot_id,
+                RobotCredentialORM.version == version,
+            )
+        )
+        if credential is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Robot credential not found")
+        return credential
+
+    def _record_identity_anomaly(self, robot: RobotORM, code: str, detail: str) -> None:
+        robot.identity_anomaly_code = code
+        robot.identity_anomaly_detected_at = utc_now()
+        AlertService(self.db).upsert(
+            f"robot-identity:{robot.id}",
+            severity=AlertSeverity.CRITICAL,
+            title="Robot identity anomaly detected",
+            message=detail,
+            source="ROBOT_IDENTITY",
+            robot_id=robot.id,
+        )
 
     @staticmethod
     def _validate_pairing(item: RobotEnrollmentORM, pairing_code: str) -> None:

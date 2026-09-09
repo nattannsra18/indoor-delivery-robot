@@ -128,3 +128,52 @@ async def revoke_robot(
     if disconnected:
         DeliveryService(db).record_robot_connection(robot_id, False)
     return next(item for item in registry.list_registry() if item.id == robot_id)
+
+
+@router.post("/robots/{robot_id}/rotate", response_model=RobotRegistryEntry)
+async def rotate_robot_credential(
+    robot_id: str,
+    user: UserORM = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if not robot_connection_manager.is_connected(robot_id):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Robot must be connected to rotate its credential",
+        )
+    registry = RobotRegistryService(db)
+    replacement = registry.prepare_rotation(robot_id)
+    AuditService(db).log(
+        TrustedActor.user(user),
+        "robot.credential_rotation_requested",
+        "robot",
+        robot_id,
+        {"robot_id": robot_id, "credential_version": replacement.credential_version},
+    )
+    db.commit()
+    sent = await robot_connection_manager.send_json(
+        robot_id,
+        {
+            "type": "credential_rotation",
+            "protocol_version": "1.0",
+            "robot_id": robot_id,
+            "credential": replacement.credential,
+            "credential_version": replacement.credential_version,
+        },
+    )
+    if not sent:
+        registry.cancel_rotation(robot_id, replacement.credential_version)
+        AuditService(db).log(
+            TrustedActor.user(user),
+            "robot.credential_rotation_failed",
+            "robot",
+            robot_id,
+            {"robot_id": robot_id, "credential_version": replacement.credential_version},
+            result="failed",
+        )
+        db.commit()
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Robot disconnected before the new credential could be delivered",
+        )
+    return next(item for item in registry.list_registry() if item.id == robot_id)

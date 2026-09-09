@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ActionToast from "@/components/ActionToast";
 import PageHeader from "@/components/PageHeader";
 import { useLocale } from "@/context/LocaleContext";
-import { approveRobotEnrollment, getFleet, getRobotEnrollments, getRobotRegistry, revokeRobotCredential } from "@/lib/api";
+import { approveRobotEnrollment, getFleet, getRobotEnrollments, getRobotRegistry, revokeRobotCredential, rotateRobotCredential } from "@/lib/api";
 import { formatDate, profileValidationMessage, robotRegistryText, robotStateLabel } from "@/lib/i18n";
 import type { FleetRobot, RobotEnrollment, RobotRegistryEntry } from "@/types";
 
-type Dialog = { kind: "approve"; enrollment: RobotEnrollment } | { kind: "revoke"; robot: RobotRegistryEntry };
+type Dialog = { kind: "approve"; enrollment: RobotEnrollment } | { kind: "revoke" | "rotate"; robot: RobotRegistryEntry };
 
 export default function RobotRegistryPage() {
   const { locale } = useLocale();
@@ -88,9 +88,12 @@ export default function RobotRegistryPage() {
       if (dialog.kind === "approve") {
         await approveRobotEnrollment(dialog.enrollment.id, pairingCode);
         setToast({ kind: "success", title: copy.approvedTitle, body: copy.approvedBody });
-      } else {
+      } else if (dialog.kind === "revoke") {
         await revokeRobotCredential(dialog.robot.id);
         setToast({ kind: "success", title: copy.revokedTitle, body: copy.revokedBody });
+      } else {
+        await rotateRobotCredential(dialog.robot.id);
+        setToast({ kind: "success", title: copy.rotatedTitle, body: copy.rotatedBody });
       }
       setDialog(undefined);
       setPairingCode("");
@@ -98,7 +101,7 @@ export default function RobotRegistryPage() {
     } catch (reason) {
       setToast({
         kind: "error",
-        title: dialog.kind === "approve" ? copy.approveFailedTitle : copy.revokeFailedTitle,
+        title: dialog.kind === "approve" ? copy.approveFailedTitle : dialog.kind === "rotate" ? copy.rotateFailedTitle : copy.revokeFailedTitle,
         body: reason instanceof Error ? reason.message : copy.loadFailed,
       });
     } finally {
@@ -149,10 +152,13 @@ export default function RobotRegistryPage() {
                   <Detail label={copy.enrollment} value={enrollmentLabel(robot.enrollmentStatus, copy)} />
                   <Detail label={copy.readiness} value={readinessLabel(robot.readinessStatus, copy)} />
                   <Detail label={copy.serial} value={robot.serialNumber ?? copy.unknown} />
-                  <Detail label={copy.credential} value={robot.credentialVersion ? copy.version.replace("{value}", String(robot.credentialVersion)) : copy.noCredential} />
+                  <Detail label={copy.credential} value={robot.credentialRotationPending ? copy.rotationPending : robot.credentialVersion ? copy.version.replace("{value}", String(robot.credentialVersion)) : copy.noCredential} />
                   <Detail label={copy.agent} value={robot.agentVersion ? `${robot.agentVersion} · ROS ${robot.rosDistro ?? copy.unknown}` : copy.unknown} />
                   <Detail label={copy.profile} value={robot.profileVersion ?? copy.unknown} />
+                  <Detail label={copy.lastAuthenticated} value={robot.lastAuthenticatedAt ? formatDate(robot.lastAuthenticatedAt, locale) : copy.neverAuthenticated} />
+                  <Detail label={copy.identity} value={robot.identityVerified ? copy.identityVerified : copy.identityUnverified} />
                 </dl>
+                {robot.identityAnomalyCode && <div role="alert" className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"><p className="font-bold">{copy.identityAnomalyTitle}</p><p className="mt-1 leading-5">{identityAnomalyLabel(robot.identityAnomalyCode, copy)}</p>{robot.identityAnomalyDetectedAt && <p className="mt-2 text-xs text-rose-600">{formatDate(robot.identityAnomalyDetectedAt, locale)}</p>}</div>}
                 {robot.capabilities.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{robot.capabilities.map((capability) => <span key={capability} className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">{capability}</span>)}</div>}
                 {operational && <dl className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-4">
                   <FleetDetail label={copy.operationalState} value={robotStateLabel(operational.state, locale)} />
@@ -161,7 +167,7 @@ export default function RobotRegistryPage() {
                   <FleetDetail label={copy.acceptingDeliveries} value={operational.acceptsDeliveries ? copy.acceptingDeliveries : copy.notAcceptingDeliveries} tone={operational.acceptsDeliveries ? "green" : "slate"} />
                 </dl>}
                 <ProfileValidation robot={robot} copy={copy} locale={locale} />
-                {robot.credentialVersion && !robot.credentialRevoked && <button type="button" onClick={() => setDialog({ kind: "revoke", robot })} className="mt-5 min-h-10 rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50">{copy.revoke}</button>}
+                {robot.credentialVersion && !robot.credentialRevoked && <div className="mt-5 flex flex-wrap gap-2"><button type="button" disabled={!robot.online || robot.credentialRotationPending} onClick={() => setDialog({ kind: "rotate", robot })} className="min-h-10 rounded-xl border border-blue-200 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40">{copy.rotate}</button><button type="button" onClick={() => setDialog({ kind: "revoke", robot })} className="min-h-10 rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50">{copy.revoke}</button></div>}
               </li>;
               })}
             </ul>}
@@ -172,14 +178,14 @@ export default function RobotRegistryPage() {
 
       {dialog && <div role="presentation" className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/45 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDialog(undefined); }}>
         <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="robot-dialog-title" className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
-          <h2 id="robot-dialog-title" className="text-xl font-bold text-slate-950">{dialog.kind === "approve" ? copy.approve : copy.revokeTitle}</h2>
+          <h2 id="robot-dialog-title" className="text-xl font-bold text-slate-950">{dialog.kind === "approve" ? copy.approve : dialog.kind === "rotate" ? copy.rotateTitle : copy.revokeTitle}</h2>
           {dialog.kind === "approve" ? <>
             <p className="mt-2 text-sm text-slate-600">{dialog.enrollment.displayName} · {dialog.enrollment.serialNumber}</p>
             <label className="mt-5 block text-sm font-bold text-slate-800" htmlFor="pairing-code">{copy.code}</label>
             <input id="pairing-code" autoFocus inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" maxLength={8} value={pairingCode} onChange={(event) => setPairingCode(event.target.value.replace(/\D/g, ""))} className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 font-mono text-lg tracking-[0.25em] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
             <p className="mt-2 text-xs text-slate-500">{copy.codeHelp}</p>
-          </> : <p className="mt-3 text-sm leading-6 text-slate-600">{copy.revokeBody}</p>}
-          <div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={() => setDialog(undefined)} className="min-h-11 rounded-xl border border-slate-200 px-5 text-sm font-bold text-slate-700">{copy.cancel}</button><button type="button" disabled={busy || (dialog.kind === "approve" && pairingCode.length !== 8)} onClick={() => void submitDialog()} className={`min-h-11 rounded-xl px-5 text-sm font-bold text-white disabled:opacity-40 ${dialog.kind === "approve" ? "bg-blue-600" : "bg-rose-600"}`}>{busy ? (dialog.kind === "approve" ? copy.approving : copy.revoking) : (dialog.kind === "approve" ? copy.confirmApprove : copy.confirmRevoke)}</button></div>
+          </> : <p className="mt-3 text-sm leading-6 text-slate-600">{dialog.kind === "rotate" ? copy.rotateBody : copy.revokeBody}</p>}
+          <div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={() => setDialog(undefined)} className="min-h-11 rounded-xl border border-slate-200 px-5 text-sm font-bold text-slate-700">{copy.cancel}</button><button type="button" disabled={busy || (dialog.kind === "approve" && pairingCode.length !== 8)} onClick={() => void submitDialog()} className={`min-h-11 rounded-xl px-5 text-sm font-bold text-white disabled:opacity-40 ${dialog.kind === "revoke" ? "bg-rose-600" : "bg-blue-600"}`}>{busy ? (dialog.kind === "approve" ? copy.approving : dialog.kind === "rotate" ? copy.rotating : copy.revoking) : (dialog.kind === "approve" ? copy.confirmApprove : dialog.kind === "rotate" ? copy.confirmRotate : copy.confirmRevoke)}</button></div>
         </section>
       </div>}
     </>
@@ -223,6 +229,7 @@ function Empty({ title, help }: { title: string; help: string }) { return <div c
 function Detail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) { return <div className="min-w-0"><dt className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</dt><dd title={value} className={`mt-1 truncate text-sm font-semibold text-slate-700 ${mono ? "font-mono" : ""}`}>{value}</dd></div>; }
 function FleetDetail({ label, value, tone = "slate" }: { label: string; value: string; tone?: "green" | "slate" }) { return <div className="min-w-0"><dt className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</dt><dd title={value} className={`mt-1 truncate text-xs font-bold ${tone === "green" ? "text-emerald-700" : "text-slate-700"}`}>{value}</dd></div>; }
 function StatusBadge({ value, tone }: { value: string; tone: "green" | "amber" | "blue" | "slate" }) { const styles = { green: "bg-emerald-50 text-emerald-700", amber: "bg-amber-50 text-amber-700", blue: "bg-blue-50 text-blue-700", slate: "bg-slate-100 text-slate-600" }; return <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${styles[tone]}`}>{value}</span>; }
+function identityAnomalyLabel(code: string, copy: { identityAnomalySerial: string; identityAnomalyFingerprint: string; identityAnomalyReused: string; identityAnomalyFingerprintReused: string }) { return code === "SERIAL_MISMATCH" ? copy.identityAnomalySerial : code === "FINGERPRINT_MISMATCH" ? copy.identityAnomalyFingerprint : code === "FINGERPRINT_REUSED" ? copy.identityAnomalyFingerprintReused : copy.identityAnomalyReused; }
 type StatusCopy = Record<
   "paired" | "revoked" | "pending" | "awaitingClaim" | "ready" | "degraded" |
   "notReady" | "checksPassed" | "noValidation" | "profileValidation" |

@@ -302,6 +302,8 @@ class RobotAgentHello(BaseModel):
     ros_distro: str = Field(min_length=1, max_length=40)
     profile_version: str = Field(min_length=1, max_length=80)
     capabilities: list[str] = Field(min_length=1, max_length=32)
+    serial_number: str = Field(min_length=3, max_length=120)
+    hardware_fingerprint: str = Field(min_length=16, max_length=255)
 
     @field_validator("capabilities")
     @classmethod
@@ -310,6 +312,11 @@ class RobotAgentHello(BaseModel):
         if not normalized or any(len(item) > 80 for item in normalized):
             raise ValueError("capabilities must contain short non-empty identifiers")
         return normalized
+
+    @field_validator("serial_number", "hardware_fingerprint")
+    @classmethod
+    def strip_identity(cls, value: str) -> str:
+        return value.strip()
 
 
 class RobotProfileValidationResult(BaseModel):
@@ -438,9 +445,24 @@ class RobotRegistryEntry(BaseModel):
     last_boot_id: Optional[str] = None
     credential_version: Optional[int] = None
     credential_revoked: bool = False
+    credential_rotation_pending: bool = False
+    last_authenticated_at: Optional[datetime] = None
+    identity_verified: bool = False
+    identity_anomaly_code: Optional[str] = None
+    identity_anomaly_detected_at: Optional[datetime] = None
     readiness_detail: Optional[str] = None
     readiness_updated_at: Optional[datetime] = None
     validation_results: list[RobotProfileValidationResult] = Field(default_factory=list)
+
+
+class RobotCredentialRotated(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["credential_rotated"] = "credential_rotated"
+    protocol_version: Literal["1.0"] = "1.0"
+    robot_id: str = Field(min_length=1, max_length=40)
+    credential_version: int = Field(ge=1)
+    timestamp: datetime
 
 
 class RobotCommandEnvelope(BaseModel):

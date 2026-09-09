@@ -352,6 +352,11 @@ type ApiRobotRegistryEntry = {
   last_boot_id: string | null;
   credential_version: number | null;
   credential_revoked: boolean;
+  credential_rotation_pending: boolean;
+  last_authenticated_at: string | null;
+  identity_verified: boolean;
+  identity_anomaly_code: string | null;
+  identity_anomaly_detected_at: string | null;
   readiness_detail: string | null;
   readiness_updated_at: string | null;
   validation_results: Array<{
@@ -397,6 +402,11 @@ function toRobotRegistryEntry(item: ApiRobotRegistryEntry): RobotRegistryEntry {
     lastBootId: item.last_boot_id ?? undefined,
     credentialVersion: item.credential_version ?? undefined,
     credentialRevoked: item.credential_revoked,
+    credentialRotationPending: item.credential_rotation_pending,
+    lastAuthenticatedAt: item.last_authenticated_at ?? undefined,
+    identityVerified: item.identity_verified,
+    identityAnomalyCode: item.identity_anomaly_code ?? undefined,
+    identityAnomalyDetectedAt: item.identity_anomaly_detected_at ?? undefined,
     readinessDetail: item.readiness_detail ?? undefined,
     readinessUpdatedAt: item.readiness_updated_at ?? undefined,
     validationResults: item.validation_results.map((result) => ({
@@ -450,6 +460,10 @@ export async function getFleet(): Promise<FleetRobot[]> {
 
 export async function revokeRobotCredential(robotId: string): Promise<RobotRegistryEntry> {
   return toRobotRegistryEntry(await request<ApiRobotRegistryEntry>(`/api/robot-registry/robots/${robotId}/revoke`, { method: "POST" }));
+}
+
+export async function rotateRobotCredential(robotId: string): Promise<RobotRegistryEntry> {
+  return toRobotRegistryEntry(await request<ApiRobotRegistryEntry>(`/api/robot-registry/robots/${robotId}/rotate`, { method: "POST" }));
 }
 
 export function getActiveAlerts(): Promise<Alert[]> {

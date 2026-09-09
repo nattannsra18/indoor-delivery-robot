@@ -10,7 +10,7 @@ Browser -> FastAPI control plane <- WSS <- Robot Agent -> Nav2 adapter -> ROS 2 
 
 - Browsers never connect to ROS 2 directly.
 - Every paired robot has an immutable server-issued UUID and an independent credential.
-- FastAPI stores only credential hashes. The plaintext credential is returned once during claim.
+- FastAPI stores only credential hashes. Plaintext credentials are returned once during claim or delivered directly over an authenticated Agent connection during rotation; they are never returned to the browser.
 - Physical emergency-stop and motion safety remain local to the robot. A web stop is an operational command, not a certified safety circuit.
 - Hardware details such as wheel radius, encoder resolution, serial ports, and PID gains stay in robot-side profiles.
 
@@ -46,17 +46,25 @@ The first frame must arrive within five seconds:
   "agent_version": "0.1.0",
   "ros_distro": "jazzy",
   "profile_version": "scuttle-v1",
-  "capabilities": ["navigation", "mapping", "localization"]
+  "capabilities": ["navigation", "mapping", "localization"],
+  "serial_number": "SCUTTLE-0001",
+  "hardware_fingerprint": "agent-derived-machine-fingerprint"
 }
 ```
 
-FastAPI rejects unknown protocol versions, mismatched robot identities, revoked credentials, and malformed hello frames before registering the connection.
+FastAPI rejects unknown protocol versions, mismatched robot identities, revoked credentials, and malformed hello frames before registering the connection. The serial number and hardware fingerprint are checked against the paired identity. A mismatch is persisted in Robot Registry and raises a critical operational alert without storing or displaying the raw fingerprint.
 
 After its ROS checks complete, the agent sends `agent_readiness` with a `READY`, `NOT_READY`, or `DEGRADED` status, the active map ID, and structured `validation_results`. Each result includes a stable `check_id`, category (`INTERFACE`, `DATA`, `TF`, `LIFECYCLE`, or `CAPABILITY`), status (`PASS`, `WARN`, or `FAIL`), human-readable message, and optional observed value. The legacy boolean `checks` object remains in the envelope for protocol compatibility. A failed required check must report `NOT_READY`, while a warning cannot report `READY`. Connection state and readiness remain independent.
 
 The ROS validator evaluates declared capabilities only. It checks required Nav2 actions and services, fresh odometry, map, AMCL and diagnostics data, the `map -> odom -> base` TF chain, AMCL lifecycle state, and map storage configuration. The control plane stores the latest report and exposes it in Robot Registry so operators can see why a robot is not ready or degraded.
 
 For paired robots, `active_map_id` in this readiness message is authoritative for fleet assignment. The control plane persists it and selects a robot only when the reported map matches both delivery stations. It does not substitute the legacy `warehouse_map` default for a paired Agent. A new Agent boot, credential claim, or revoke clears the reported map until a fresh readiness message arrives.
+
+## Credential rotation
+
+An administrator may rotate a connected robot's credential from Robot Registry. FastAPI creates a new version and sends the plaintext replacement only through the already authenticated Robot Agent WebSocket. The Agent writes it atomically to its protected credential file before returning `credential_rotated`. FastAPI then revokes every older version and records the operation in the audit log.
+
+The previous credential remains valid for a short grace period while the new version is being delivered. If the connection drops before delivery and the Agent reconnects with the previous credential, FastAPI rolls back the undelivered replacement. If it reconnects with the new credential, FastAPI completes the rotation. This prevents a network interruption from leaving the robot without a usable credential.
 
 ## Command lifecycle
 

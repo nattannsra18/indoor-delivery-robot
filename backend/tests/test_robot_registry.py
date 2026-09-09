@@ -27,7 +27,7 @@ from app.models import (
 )
 from app.robot_registry import RobotRegistryService
 from app.routers.robot_ws import robot_websocket
-from app.routers.robot_registry import revoke_robot
+from app.routers.robot_registry import revoke_robot, rotate_robot_credential
 from app.schema import apply_compatibility_migrations
 from app.service import DeliveryService
 from app.websocket_manager import robot_connection_manager
@@ -96,6 +96,90 @@ def test_pairing_claims_one_time_per_robot_credential_and_never_stores_plaintext
     assert duplicate.value.status_code == 409
 
 
+def test_credential_rotation_accepts_replacement_before_revoking_previous_version():
+    db = session()
+    registry = RobotRegistryService(db)
+    created = registry.create_enrollment(enrollment_payload(), ttl_seconds=600)
+    registry.approve(created.enrollment_id, created.pairing_code, "admin")
+    original = registry.claim(
+        created.enrollment_id,
+        created.pairing_code,
+        enrollment_payload().hardware_fingerprint,
+    )
+
+    replacement = registry.prepare_rotation(original.robot_id)
+    db.commit()
+    pending = next(item for item in registry.list_registry() if item.id == original.robot_id)
+    assert replacement.credential_version == original.credential_version + 1
+    assert pending.credential_rotation_pending is True
+    assert registry.authenticate(original.robot_id, original.credential) is not None
+    assert registry.authenticate(original.robot_id, replacement.credential) is not None
+
+    registry.complete_rotation(original.robot_id, replacement.credential_version)
+    db.commit()
+    assert registry.authenticate(original.robot_id, original.credential) is None
+    assert registry.authenticate(original.robot_id, replacement.credential) is not None
+    completed = next(item for item in registry.list_registry() if item.id == original.robot_id)
+    assert completed.credential_rotation_pending is False
+    assert completed.credential_version == replacement.credential_version
+    assert completed.last_authenticated_at is not None
+
+
+def test_agent_hello_rejects_changed_hardware_identity_and_records_critical_alert():
+    db = session()
+    registry = RobotRegistryService(db)
+    created = registry.create_enrollment(enrollment_payload(), ttl_seconds=600)
+    registry.approve(created.enrollment_id, created.pairing_code, "admin")
+    claimed = registry.claim(
+        created.enrollment_id,
+        created.pairing_code,
+        enrollment_payload().hardware_fingerprint,
+    )
+    robot = db.get(RobotORM, claimed.robot_id)
+    hello = agent_hello(claimed.robot_id, "boot-anomaly").model_copy(update={
+        "serial_number": enrollment_payload().serial_number,
+        "hardware_fingerprint": "sha256:different-hardware-fingerprint",
+    })
+
+    with pytest.raises(HTTPException) as rejected:
+        registry.apply_hello(robot, hello)
+
+    assert rejected.value.status_code == 403
+    db.refresh(robot)
+    assert robot.identity_anomaly_detected_at is not None
+    assert robot.identity_anomaly_code == "FINGERPRINT_MISMATCH"
+    alert = AlertService(db).get_by_key(f"robot-identity:{robot.id}")
+    assert alert is not None
+    assert alert.active is True
+    assert alert.severity.value == "CRITICAL"
+
+
+def test_reconnect_with_old_credential_rolls_back_undelivered_rotation():
+    db = session()
+    registry = RobotRegistryService(db)
+    created = registry.create_enrollment(enrollment_payload(), ttl_seconds=600)
+    registry.approve(created.enrollment_id, created.pairing_code, "admin")
+    original = registry.claim(
+        created.enrollment_id,
+        created.pairing_code,
+        enrollment_payload().hardware_fingerprint,
+    )
+    replacement = registry.prepare_rotation(original.robot_id)
+    db.commit()
+
+    authenticated = registry.authenticate(original.robot_id, original.credential)
+    assert authenticated is not None
+    registry.reconcile_authenticated_credential(
+        original.robot_id,
+        authenticated.version,
+    )
+
+    assert registry.authenticate(original.robot_id, original.credential) is not None
+    assert registry.authenticate(original.robot_id, replacement.credential) is None
+    entry = next(item for item in registry.list_registry() if item.id == original.robot_id)
+    assert entry.credential_rotation_pending is False
+
+
 def test_agent_hello_is_versioned_bound_to_identity_and_updates_observed_profile():
     db = session()
     registry = RobotRegistryService(db)
@@ -117,6 +201,8 @@ def test_agent_hello_is_versioned_bound_to_identity_and_updates_observed_profile
         ros_distro="jazzy",
         profile_version="turtlebot3-sim-v2",
         capabilities=["Navigation", "mapping", "navigation"],
+        serial_number=enrollment_payload().serial_number,
+        hardware_fingerprint=enrollment_payload().hardware_fingerprint,
     )
     registry.apply_hello(robot, hello)
     entry = next(item for item in registry.list_registry() if item.id == claimed.robot_id)
@@ -242,6 +328,8 @@ def test_paired_robot_without_agent_reported_active_map_is_not_eligible():
         ros_distro="jazzy",
         profile_version="turtlebot3-sim-v1",
         capabilities=["navigation"],
+        serial_number=enrollment_payload().serial_number,
+        hardware_fingerprint=enrollment_payload().hardware_fingerprint,
     ))
     registry.apply_readiness(robot, RobotAgentReadiness(
         type="agent_readiness",
@@ -442,6 +530,8 @@ def agent_hello(robot_id: str, boot_id: str) -> RobotAgentHello:
         ros_distro="jazzy",
         profile_version="turtlebot3-sim-v1",
         capabilities=["navigation", "diagnostics"],
+        serial_number=enrollment_payload().serial_number,
+        hardware_fingerprint=enrollment_payload().hardware_fingerprint,
     )
 
 
@@ -554,6 +644,49 @@ def test_admin_revoke_endpoint_closes_runtime_socket_immediately():
     asyncio.run(scenario())
 
 
+def test_admin_rotation_delivers_secret_only_to_agent_and_revokes_old_after_ack():
+    async def scenario():
+        db = session()
+        registry, claimed = paired_robot(db)
+        socket = QueueSocket(claimed.credential, agent_hello(claimed.robot_id, "boot-rotate"))
+        websocket_run = asyncio.create_task(robot_websocket(socket, claimed.robot_id, db))
+        await socket.wait_for("connection_ack")
+
+        pending = await rotate_robot_credential(
+            claimed.robot_id,
+            db.get(UserORM, "admin"),
+            db,
+        )
+        command = await socket.wait_for("credential_rotation")
+        assert pending.credential_rotation_pending is True
+        assert command["robot_id"] == claimed.robot_id
+        assert command["credential_version"] == claimed.credential_version + 1
+        assert "credential" in command
+        assert registry.authenticate(claimed.robot_id, command["credential"]) is not None
+        assert registry.authenticate(claimed.robot_id, claimed.credential) is not None
+
+        socket.incoming.put_nowait({
+            "type": "credential_rotated",
+            "protocol_version": "1.0",
+            "robot_id": claimed.robot_id,
+            "credential_version": command["credential_version"],
+            "timestamp": utc_now().isoformat(),
+        })
+        await socket.wait_for("credential_rotation_ack")
+        assert registry.authenticate(claimed.robot_id, claimed.credential) is None
+        assert registry.authenticate(claimed.robot_id, command["credential"]) is not None
+        completed = next(
+            item for item in registry.list_registry() if item.id == claimed.robot_id
+        )
+        assert completed.credential_rotation_pending is False
+
+        socket.disconnect()
+        await asyncio.wait_for(websocket_run, timeout=1.0)
+        db.close()
+
+    asyncio.run(scenario())
+
+
 def test_paired_websocket_rejects_shared_token_and_requires_protocol_hello(monkeypatch):
     monkeypatch.setenv("ROBOT_WS_TOKEN", "legacy-shared-token")
     monkeypatch.setenv("ROBOT_WS_AUTH_REQUIRED", "true")
@@ -587,6 +720,8 @@ def test_paired_websocket_rejects_shared_token_and_requires_protocol_hello(monke
         ros_distro="jazzy",
         profile_version="turtlebot3-sim-v1",
         capabilities=["navigation", "mapping"],
+        serial_number=enrollment_payload().serial_number,
+        hardware_fingerprint=enrollment_payload().hardware_fingerprint,
     )
     connected = StubSocket(claimed.credential, [hello.model_dump(mode="json")])
     asyncio.run(robot_websocket(connected, claimed.robot_id, db))
@@ -665,6 +800,9 @@ def test_compatibility_migration_adds_registry_schema_to_existing_robot_table():
         "readiness_checks_json",
         "readiness_updated_at",
         "active_map_id",
+        "identity_fingerprint_hash",
+        "identity_anomaly_code",
+        "identity_anomaly_detected_at",
     } <= robot_columns
     with engine.connect() as connection:
         legacy = connection.execute(text(

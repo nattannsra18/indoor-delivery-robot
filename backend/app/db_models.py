@@ -151,6 +151,13 @@ class RobotORM(Base):
         DateTime(timezone=True), nullable=True
     )
     active_map_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    identity_fingerprint_hash: Mapped[str | None] = mapped_column(
+        String(64), index=True, nullable=True
+    )
+    identity_anomaly_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    identity_anomaly_detected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class RobotEnrollmentORM(Base):

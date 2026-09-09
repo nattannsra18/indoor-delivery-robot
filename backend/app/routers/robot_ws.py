@@ -35,6 +35,7 @@ from ..models import (
     RobotAgentHello,
     RobotAgentReadiness,
     RobotCommandAcknowledgement,
+    RobotCredentialRotated,
     TaskEvent,
 )
 from ..service import DeliveryService
@@ -218,6 +219,7 @@ async def robot_websocket(
             first_message = await asyncio.wait_for(websocket.receive_json(), timeout=5.0)
             hello = RobotAgentHello.model_validate(first_message)
             registry.apply_hello(robot, hello)
+            registry.reconcile_authenticated_credential(robot_id, credential.version)
         except (asyncio.TimeoutError, ValidationError, HTTPException, WebSocketDisconnect):
             await websocket.send_json(
                 {
@@ -362,6 +364,82 @@ async def robot_websocket(
                         "type": "agent_readiness_ack",
                         "robot_id": robot_id,
                         "status": readiness.status.value,
+                        "server_time": current_utc_time(),
+                    }
+                )
+            elif message_type == "credential_rotated":
+                try:
+                    rotated = RobotCredentialRotated.model_validate(message)
+                    if rotated.robot_id != robot_id:
+                        raise HTTPException(403, "robot_id does not match the authenticated connection")
+                    registry.complete_rotation(robot_id, rotated.credential_version)
+                    AuditService(db).log(
+                        TrustedActor.robot(robot_id),
+                        "robot.credential_rotated",
+                        "robot",
+                        robot_id,
+                        {
+                            "robot_id": robot_id,
+                            "credential_version": rotated.credential_version,
+                        },
+                    )
+                    db.commit()
+                except (ValidationError, HTTPException) as error:
+                    detail = (
+                        error.detail
+                        if isinstance(error, HTTPException)
+                        else "; ".join(item["msg"] for item in error.errors(include_url=False))
+                    )
+                    await send_error(websocket, "INVALID_CREDENTIAL_ROTATION", str(detail))
+                    continue
+                await websocket.send_json(
+                    {
+                        "type": "credential_rotation_ack",
+                        "robot_id": robot_id,
+                        "credential_version": rotated.credential_version,
+                        "server_time": current_utc_time(),
+                    }
+                )
+            elif message_type == "credential_rotation_failed":
+                version = message.get("credential_version")
+                detail = message.get("detail")
+                if (
+                    message.get("robot_id") != robot_id
+                    or not isinstance(version, int)
+                    or version < 1
+                    or not isinstance(detail, str)
+                    or not detail.strip()
+                    or len(detail) > 500
+                ):
+                    await send_error(
+                        websocket,
+                        "INVALID_CREDENTIAL_ROTATION_FAILURE",
+                        "Invalid credential rotation failure report",
+                    )
+                    continue
+                try:
+                    registry.cancel_rotation(robot_id, version)
+                except HTTPException as error:
+                    await send_error(
+                        websocket,
+                        "INVALID_CREDENTIAL_ROTATION_FAILURE",
+                        str(error.detail),
+                    )
+                    continue
+                AuditService(db).log(
+                    TrustedActor.robot(robot_id),
+                    "robot.credential_rotation_failed",
+                    "robot",
+                    robot_id,
+                    {"robot_id": robot_id, "credential_version": version},
+                    result="failed",
+                )
+                db.commit()
+                await websocket.send_json(
+                    {
+                        "type": "credential_rotation_failure_ack",
+                        "robot_id": robot_id,
+                        "credential_version": version,
                         "server_time": current_utc_time(),
                     }
                 )

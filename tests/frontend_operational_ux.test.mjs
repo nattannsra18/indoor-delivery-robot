@@ -18,16 +18,19 @@ test("admin account approval is available only through the protected user route"
   );
 });
 
-test("robot registry uses secure pairing and distinct operational states", () => {
+test("robot registry uses secure pairing, rotation and identity anomaly states", () => {
   const page = read("src/app/robots/page.tsx");
   const api = read("src/lib/api.ts");
   const roles = read("src/lib/roleDashboard.ts");
   assert.match(page, /fingerprintSha256/);
   assert.match(page, /approveRobotEnrollment/);
   assert.match(page, /revokeRobotCredential/);
+  assert.match(page, /rotateRobotCredential/);
+  assert.match(page, /identityAnomalyCode/);
   assert.match(page, /readinessStatus/);
   assert.match(api, /\/api\/robot-registry\/enrollments/);
   assert.match(api, /\/api\/robot-registry\/robots/);
+  assert.match(api, /\/rotate/);
   assert.match(roles, /href: "\/robots"/);
 });
 

@@ -277,6 +277,11 @@ export interface RobotRegistryEntry {
   lastBootId?: string;
   credentialVersion?: number;
   credentialRevoked: boolean;
+  credentialRotationPending: boolean;
+  lastAuthenticatedAt?: string;
+  identityVerified: boolean;
+  identityAnomalyCode?: string;
+  identityAnomalyDetectedAt?: string;
   readinessDetail?: string;
   readinessUpdatedAt?: string;
   validationResults: RobotProfileValidationResult[];
