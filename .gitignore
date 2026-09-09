@@ -3,6 +3,7 @@ node_modules
 out
 .env
 .env.local
+deploy/production/.env.production
 .DS_Store
 *.log
 playwright-report/

@@ -285,6 +285,17 @@ until that map matches the delivery stations.
 
 See [Development guide](docs/DEVELOPMENT.md) for configuration, individual service commands, testing, and troubleshooting.
 
+## Production deployment
+
+The repository includes a containerized production topology with automatic TLS,
+same-origin HTTPS/WSS routing, private application/database networks,
+per-client enrollment rate limiting, explicit trusted hosts, and fail-closed
+Robot Agent authentication. Only the Caddy edge publishes host ports.
+
+See the [Production TLS and network deployment guide](docs/PRODUCTION_DEPLOYMENT.md)
+for public-domain and private-LAN setup, secret generation, firewall rules,
+certificate trust, deployment commands, and verification.
+
 ## Quality checks
 
 Run the development stack before the browser smoke tests. Install the Chromium runtime once with `npx playwright install chromium`.
@@ -299,7 +310,7 @@ cd backend
 PYTHONPATH=. PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python -m pytest -q
 ```
 
-The current suite contains 78 frontend contract/UX checks and 158 backend tests. Continuous integration runs both suites, zero-warning TypeScript/ESLint validation, a production build, and Chromium smoke tests against a real FastAPI/PostgreSQL stack on every pull request.
+The current suite contains 79 frontend contract/UX checks and 174 backend tests. Continuous integration runs both suites, zero-warning TypeScript/ESLint validation, a production build, and Chromium smoke tests against a real FastAPI/PostgreSQL stack on every pull request.
 
 ## Repository layout
 
@@ -307,6 +318,7 @@ The current suite contains 78 frontend contract/UX checks and 158 backend tests.
 indoor-delivery-robot/
 ├── .github/workflows/   # Continuous integration
 ├── backend/             # FastAPI, domain services, persistence, and tests
+├── deploy/production/   # TLS reverse proxy and private production topology
 ├── docs/                # Architecture and development documentation
 ├── public/auth/         # Product artwork and brand assets
 ├── scripts/             # Full-stack development orchestration

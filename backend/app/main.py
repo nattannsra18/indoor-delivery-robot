@@ -1,8 +1,8 @@
 from contextlib import asynccontextmanager
-import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import db_models  # noqa: F401
 from .database import Base, SessionLocal, engine
@@ -26,6 +26,7 @@ from .routers import (
 )
 from .seed import seed_database
 from .auth import bootstrap_admin
+from .config import security_settings
 from .schema import apply_compatibility_migrations
 
 
@@ -53,12 +54,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-allowed_origins = {
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-}
-if configured_frontend_url := os.getenv("FRONTEND_URL", "").strip().rstrip("/"):
-    allowed_origins.add(configured_frontend_url)
+settings = security_settings()
+allowed_origins = set(settings.cors_allowed_origins)
+if settings.app_env != "production":
+    allowed_origins.update({
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    })
+
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=list(settings.trusted_hosts),
+)
 
 app.add_middleware(
     CORSMiddleware,

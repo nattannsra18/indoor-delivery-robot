@@ -1,0 +1,128 @@
+name: indoor-delivery-robot
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - private
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN}
+      APP_ENV: ${APP_ENV:?Set APP_ENV}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+      FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?Set CORS_ALLOWED_ORIGINS}
+      TRUSTED_HOSTS: ${TRUSTED_HOSTS:?Set TRUSTED_HOSTS}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:?Set SESSION_COOKIE_SECURE}
+      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-43200}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:?Set BOOTSTRAP_ADMIN_USERNAME}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD}
+      ROBOT_WS_AUTH_REQUIRED: ${ROBOT_WS_AUTH_REQUIRED:?Set ROBOT_WS_AUTH_REQUIRED}
+      ALLOW_LEGACY_ROBOT_TOKEN: ${ALLOW_LEGACY_ROBOT_TOKEN:?Set ALLOW_LEGACY_ROBOT_TOKEN}
+      ROBOT_ENROLLMENT_ENABLED: ${ROBOT_ENROLLMENT_ENABLED:-true}
+      ROBOT_ENROLLMENT_TOKEN: ${ROBOT_ENROLLMENT_TOKEN:?Set ROBOT_ENROLLMENT_TOKEN}
+      ROBOT_ENROLLMENT_TTL_SECONDS: ${ROBOT_ENROLLMENT_TTL_SECONDS:-600}
+      ROBOT_ENROLLMENT_RATE_LIMIT: ${ROBOT_ENROLLMENT_RATE_LIMIT:-6}
+      ROBOT_ENROLLMENT_RATE_WINDOW_SECONDS: ${ROBOT_ENROLLMENT_RATE_WINDOW_SECONDS:-60}
+      EMERGENCY_COMMAND_TIMEOUT_SECONDS: ${EMERGENCY_COMMAND_TIMEOUT_SECONDS:-10}
+      MAP_COMMAND_TIMEOUT_SECONDS: ${MAP_COMMAND_TIMEOUT_SECONDS:-10}
+      PASSWORD_MIN_LENGTH: ${PASSWORD_MIN_LENGTH:-12}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      PASSWORD_RESET_URL_BASE: ${PASSWORD_RESET_URL_BASE:?Set PASSWORD_RESET_URL_BASE}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import os,urllib.request;
+          request=urllib.request.Request('http://127.0.0.1:8000/health',headers={'Host':os.environ['APP_DOMAIN']});
+          urllib.request.urlopen(request,timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - private
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          require('http').get('http://127.0.0.1:3000/login',response=>process.exit(response.statusCode<500?0:1)).on('error',()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - edge
+
+  proxy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ${CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    networks:
+      - edge
+      - private
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  edge:
+  private:
+    internal: true

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hmac
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from ..audit_service import AuditService
@@ -23,8 +23,25 @@ from ..models import (
 from ..robot_registry import RobotRegistryService, bearer_value
 from ..service import DeliveryService
 from ..websocket_manager import robot_connection_manager
+from ..rate_limit import robot_enrollment_limiter
 
 router = APIRouter(prefix="/api/robot-registry", tags=["robot-registry"])
+
+
+def _rate_limit_enrollment(request: Request, action: str) -> None:
+    settings = security_settings()
+    client = request.client.host if request.client is not None else "unknown"
+    retry_after = robot_enrollment_limiter.check(
+        f"{action}:{client}",
+        limit=settings.robot_enrollment_rate_limit,
+        window_seconds=settings.robot_enrollment_rate_window_seconds,
+    )
+    if retry_after is not None:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "Too many robot enrollment attempts",
+            headers={"Retry-After": str(retry_after)},
+        )
 
 
 def _require_bootstrap(authorization: str | None) -> None:
@@ -41,9 +58,11 @@ def _require_bootstrap(authorization: str | None) -> None:
 @router.post("/enrollments", response_model=RobotEnrollmentCreated, status_code=status.HTTP_201_CREATED)
 def create_enrollment(
     payload: RobotEnrollmentRequest,
+    request: Request,
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ):
+    _rate_limit_enrollment(request, "create")
     _require_bootstrap(authorization)
     settings = security_settings()
     result = RobotRegistryService(db).create_enrollment(
@@ -89,8 +108,10 @@ def approve_enrollment(
 def claim_enrollment(
     enrollment_id: str,
     payload: RobotEnrollmentClaim,
+    request: Request,
     db: Session = Depends(get_db),
 ):
+    _rate_limit_enrollment(request, "claim")
     result = RobotRegistryService(db).claim(
         enrollment_id, payload.pairing_code, payload.hardware_fingerprint
     )

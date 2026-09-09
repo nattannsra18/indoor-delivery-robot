@@ -46,12 +46,25 @@ export function setUnauthorizedHandler(handler: (() => void) | undefined) {
   unauthorizedHandler = handler;
 }
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const configuredApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "");
+
+export const API_BASE_URL = configuredApiBaseUrl ??
+  (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
+
+function defaultWebSocketBaseUrl() {
+  if (API_BASE_URL) {
+    return API_BASE_URL.replace(/^http/, "ws");
+  }
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${window.location.host}`;
+  }
+  return "";
+}
 
 export const WS_BASE_URL =
-  process.env.NEXT_PUBLIC_WS_BASE_URL ??
-  API_BASE_URL.replace(/^http/, "ws");
+  process.env.NEXT_PUBLIC_WS_BASE_URL?.replace(/\/$/, "") ??
+  defaultWebSocketBaseUrl();
 
 type ApiRobot = {
   id: string;
