@@ -165,9 +165,37 @@ def test_agent_hello_is_versioned_bound_to_identity_and_updates_observed_profile
     )
     ready = next(item for item in registry.list_registry() if item.id == claimed.robot_id)
     assert ready.readiness_status == RobotReadinessStatus.READY
+    assert robot.active_map_id == "warehouse_map"
     assert ready.readiness_detail == "All 1 declared profile checks passed"
     assert ready.readiness_updated_at is not None
     assert ready.validation_results[0].check_id == "interface.navigate_action"
+    DeliveryService(db).record_robot_connection(claimed.robot_id, True)
+
+    assert DeliveryService(db).select_delivery_robot(
+        claimed.robot_id,
+        "warehouse_map",
+    ).id == claimed.robot_id
+    registry.apply_readiness(
+        robot,
+        RobotAgentReadiness(
+            type="agent_readiness",
+            protocol_version="1.0",
+            robot_id=claimed.robot_id,
+            status=RobotReadinessStatus.READY,
+            checks={"map": True},
+            active_map_id="second_floor",
+            timestamp=utc_now(),
+        ),
+    )
+    with pytest.raises(HTTPException, match="not using the stations' map"):
+        DeliveryService(db).select_delivery_robot(
+            claimed.robot_id,
+            "warehouse_map",
+        )
+    assert DeliveryService(db).select_delivery_robot(
+        claimed.robot_id,
+        "second_floor",
+    ).id == claimed.robot_id
 
     with pytest.raises(ValueError, match="failed profile checks require NOT_READY"):
         RobotAgentReadiness(
@@ -182,6 +210,58 @@ def test_agent_hello_is_versioned_bound_to_identity_and_updates_observed_profile
                 "message": "Odometry topic has no fresh data",
             }],
             timestamp=utc_now(),
+        )
+    with pytest.raises(ValueError, match="unsupported characters"):
+        RobotAgentReadiness(
+            type="agent_readiness",
+            protocol_version="1.0",
+            robot_id=claimed.robot_id,
+            status=RobotReadinessStatus.NOT_READY,
+            active_map_id="../../map.yaml",
+            timestamp=utc_now(),
+        )
+
+
+def test_paired_robot_without_agent_reported_active_map_is_not_eligible():
+    db = session()
+    registry = RobotRegistryService(db)
+    created = registry.create_enrollment(enrollment_payload(), ttl_seconds=600)
+    registry.approve(created.enrollment_id, created.pairing_code, "admin")
+    claimed = registry.claim(
+        created.enrollment_id,
+        created.pairing_code,
+        enrollment_payload().hardware_fingerprint,
+    )
+    robot = db.get(RobotORM, claimed.robot_id)
+    registry.apply_hello(robot, RobotAgentHello(
+        type="agent_hello",
+        protocol_version="1.0",
+        robot_id=claimed.robot_id,
+        boot_id="boot-map-unknown",
+        agent_version="0.5.0",
+        ros_distro="jazzy",
+        profile_version="turtlebot3-sim-v1",
+        capabilities=["navigation"],
+    ))
+    registry.apply_readiness(robot, RobotAgentReadiness(
+        type="agent_readiness",
+        protocol_version="1.0",
+        robot_id=claimed.robot_id,
+        status=RobotReadinessStatus.READY,
+        active_map_id="   ",
+        timestamp=utc_now(),
+    ))
+    DeliveryService(db).record_robot_connection(claimed.robot_id, True)
+
+    fleet = DeliveryService(db).list_fleet()[0]
+    assert fleet.active_map_id is None
+    assert fleet.available_now is False
+    assert fleet.accepts_deliveries is False
+    assert fleet.unavailable_reason == "ACTIVE_MAP_UNKNOWN"
+    with pytest.raises(HTTPException, match="ACTIVE_MAP_UNKNOWN"):
+        DeliveryService(db).select_delivery_robot(
+            claimed.robot_id,
+            "warehouse_map",
         )
 
 
@@ -584,6 +664,7 @@ def test_compatibility_migration_adds_registry_schema_to_existing_robot_table():
         "readiness_detail",
         "readiness_checks_json",
         "readiness_updated_at",
+        "active_map_id",
     } <= robot_columns
     with engine.connect() as connection:
         legacy = connection.execute(text(

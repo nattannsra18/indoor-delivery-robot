@@ -279,7 +279,9 @@ cd ../amr-navigation-vision-diagnostics
 Approve the requests in **Robot Registry**, then use `sim01` and `sim02` for
 automatic or explicit dispatch tests. Stop and restart an individual agent to
 exercise offline recovery; revoke its credential from the registry to verify
-that its active connection is terminated immediately.
+that its active connection is terminated immediately. For paired robots, fleet
+assignment uses the `active_map_id` reported by each Agent and rejects a robot
+until that map matches the delivery stations.
 
 See [Development guide](docs/DEVELOPMENT.md) for configuration, individual service commands, testing, and troubleshooting.
 

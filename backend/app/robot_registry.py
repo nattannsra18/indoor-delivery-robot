@@ -183,6 +183,7 @@ class RobotRegistryService:
         robot.name = item.display_name
         robot.enrollment_status = RobotEnrollmentStatus.PAIRED
         robot.readiness_status = RobotReadinessStatus.NOT_READY
+        robot.active_map_id = None
         robot.profile_version = item.profile_version
         robot.agent_version = item.agent_version
         robot.ros_distro = item.ros_distro
@@ -246,6 +247,10 @@ class RobotRegistryService:
         robot.capabilities_json = json.dumps(hello.capabilities, separators=(",", ":"))
         robot.enrollment_status = RobotEnrollmentStatus.PAIRED
         robot.readiness_status = RobotReadinessStatus.NOT_READY
+        robot.readiness_detail = "Waiting for a fresh Agent readiness report"
+        robot.readiness_checks_json = "[]"
+        robot.readiness_updated_at = None
+        robot.active_map_id = None
         self.db.commit()
 
     def apply_readiness(self, robot: RobotORM, readiness: RobotAgentReadiness) -> None:
@@ -256,6 +261,7 @@ class RobotRegistryService:
         robot.readiness_status = readiness.status
         robot.readiness_detail = readiness.detail
         robot.readiness_updated_at = readiness.timestamp
+        robot.active_map_id = readiness.active_map_id
         robot.readiness_checks_json = json.dumps(
             [item.model_dump(mode="json") for item in readiness.validation_results],
             separators=(",", ":"),
@@ -309,6 +315,7 @@ class RobotRegistryService:
             credential.revoked_at = now
         robot.enrollment_status = RobotEnrollmentStatus.REVOKED
         robot.readiness_status = RobotReadinessStatus.NOT_READY
+        robot.active_map_id = None
         robot.online = False
         robot.state = RobotState.OFFLINE
         self.db.flush()

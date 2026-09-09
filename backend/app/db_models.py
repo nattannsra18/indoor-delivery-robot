@@ -150,6 +150,7 @@ class RobotORM(Base):
     readiness_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    active_map_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
 class RobotEnrollmentORM(Base):

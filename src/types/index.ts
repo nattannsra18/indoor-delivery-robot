@@ -210,6 +210,7 @@ export type FleetUnavailableReason =
   | "ROBOT_NOT_PAIRED"
   | "ROBOT_NOT_READY"
   | "NAVIGATION_UNAVAILABLE"
+  | "ACTIVE_MAP_UNKNOWN"
   | "EMERGENCY_STOP_ACTIVE"
   | "MAPPING_ACTIVE";
 

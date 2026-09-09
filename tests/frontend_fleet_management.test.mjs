@@ -12,6 +12,7 @@ test("delivery creation supports automatic and explicit fleet assignment", () =>
   assert.match(page, /getFleet\(\)/);
   assert.match(page, /flow\.automaticAssignment/);
   assert.match(page, /item\.activeMapId !== pickupStation\.mapId/);
+  assert.match(page, /flow\.activeMapUnknown/);
   assert.match(page, /robotId: preview\.robotId/);
   assert.match(page, /preview\.queuePosition/);
   assert.match(page, /preview\.estimatedStartSeconds/);

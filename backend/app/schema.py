@@ -200,6 +200,10 @@ def apply_compatibility_migrations(engine: Engine) -> None:
                 connection.execute(text(
                     "ALTER TABLE robots ADD COLUMN readiness_updated_at TIMESTAMP WITH TIME ZONE"
                 ))
+            if "active_map_id" not in robot_columns:
+                connection.execute(text(
+                    "ALTER TABLE robots ADD COLUMN active_map_id VARCHAR(120)"
+                ))
             connection.execute(text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS ix_robots_serial_number ON robots (serial_number)"
             ))

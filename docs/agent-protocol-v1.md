@@ -56,6 +56,8 @@ After its ROS checks complete, the agent sends `agent_readiness` with a `READY`,
 
 The ROS validator evaluates declared capabilities only. It checks required Nav2 actions and services, fresh odometry, map, AMCL and diagnostics data, the `map -> odom -> base` TF chain, AMCL lifecycle state, and map storage configuration. The control plane stores the latest report and exposes it in Robot Registry so operators can see why a robot is not ready or degraded.
 
+For paired robots, `active_map_id` in this readiness message is authoritative for fleet assignment. The control plane persists it and selects a robot only when the reported map matches both delivery stations. It does not substitute the legacy `warehouse_map` default for a paired Agent. A new Agent boot, credential claim, or revoke clears the reported map until a fresh readiness message arrives.
+
 ## Command lifecycle
 
 New commands use an envelope containing `command_id`, `robot_id`, `issued_at`, `expires_at`, optional expected map/profile revisions, an action identifier, and an action-specific payload. Agents must reject expired commands and commands addressed to another robot.

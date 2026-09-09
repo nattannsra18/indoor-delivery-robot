@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
+import re
 from typing import Literal, Optional
 from pydantic import (
     BaseModel,
@@ -333,6 +334,18 @@ class RobotAgentReadiness(BaseModel):
     active_map_id: Optional[str] = Field(default=None, max_length=120)
     detail: Optional[str] = Field(default=None, max_length=500)
     timestamp: datetime
+
+    @field_validator("active_map_id")
+    @classmethod
+    def normalize_active_map_id(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,119}", normalized) is None:
+            raise ValueError("active_map_id contains unsupported characters")
+        return normalized
 
     @model_validator(mode="after")
     def validate_report_consistency(self) -> "RobotAgentReadiness":

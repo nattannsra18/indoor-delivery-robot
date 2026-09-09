@@ -276,6 +276,7 @@ def test_task_dispatch_uses_connected_ready_paired_robot():
                 online=True,
                 enrollment_status=RobotEnrollmentStatus.PAIRED,
                 readiness_status=RobotReadinessStatus.READY,
+                active_map_id="warehouse_map",
                 capabilities_json=json.dumps(["navigation"]),
             )
         )
@@ -301,6 +302,7 @@ def test_selected_robots_keep_independent_active_missions_and_queues():
                 online=True,
                 enrollment_status=RobotEnrollmentStatus.PAIRED,
                 readiness_status=RobotReadinessStatus.READY,
+                active_map_id="warehouse_map",
                 capabilities_json=json.dumps(["navigation", "diagnostics"]),
             ))
         db.commit()
@@ -356,6 +358,7 @@ def test_task_api_dispatches_navigation_commands_to_two_selected_robots():
                     online=True,
                     enrollment_status=RobotEnrollmentStatus.PAIRED,
                     readiness_status=RobotReadinessStatus.READY,
+                    active_map_id="warehouse_map",
                     capabilities_json=json.dumps(["navigation", "diagnostics"]),
                 ))
             db.commit()
@@ -417,6 +420,7 @@ def test_idle_robot_with_reserved_queue_is_not_reported_as_immediately_available
             online=True,
             enrollment_status=RobotEnrollmentStatus.PAIRED,
             readiness_status=RobotReadinessStatus.READY,
+            active_map_id="warehouse_map",
             capabilities_json=json.dumps(["navigation"]),
         ))
         db.commit()
@@ -458,6 +462,39 @@ def test_selected_robot_must_be_ready_navigation_capable_and_on_map():
         assert "ROBOT_NOT_READY" in rejected.value.detail
 
 
+def test_automatic_assignment_uses_each_agents_reported_active_map():
+    with Session() as db:
+        db.add_all([
+            RobotORM(
+                id="warehouse-agent",
+                name="Warehouse agent",
+                online=True,
+                enrollment_status=RobotEnrollmentStatus.PAIRED,
+                readiness_status=RobotReadinessStatus.READY,
+                active_map_id="warehouse_map",
+                capabilities_json=json.dumps(["navigation"]),
+            ),
+            RobotORM(
+                id="second-floor-agent",
+                name="Second floor agent",
+                online=True,
+                enrollment_status=RobotEnrollmentStatus.PAIRED,
+                readiness_status=RobotReadinessStatus.READY,
+                active_map_id="second_floor",
+                capabilities_json=json.dumps(["navigation"]),
+            ),
+        ])
+        db.commit()
+
+        service = DeliveryService(db)
+        assert service.select_delivery_robot(None, "warehouse_map").id == (
+            "warehouse-agent"
+        )
+        assert service.select_delivery_robot(None, "second_floor").id == (
+            "second-floor-agent"
+        )
+
+
 def test_robot_without_navigation_capability_is_rejected_from_delivery():
     with Session() as db:
         db.add(RobotORM(
@@ -466,6 +503,7 @@ def test_robot_without_navigation_capability_is_rejected_from_delivery():
             online=True,
             enrollment_status=RobotEnrollmentStatus.PAIRED,
             readiness_status=RobotReadinessStatus.READY,
+            active_map_id="warehouse_map",
             capabilities_json=json.dumps(["localization", "diagnostics"]),
         ))
         db.commit()

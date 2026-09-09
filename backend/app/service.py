@@ -245,6 +245,8 @@ class DeliveryService:
             reason = "ROBOT_NOT_READY"
         elif not is_legacy and "navigation" not in capabilities:
             reason = "NAVIGATION_UNAVAILABLE"
+        elif not is_legacy and not robot.active_map_id:
+            reason = "ACTIVE_MAP_UNKNOWN"
         elif EmergencyStopService(self.db).is_latched(robot.id):
             reason = "EMERGENCY_STOP_ACTIVE"
         elif mapping_store.is_active(robot.id):
@@ -261,10 +263,18 @@ class DeliveryService:
             enrollment_status=robot.enrollment_status,
             readiness_status=robot.readiness_status,
             capabilities=capabilities,
-            active_map_id=self.active_map_id(robot.id),
+            active_map_id=(
+                robot.active_map_id
+                if not is_legacy
+                else self.active_map_id(robot.id)
+            ),
             current_task_id=robot.current_task_id,
             queued_count=queued_count,
-            available_now=self._robot_available(robot) and queued_count == 0,
+            available_now=(
+                reason is None
+                and self._robot_available(robot)
+                and queued_count == 0
+            ),
             accepts_deliveries=reason is None,
             unavailable_reason=reason,
         )
@@ -318,7 +328,16 @@ class DeliveryService:
             )
         )
         selected = eligible[0][0]
-        return self._robot_or_404(selected.id, lock=lock) if lock else selected
+        if not lock:
+            return selected
+        locked = self._robot_or_404(selected.id, lock=True)
+        locked_fleet = self._fleet_robot(locked, allow_legacy=allow_legacy)
+        if not locked_fleet.accepts_deliveries or locked_fleet.active_map_id != map_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Selected robot readiness or active map changed during assignment",
+            )
+        return locked
 
     def get_robot(self, robot_id: str) -> RobotORM:
         return self._robot_or_404(robot_id)

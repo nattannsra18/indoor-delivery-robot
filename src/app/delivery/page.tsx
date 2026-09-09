@@ -187,9 +187,12 @@ export default function CreateDeliveryPage() {
           <select id="robot-assignment" value={robotId} disabled={fleetLoading} onChange={(event) => { setRobotId(event.target.value); setPreview(undefined); }} className={`${inputClass} mt-2`}>
             <option value="">{fleetLoading ? flow.fleetLoading : flow.automaticAssignment}</option>
             {fleet.map((item) => {
-              const mapMismatch = Boolean(pickupStation && item.activeMapId !== pickupStation.mapId);
+              const mapUnknown = !item.activeMapId;
+              const mapMismatch = Boolean(!mapUnknown && pickupStation && item.activeMapId !== pickupStation.mapId);
               const unavailable = !item.acceptsDeliveries || mapMismatch;
-              const suffix = mapMismatch
+              const suffix = mapUnknown
+                ? flow.activeMapUnknown
+                : mapMismatch
                 ? flow.differentMap
                 : !item.acceptsDeliveries
                   ? flow.robotUnavailable
