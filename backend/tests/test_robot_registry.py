@@ -149,12 +149,40 @@ def test_agent_hello_is_versioned_bound_to_identity_and_updates_observed_profile
             robot_id=claimed.robot_id,
             status=RobotReadinessStatus.READY,
             checks={"nav2": True, "localization": True, "map": True},
+            validation_results=[
+                {
+                    "check_id": "interface.navigate_action",
+                    "category": "INTERFACE",
+                    "status": "PASS",
+                    "message": "NavigateToPose action is available",
+                    "observed": "/navigate_to_pose",
+                }
+            ],
             active_map_id="warehouse_map",
+            detail="All 1 declared profile checks passed",
             timestamp=utc_now(),
         ),
     )
     ready = next(item for item in registry.list_registry() if item.id == claimed.robot_id)
     assert ready.readiness_status == RobotReadinessStatus.READY
+    assert ready.readiness_detail == "All 1 declared profile checks passed"
+    assert ready.readiness_updated_at is not None
+    assert ready.validation_results[0].check_id == "interface.navigate_action"
+
+    with pytest.raises(ValueError, match="failed profile checks require NOT_READY"):
+        RobotAgentReadiness(
+            type="agent_readiness",
+            protocol_version="1.0",
+            robot_id=claimed.robot_id,
+            status=RobotReadinessStatus.READY,
+            validation_results=[{
+                "check_id": "data.odom",
+                "category": "DATA",
+                "status": "FAIL",
+                "message": "Odometry topic has no fresh data",
+            }],
+            timestamp=utc_now(),
+        )
 
 
 def test_expired_pairing_code_and_revoked_credential_are_rejected():
@@ -548,7 +576,15 @@ def test_compatibility_migration_adds_registry_schema_to_existing_robot_table():
     robot_columns = {column["name"] for column in inspect(engine).get_columns("robots")}
     assert "robot_enrollments" in table_names
     assert "robot_credentials" in table_names
-    assert {"serial_number", "enrollment_status", "readiness_status", "capabilities_json"} <= robot_columns
+    assert {
+        "serial_number",
+        "enrollment_status",
+        "readiness_status",
+        "capabilities_json",
+        "readiness_detail",
+        "readiness_checks_json",
+        "readiness_updated_at",
+    } <= robot_columns
     with engine.connect() as connection:
         legacy = connection.execute(text(
             "SELECT enrollment_status, readiness_status FROM robots WHERE id = 'legacy-sim'"

@@ -5,7 +5,7 @@ import ActionToast from "@/components/ActionToast";
 import PageHeader from "@/components/PageHeader";
 import { useLocale } from "@/context/LocaleContext";
 import { approveRobotEnrollment, getFleet, getRobotEnrollments, getRobotRegistry, revokeRobotCredential } from "@/lib/api";
-import { formatDate, robotRegistryText, robotStateLabel } from "@/lib/i18n";
+import { formatDate, profileValidationMessage, robotRegistryText, robotStateLabel } from "@/lib/i18n";
 import type { FleetRobot, RobotEnrollment, RobotRegistryEntry } from "@/types";
 
 type Dialog = { kind: "approve"; enrollment: RobotEnrollment } | { kind: "revoke"; robot: RobotRegistryEntry };
@@ -160,6 +160,7 @@ export default function RobotRegistryPage() {
                   <FleetDetail label={copy.deliveryQueue} value={String(operational.queuedCount)} />
                   <FleetDetail label={copy.acceptingDeliveries} value={operational.acceptsDeliveries ? copy.acceptingDeliveries : copy.notAcceptingDeliveries} tone={operational.acceptsDeliveries ? "green" : "slate"} />
                 </dl>}
+                <ProfileValidation robot={robot} copy={copy} locale={locale} />
                 {robot.credentialVersion && !robot.credentialRevoked && <button type="button" onClick={() => setDialog({ kind: "revoke", robot })} className="mt-5 min-h-10 rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50">{copy.revoke}</button>}
               </li>;
               })}
@@ -185,6 +186,35 @@ export default function RobotRegistryPage() {
   );
 }
 
+function ProfileValidation({ robot, copy, locale }: { robot: RobotRegistryEntry; copy: StatusCopy; locale: "en" | "th" }) {
+  const passed = robot.validationResults.filter((result) => result.status === "PASS").length;
+  const summary = robot.validationResults.length > 0
+    ? copy.checksPassed.replace("{passed}", String(passed)).replace("{total}", String(robot.validationResults.length))
+    : copy.noValidation;
+  return <details className="mt-4 rounded-2xl border border-slate-200 bg-white">
+    <summary className="cursor-pointer list-none px-4 py-3 marker:hidden">
+      <div className="flex items-center justify-between gap-3">
+        <div><p className="text-sm font-bold text-slate-900">{copy.profileValidation}</p><p className="mt-0.5 text-xs text-slate-500">{locale === "en" ? (robot.readinessDetail ?? summary) : summary}</p></div>
+        <span className="shrink-0 text-xs font-semibold text-slate-500">{summary}</span>
+      </div>
+    </summary>
+    <div className="border-t border-slate-100 px-4 py-3">
+      {robot.readinessUpdatedAt && <p className="mb-3 text-xs text-slate-400">{copy.lastChecked.replace("{time}", formatDate(robot.readinessUpdatedAt, locale))}</p>}
+      {robot.validationResults.length === 0 ? <p className="text-sm text-slate-500">{copy.noValidation}</p> : <ul className="space-y-2">
+        {robot.validationResults.map((result) => <li key={result.checkId} className="flex items-start gap-3 rounded-xl bg-slate-50 p-3">
+          <ValidationBadge status={result.status} />
+          <div className="min-w-0"><p className="text-sm font-semibold text-slate-800">{profileValidationMessage(result.checkId, result.status, locale, result.message)}</p><p className="mt-0.5 font-mono text-[11px] text-slate-400">{result.category} · {result.checkId}</p>{result.observed && <p className="mt-1 text-xs text-slate-500">{copy.observed}: <span className="font-mono">{result.observed}</span></p>}</div>
+        </li>)}
+      </ul>}
+    </div>
+  </details>;
+}
+
+function ValidationBadge({ status }: { status: "PASS" | "WARN" | "FAIL" }) {
+  const tone = status === "PASS" ? "bg-emerald-100 text-emerald-700" : status === "WARN" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
+  return <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${tone}`}>{status}</span>;
+}
+
 function RegistrySection({ title, help, count, children }: { title: string; help: string; count: string; children: React.ReactNode }) {
   return <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"><header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-5 md:px-6"><div><h2 className="text-lg font-bold text-slate-950">{title}</h2><p className="mt-1 text-sm text-slate-500">{help}</p></div><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">{count}</span></header>{children}</section>;
 }
@@ -193,6 +223,11 @@ function Empty({ title, help }: { title: string; help: string }) { return <div c
 function Detail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) { return <div className="min-w-0"><dt className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</dt><dd title={value} className={`mt-1 truncate text-sm font-semibold text-slate-700 ${mono ? "font-mono" : ""}`}>{value}</dd></div>; }
 function FleetDetail({ label, value, tone = "slate" }: { label: string; value: string; tone?: "green" | "slate" }) { return <div className="min-w-0"><dt className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</dt><dd title={value} className={`mt-1 truncate text-xs font-bold ${tone === "green" ? "text-emerald-700" : "text-slate-700"}`}>{value}</dd></div>; }
 function StatusBadge({ value, tone }: { value: string; tone: "green" | "amber" | "blue" | "slate" }) { const styles = { green: "bg-emerald-50 text-emerald-700", amber: "bg-amber-50 text-amber-700", blue: "bg-blue-50 text-blue-700", slate: "bg-slate-100 text-slate-600" }; return <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${styles[tone]}`}>{value}</span>; }
-type StatusCopy = Record<"paired" | "revoked" | "pending" | "awaitingClaim" | "ready" | "degraded" | "notReady", string>;
+type StatusCopy = Record<
+  "paired" | "revoked" | "pending" | "awaitingClaim" | "ready" | "degraded" |
+  "notReady" | "checksPassed" | "noValidation" | "profileValidation" |
+  "lastChecked" | "observed",
+  string
+>;
 function enrollmentLabel(status: RobotRegistryEntry["enrollmentStatus"], copy: StatusCopy) { return status === "PAIRED" ? copy.paired : status === "REVOKED" ? copy.revoked : status === "PENDING" ? copy.pending : copy.awaitingClaim; }
 function readinessLabel(status: RobotRegistryEntry["readinessStatus"], copy: StatusCopy) { return status === "READY" ? copy.ready : status === "DEGRADED" ? copy.degraded : copy.notReady; }

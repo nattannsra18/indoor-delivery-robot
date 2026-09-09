@@ -22,6 +22,12 @@ test("delivery creation supports automatic and explicit fleet assignment", () =>
 
 test("robot registry loads operational fleet data", () => {
   const page = read("src/app/robots/page.tsx");
+  const api = read("src/lib/api.ts");
+  const types = read("src/types/index.ts");
   assert.match(page, /getFleet\(\)/);
   assert.match(page, /setFleet/);
+  assert.match(page, /ProfileValidation/);
+  assert.match(page, /robot\.validationResults/);
+  assert.match(api, /validation_results/);
+  assert.match(types, /interface RobotProfileValidationResult/);
 });

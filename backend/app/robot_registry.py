@@ -40,6 +40,14 @@ def _capabilities(raw: str) -> list[str]:
     return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
 
 
+def _validation_results(raw: str | None) -> list[dict]:
+    try:
+        value = json.loads(raw or "[]")
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return value if isinstance(value, list) else []
+
+
 def enrollment_summary(item: RobotEnrollmentORM) -> RobotEnrollmentSummary:
     return RobotEnrollmentSummary(
         id=item.id,
@@ -246,6 +254,12 @@ class RobotRegistryService:
         if robot.enrollment_status != RobotEnrollmentStatus.PAIRED:
             raise HTTPException(status.HTTP_409_CONFLICT, "Robot is not paired")
         robot.readiness_status = readiness.status
+        robot.readiness_detail = readiness.detail
+        robot.readiness_updated_at = readiness.timestamp
+        robot.readiness_checks_json = json.dumps(
+            [item.model_dump(mode="json") for item in readiness.validation_results],
+            separators=(",", ":"),
+        )
         self.db.commit()
 
     def list_registry(self) -> list[RobotRegistryEntry]:
@@ -273,6 +287,9 @@ class RobotRegistryService:
                     last_boot_id=robot.last_boot_id,
                     credential_version=credential.version if credential else None,
                     credential_revoked=bool(credential and credential.revoked_at),
+                    readiness_detail=robot.readiness_detail,
+                    readiness_updated_at=robot.readiness_updated_at,
+                    validation_results=_validation_results(robot.readiness_checks_json),
                 )
             )
         return result

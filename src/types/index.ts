@@ -234,6 +234,14 @@ export interface FleetRobot {
 export type RobotEnrollmentStatus = "UNPAIRED" | "PENDING" | "PAIRED" | "REVOKED";
 export type RobotReadinessStatus = "NOT_READY" | "READY" | "DEGRADED";
 
+export interface RobotProfileValidationResult {
+  checkId: string;
+  category: "INTERFACE" | "DATA" | "TF" | "LIFECYCLE" | "CAPABILITY";
+  status: "PASS" | "WARN" | "FAIL";
+  message: string;
+  observed?: string;
+}
+
 export interface RobotEnrollment {
   id: string;
   serialNumber: string;
@@ -265,6 +273,9 @@ export interface RobotRegistryEntry {
   lastBootId?: string;
   credentialVersion?: number;
   credentialRevoked: boolean;
+  readinessDetail?: string;
+  readinessUpdatedAt?: string;
+  validationResults: RobotProfileValidationResult[];
 }
 
 export interface NavigationFeedbackPose {

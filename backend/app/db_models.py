@@ -143,6 +143,13 @@ class RobotORM(Base):
     ros_distro: Mapped[str | None] = mapped_column(String(40), nullable=True)
     capabilities_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     last_boot_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    readiness_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    readiness_checks_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]", server_default="[]"
+    )
+    readiness_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class RobotEnrollmentORM(Base):

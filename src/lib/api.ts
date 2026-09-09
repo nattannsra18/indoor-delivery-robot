@@ -349,6 +349,15 @@ type ApiRobotRegistryEntry = {
   last_boot_id: string | null;
   credential_version: number | null;
   credential_revoked: boolean;
+  readiness_detail: string | null;
+  readiness_updated_at: string | null;
+  validation_results: Array<{
+    check_id: string;
+    category: "INTERFACE" | "DATA" | "TF" | "LIFECYCLE" | "CAPABILITY";
+    status: "PASS" | "WARN" | "FAIL";
+    message: string;
+    observed: string | null;
+  }>;
 };
 
 function toRobotEnrollment(item: ApiRobotEnrollment): RobotEnrollment {
@@ -385,6 +394,15 @@ function toRobotRegistryEntry(item: ApiRobotRegistryEntry): RobotRegistryEntry {
     lastBootId: item.last_boot_id ?? undefined,
     credentialVersion: item.credential_version ?? undefined,
     credentialRevoked: item.credential_revoked,
+    readinessDetail: item.readiness_detail ?? undefined,
+    readinessUpdatedAt: item.readiness_updated_at ?? undefined,
+    validationResults: item.validation_results.map((result) => ({
+      checkId: result.check_id,
+      category: result.category,
+      status: result.status,
+      message: result.message,
+      observed: result.observed ?? undefined,
+    })),
   };
 }
 

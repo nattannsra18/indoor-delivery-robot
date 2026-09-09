@@ -52,7 +52,9 @@ The first frame must arrive within five seconds:
 
 FastAPI rejects unknown protocol versions, mismatched robot identities, revoked credentials, and malformed hello frames before registering the connection.
 
-After its ROS checks complete, the agent sends `agent_readiness` with a `READY`, `NOT_READY`, or `DEGRADED` status, boolean checks such as `nav2`, `localization`, and `map`, and the active map ID. This state is independent from whether the socket is connected.
+After its ROS checks complete, the agent sends `agent_readiness` with a `READY`, `NOT_READY`, or `DEGRADED` status, the active map ID, and structured `validation_results`. Each result includes a stable `check_id`, category (`INTERFACE`, `DATA`, `TF`, `LIFECYCLE`, or `CAPABILITY`), status (`PASS`, `WARN`, or `FAIL`), human-readable message, and optional observed value. The legacy boolean `checks` object remains in the envelope for protocol compatibility. A failed required check must report `NOT_READY`, while a warning cannot report `READY`. Connection state and readiness remain independent.
+
+The ROS validator evaluates declared capabilities only. It checks required Nav2 actions and services, fresh odometry, map, AMCL and diagnostics data, the `map -> odom -> base` TF chain, AMCL lifecycle state, and map storage configuration. The control plane stores the latest report and exposes it in Robot Registry so operators can see why a robot is not ready or degraded.
 
 ## Command lifecycle
 

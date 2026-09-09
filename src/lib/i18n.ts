@@ -108,7 +108,7 @@ export const robotRegistryText = {
     robotsTitle: "Registered robots", robotsHelp: "Each robot uses an immutable ID and its own revocable credential.", robotCount: "{count} registered",
     loading: "Loading robot registry…", loadFailed: "Unable to load the robot registry.", retry: "Retry", emptyPending: "No pairing requests", emptyPendingHelp: "New robot agents will appear here after bootstrap enrollment.", emptyRobots: "No registered robots", emptyRobotsHelp: "Approve and claim a pairing request to register the first robot.",
     requested: "Requested", expires: "Expires", expired: "Expired", serial: "Serial", fingerprint: "Fingerprint (SHA-256)", agent: "Agent", profile: "Profile", capabilities: "Capabilities", approve: "Verify & approve", approving: "Approving…", code: "Pairing code", codeHelp: "Enter the 8-digit code displayed by this robot.", cancel: "Cancel", confirmApprove: "Approve pairing", approvedTitle: "Pairing approved", approvedBody: "The robot may now claim its individual credential.", approveFailedTitle: "Pairing approval failed",
-    online: "Connected", offline: "Disconnected", enrollment: "Enrollment", readiness: "Readiness", credential: "Credential", version: "Version {value}", noCredential: "Not issued", pending: "Pending approval", awaitingClaim: "Approved · awaiting claim", paired: "Paired", revoked: "Revoked", ready: "Ready", notReady: "Not ready", degraded: "Degraded", operationalState: "Robot state", activeMap: "Active map", deliveryQueue: "Delivery queue", acceptingDeliveries: "Accepting deliveries", notAcceptingDeliveries: "Unavailable", revoke: "Revoke credential", revoking: "Revoking…", revokeTitle: "Revoke this robot credential?", revokeBody: "The robot will disconnect and cannot reconnect until it is enrolled and paired again.", confirmRevoke: "Revoke access", revokedTitle: "Robot access revoked", revokedBody: "The credential is no longer accepted by the control plane.", revokeFailedTitle: "Credential revocation failed", close: "Close notification", protocolNote: "Security boundary: the bootstrap token can request pairing only. Operational connections require a unique per-robot credential and Agent Protocol v1 handshake.", unknown: "Not reported",
+    online: "Connected", offline: "Disconnected", enrollment: "Enrollment", readiness: "Readiness", credential: "Credential", version: "Version {value}", noCredential: "Not issued", pending: "Pending approval", awaitingClaim: "Approved · awaiting claim", paired: "Paired", revoked: "Revoked", ready: "Ready", notReady: "Not ready", degraded: "Degraded", operationalState: "Robot state", activeMap: "Active map", deliveryQueue: "Delivery queue", acceptingDeliveries: "Accepting deliveries", notAcceptingDeliveries: "Unavailable", profileValidation: "Profile validation", checksPassed: "{passed}/{total} checks passed", noValidation: "No validation report received", lastChecked: "Checked {time}", observed: "Observed", revoke: "Revoke credential", revoking: "Revoking…", revokeTitle: "Revoke this robot credential?", revokeBody: "The robot will disconnect and cannot reconnect until it is enrolled and paired again.", confirmRevoke: "Revoke access", revokedTitle: "Robot access revoked", revokedBody: "The credential is no longer accepted by the control plane.", revokeFailedTitle: "Credential revocation failed", close: "Close notification", protocolNote: "Security boundary: the bootstrap token can request pairing only. Operational connections require a unique per-robot credential and Agent Protocol v1 handshake.", unknown: "Not reported",
   },
   th: {
     title: "ทะเบียนหุ่นยนต์", description: "จับคู่ Robot Agent และตรวจสอบสถานะตัวตน การเชื่อมต่อ และความพร้อมแยกจากกัน",
@@ -116,9 +116,53 @@ export const robotRegistryText = {
     robotsTitle: "หุ่นยนต์ที่ลงทะเบียน", robotsHelp: "หุ่นยนต์แต่ละตัวมี ID ถาวรและ credential ที่เพิกถอนได้เป็นของตนเอง", robotCount: "ลงทะเบียนแล้ว {count} ตัว",
     loading: "กำลังโหลดทะเบียนหุ่นยนต์…", loadFailed: "ไม่สามารถโหลดทะเบียนหุ่นยนต์ได้", retry: "ลองใหม่", emptyPending: "ไม่มีคำขอจับคู่", emptyPendingHelp: "Robot Agent ใหม่จะแสดงที่นี่หลังส่งคำขอลงทะเบียนด้วย bootstrap credential", emptyRobots: "ยังไม่มีหุ่นยนต์ที่ลงทะเบียน", emptyRobotsHelp: "อนุมัติและให้ Agent รับ credential เพื่อเพิ่มหุ่นยนต์ตัวแรก",
     requested: "ส่งคำขอเมื่อ", expires: "หมดอายุ", expired: "หมดอายุแล้ว", serial: "หมายเลขเครื่อง", fingerprint: "Fingerprint (SHA-256)", agent: "Agent", profile: "โปรไฟล์", capabilities: "ความสามารถ", approve: "ตรวจสอบและอนุมัติ", approving: "กำลังอนุมัติ…", code: "รหัสจับคู่", codeHelp: "กรอกรหัส 8 หลักที่แสดงอยู่บนหุ่นยนต์ตัวนี้", cancel: "ยกเลิก", confirmApprove: "อนุมัติการจับคู่", approvedTitle: "อนุมัติการจับคู่แล้ว", approvedBody: "Robot Agent สามารถรับ credential เฉพาะเครื่องได้แล้ว", approveFailedTitle: "อนุมัติการจับคู่ไม่สำเร็จ",
-    online: "เชื่อมต่อ", offline: "ไม่ได้เชื่อมต่อ", enrollment: "การลงทะเบียน", readiness: "ความพร้อม", credential: "Credential", version: "เวอร์ชัน {value}", noCredential: "ยังไม่ออกให้", pending: "รออนุมัติ", awaitingClaim: "อนุมัติแล้ว · รอ Agent รับสิทธิ์", paired: "จับคู่แล้ว", revoked: "เพิกถอนแล้ว", ready: "พร้อม", notReady: "ยังไม่พร้อม", degraded: "ประสิทธิภาพลดลง", operationalState: "สถานะหุ่นยนต์", activeMap: "แผนที่ที่ใช้งาน", deliveryQueue: "คิวจัดส่ง", acceptingDeliveries: "รับงานจัดส่ง", notAcceptingDeliveries: "ไม่พร้อมรับงาน", revoke: "เพิกถอน credential", revoking: "กำลังเพิกถอน…", revokeTitle: "เพิกถอน credential ของหุ่นยนต์หรือไม่", revokeBody: "หุ่นยนต์จะหลุดการเชื่อมต่อและเชื่อมใหม่ไม่ได้จนกว่าจะลงทะเบียนและจับคู่อีกครั้ง", confirmRevoke: "เพิกถอนสิทธิ์", revokedTitle: "เพิกถอนสิทธิ์หุ่นยนต์แล้ว", revokedBody: "Control plane จะไม่ยอมรับ credential นี้อีก", revokeFailedTitle: "เพิกถอน credential ไม่สำเร็จ", close: "ปิดการแจ้งเตือน", protocolNote: "ขอบเขตความปลอดภัย: bootstrap token ใช้ส่งคำขอจับคู่เท่านั้น การเชื่อมต่อทำงานต้องใช้ credential แยกต่อหุ่นและผ่าน Agent Protocol v1 handshake", unknown: "ยังไม่รายงาน",
+    online: "เชื่อมต่อ", offline: "ไม่ได้เชื่อมต่อ", enrollment: "การลงทะเบียน", readiness: "ความพร้อม", credential: "Credential", version: "เวอร์ชัน {value}", noCredential: "ยังไม่ออกให้", pending: "รออนุมัติ", awaitingClaim: "อนุมัติแล้ว · รอ Agent รับสิทธิ์", paired: "จับคู่แล้ว", revoked: "เพิกถอนแล้ว", ready: "พร้อม", notReady: "ยังไม่พร้อม", degraded: "ประสิทธิภาพลดลง", operationalState: "สถานะหุ่นยนต์", activeMap: "แผนที่ที่ใช้งาน", deliveryQueue: "คิวจัดส่ง", acceptingDeliveries: "รับงานจัดส่ง", notAcceptingDeliveries: "ไม่พร้อมรับงาน", profileValidation: "ผลตรวจ Robot Profile", checksPassed: "ผ่าน {passed}/{total} รายการ", noValidation: "ยังไม่ได้รับรายงานผลตรวจ", lastChecked: "ตรวจเมื่อ {time}", observed: "ค่าที่ตรวจพบ", revoke: "เพิกถอน credential", revoking: "กำลังเพิกถอน…", revokeTitle: "เพิกถอน credential ของหุ่นยนต์หรือไม่", revokeBody: "หุ่นยนต์จะหลุดการเชื่อมต่อและเชื่อมใหม่ไม่ได้จนกว่าจะลงทะเบียนและจับคู่อีกครั้ง", confirmRevoke: "เพิกถอนสิทธิ์", revokedTitle: "เพิกถอนสิทธิ์หุ่นยนต์แล้ว", revokedBody: "Control plane จะไม่ยอมรับ credential นี้อีก", revokeFailedTitle: "เพิกถอน credential ไม่สำเร็จ", close: "ปิดการแจ้งเตือน", protocolNote: "ขอบเขตความปลอดภัย: bootstrap token ใช้ส่งคำขอจับคู่เท่านั้น การเชื่อมต่อทำงานต้องใช้ credential แยกต่อหุ่นและผ่าน Agent Protocol v1 handshake", unknown: "ยังไม่รายงาน",
   },
 } as const;
+
+const profileValidationMessages = {
+  en: {
+    "interface.navigate_action": ["NavigateToPose action is unavailable", "NavigateToPose action is available"],
+    "interface.compute_path_action": ["ComputePathToPose action is unavailable", "ComputePathToPose action is available"],
+    "interface.global_localization_service": ["Global localization service is unavailable", "Global localization service is available"],
+    "interface.load_map_service": ["LoadMap service is unavailable", "LoadMap service is available"],
+    "data.odom": ["Odometry topic has no fresh data", "Odometry topic is fresh"],
+    "data.amcl_pose": ["AMCL pose topic has no fresh data", "AMCL pose topic is fresh"],
+    "data.diagnostics": ["Diagnostics topic has no fresh data", "Diagnostics topic is fresh"],
+    "data.map": ["Occupancy map has not been received", "Occupancy map has been received"],
+    "tf.map_to_odom": ["TF map to odom is unavailable", "TF map to odom is connected"],
+    "tf.odom_to_base": ["TF odom to base is unavailable", "TF odom to base is connected"],
+    "lifecycle.amcl": ["AMCL lifecycle is not active", "AMCL lifecycle is active"],
+    "capability.mapping_storage": ["Map storage directory is not configured", "Writable map storage is configured"],
+    "capability.fleet_lab_profile": ["Fleet Lab profile is not configured", "Fleet Lab profile is configured"],
+  },
+  th: {
+    "interface.navigate_action": ["ไม่พบ NavigateToPose action", "พร้อมใช้งาน NavigateToPose action"],
+    "interface.compute_path_action": ["ไม่พบ ComputePathToPose action", "พร้อมใช้งาน ComputePathToPose action"],
+    "interface.global_localization_service": ["ไม่พบ Global localization service", "พร้อมใช้งาน Global localization service"],
+    "interface.load_map_service": ["ไม่พบ LoadMap service", "พร้อมใช้งาน LoadMap service"],
+    "data.odom": ["ไม่มีข้อมูล Odometry ที่ใหม่เพียงพอ", "ข้อมูล Odometry เป็นปัจจุบัน"],
+    "data.amcl_pose": ["ไม่มีข้อมูล AMCL pose ที่ใหม่เพียงพอ", "ข้อมูล AMCL pose เป็นปัจจุบัน"],
+    "data.diagnostics": ["ไม่มีข้อมูล Diagnostics ที่ใหม่เพียงพอ", "ข้อมูล Diagnostics เป็นปัจจุบัน"],
+    "data.map": ["ยังไม่ได้รับ Occupancy map", "ได้รับ Occupancy map แล้ว"],
+    "tf.map_to_odom": ["ไม่พบ TF จาก map ไป odom", "TF จาก map ไป odom เชื่อมต่อแล้ว"],
+    "tf.odom_to_base": ["ไม่พบ TF จาก odom ไป base", "TF จาก odom ไป base เชื่อมต่อแล้ว"],
+    "lifecycle.amcl": ["AMCL lifecycle ยังไม่ Active", "AMCL lifecycle อยู่ในสถานะ Active"],
+    "capability.mapping_storage": ["ยังไม่ได้กำหนดที่จัดเก็บแผนที่", "กำหนดที่จัดเก็บแผนที่แล้ว"],
+    "capability.fleet_lab_profile": ["ยังไม่ได้กำหนด Fleet Lab profile", "กำหนด Fleet Lab profile แล้ว"],
+  },
+} as const;
+
+export function profileValidationMessage(checkId: string, status: "PASS" | "WARN" | "FAIL", locale: Locale, fallback: string) {
+  const messages = profileValidationMessages[locale] as Record<string, readonly [string, string]>;
+  const known = messages[checkId];
+  if (known) return known[status === "PASS" ? 1 : 0];
+  if (checkId.startsWith("capability.") && status === "WARN") {
+    const capability = checkId.slice("capability.".length);
+    return locale === "th" ? `Capability ${capability} ยังไม่มี validation contract` : `Capability ${capability} has no validator contract`;
+  }
+  return fallback;
+}
 
 export const accountRequestNoticeText: Record<Locale, Record<string, string>> = {
   en: {

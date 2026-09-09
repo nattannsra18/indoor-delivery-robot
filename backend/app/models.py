@@ -308,6 +308,16 @@ class RobotAgentHello(BaseModel):
         return normalized
 
 
+class RobotProfileValidationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    check_id: str = Field(min_length=1, max_length=100, pattern=r"^[a-z0-9_.-]+$")
+    category: Literal["INTERFACE", "DATA", "TF", "LIFECYCLE", "CAPABILITY"]
+    status: Literal["PASS", "WARN", "FAIL"]
+    message: str = Field(min_length=1, max_length=300)
+    observed: Optional[str] = Field(default=None, max_length=200)
+
+
 class RobotAgentReadiness(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -316,9 +326,22 @@ class RobotAgentReadiness(BaseModel):
     robot_id: str = Field(min_length=1, max_length=40)
     status: RobotReadinessStatus
     checks: dict[str, bool] = Field(default_factory=dict, max_length=32)
+    validation_results: list[RobotProfileValidationResult] = Field(
+        default_factory=list,
+        max_length=64,
+    )
     active_map_id: Optional[str] = Field(default=None, max_length=120)
     detail: Optional[str] = Field(default=None, max_length=500)
     timestamp: datetime
+
+    @model_validator(mode="after")
+    def validate_report_consistency(self) -> "RobotAgentReadiness":
+        statuses = {item.status for item in self.validation_results}
+        if "FAIL" in statuses and self.status != RobotReadinessStatus.NOT_READY:
+            raise ValueError("failed profile checks require NOT_READY status")
+        if "WARN" in statuses and self.status == RobotReadinessStatus.READY:
+            raise ValueError("warning profile checks cannot report READY status")
+        return self
 
 
 class RobotEnrollmentRequest(BaseModel):
@@ -399,6 +422,9 @@ class RobotRegistryEntry(BaseModel):
     last_boot_id: Optional[str] = None
     credential_version: Optional[int] = None
     credential_revoked: bool = False
+    readiness_detail: Optional[str] = None
+    readiness_updated_at: Optional[datetime] = None
+    validation_results: list[RobotProfileValidationResult] = Field(default_factory=list)
 
 
 class RobotCommandEnvelope(BaseModel):

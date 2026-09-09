@@ -189,6 +189,17 @@ def apply_compatibility_migrations(engine: Engine) -> None:
                 ))
             if "last_boot_id" not in robot_columns:
                 connection.execute(text("ALTER TABLE robots ADD COLUMN last_boot_id VARCHAR(100)"))
+            if "readiness_detail" not in robot_columns:
+                connection.execute(text("ALTER TABLE robots ADD COLUMN readiness_detail TEXT"))
+            if "readiness_checks_json" not in robot_columns:
+                connection.execute(text(
+                    "ALTER TABLE robots ADD COLUMN readiness_checks_json "
+                    "TEXT NOT NULL DEFAULT '[]'"
+                ))
+            if "readiness_updated_at" not in robot_columns:
+                connection.execute(text(
+                    "ALTER TABLE robots ADD COLUMN readiness_updated_at TIMESTAMP WITH TIME ZONE"
+                ))
             connection.execute(text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS ix_robots_serial_number ON robots (serial_number)"
             ))
