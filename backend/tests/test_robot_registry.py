@@ -437,6 +437,53 @@ def test_primary_robot_prefers_connected_ready_pair_over_legacy_seed():
     assert service.primary_robot().id == claimed.robot_id
 
 
+def test_startup_reconciliation_clears_only_stale_paired_connections():
+    db = session()
+    legacy = RobotORM(id="robot01", name="Legacy simulator", online=True)
+    paired = RobotORM(
+        id="paired-agent",
+        name="Paired Agent",
+        online=True,
+        state="IDLE",
+        enrollment_status=RobotEnrollmentStatus.PAIRED,
+    )
+    db.add_all([legacy, paired])
+    db.commit()
+
+    DeliveryService(db).clear_stale_paired_connections()
+
+    assert legacy.online is True
+    assert paired.online is False
+    assert paired.state.value == "OFFLINE"
+
+
+def test_live_connection_wins_over_stale_ready_database_record(monkeypatch):
+    db = session()
+    stale = RobotORM(
+        id="a-stale-agent",
+        name="Stale Agent",
+        online=True,
+        enrollment_status=RobotEnrollmentStatus.PAIRED,
+        readiness_status=RobotReadinessStatus.READY,
+    )
+    connected = RobotORM(
+        id="z-connected-agent",
+        name="Connected Agent",
+        online=True,
+        enrollment_status=RobotEnrollmentStatus.PAIRED,
+        readiness_status=RobotReadinessStatus.NOT_READY,
+    )
+    db.add_all([stale, connected])
+    db.commit()
+    monkeypatch.setattr(
+        robot_connection_manager,
+        "connected_robot_ids",
+        lambda: [connected.id],
+    )
+
+    assert DeliveryService(db).primary_robot().id == connected.id
+
+
 class StubSocket:
     def __init__(self, token: str, messages: list[dict]):
         self.headers = {"authorization": f"Bearer {token}"}

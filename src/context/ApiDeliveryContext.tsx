@@ -470,15 +470,19 @@ export function ApiDeliveryProvider({
             window.dispatchEvent(new CustomEvent("idr:account-request"));
             window.dispatchEvent(new CustomEvent("idr:notification"));
           } else if (message.type === "robot_telemetry") {
-            const data = (message as { data?: { x?: unknown; y?: unknown; yaw?: unknown; last_seen?: unknown } }).data;
+            const telemetryMessage = message as {
+              robot_id?: unknown;
+              data?: { x?: unknown; y?: unknown; yaw?: unknown; last_seen?: unknown };
+            };
+            const data = telemetryMessage.data;
             if (data && typeof data.x === "number" && typeof data.y === "number" && typeof data.yaw === "number") {
-              setRobot((current) => ({
-                ...current,
-                x: data.x as number,
-                y: data.y as number,
-                yaw: data.yaw as number,
-                lastSeen: typeof data.last_seen === "string" ? data.last_seen : current.lastSeen,
-              }));
+              setRobot((current) => telemetryMessage.robot_id === current.id ? ({
+                  ...current,
+                  x: data.x as number,
+                  y: data.y as number,
+                  yaw: data.yaw as number,
+                  lastSeen: typeof data.last_seen === "string" ? data.last_seen : current.lastSeen,
+                }) : current);
             }
           } else if (message.type === "map_updated") {
             void refreshMap();

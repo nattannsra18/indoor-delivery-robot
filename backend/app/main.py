@@ -28,6 +28,7 @@ from .seed import seed_database
 from .auth import bootstrap_admin
 from .config import security_settings
 from .schema import apply_compatibility_migrations
+from .service import DeliveryService
 
 
 @asynccontextmanager
@@ -38,6 +39,7 @@ async def lifespan(_: FastAPI):
     with SessionLocal() as db:
         seed_database(db)
         bootstrap_admin(db)
+        DeliveryService(db).clear_stale_paired_connections()
 
     yield
 

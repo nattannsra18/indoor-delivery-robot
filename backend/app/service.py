@@ -375,7 +375,47 @@ class DeliveryService:
         return len(queued) + 1, wait_seconds
 
     def primary_robot(self) -> RobotORM:
+        # Prefer an Agent that is connected in this FastAPI process. Persisted
+        # online flags can be stale after a server restart and must not route
+        # map or localization commands to an old Fleet Lab record.
+        from .websocket_manager import robot_connection_manager
+
+        connected_ids = set(robot_connection_manager.connected_robot_ids())
+        if connected_ids:
+            connected = [
+                robot for robot in self.repo.list_robots()
+                if robot.id in connected_ids
+            ]
+            if connected:
+                connected.sort(
+                    key=lambda robot: (
+                        0 if robot.current_task_id is not None else 1,
+                        0 if (
+                            robot.enrollment_status
+                            == RobotEnrollmentStatus.PAIRED
+                            and robot.readiness_status
+                            == RobotReadinessStatus.READY
+                        ) else 1,
+                        0 if robot.enrollment_status == RobotEnrollmentStatus.PAIRED else 1,
+                        robot.id,
+                    )
+                )
+                return connected[0]
         return self._robot_or_404()
+
+    def clear_stale_paired_connections(self) -> None:
+        """Fail closed after backend restart without emitting fake disconnects."""
+        changed = False
+        for robot in self.repo.list_robots():
+            if (
+                robot.enrollment_status == RobotEnrollmentStatus.PAIRED
+                and robot.online
+            ):
+                robot.online = False
+                robot.state = RobotState.OFFLINE
+                changed = True
+        if changed:
+            self.db.commit()
 
     def update_robot_telemetry(
         self,

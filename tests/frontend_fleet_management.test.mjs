@@ -48,3 +48,8 @@ test("robot registry loads operational fleet data", () => {
   assert.match(api, /validation_results/);
   assert.match(types, /interface RobotProfileValidationResult/);
 });
+
+test("dashboard telemetry cannot overwrite a different selected robot", () => {
+  const context = read("src/context/ApiDeliveryContext.tsx");
+  assert.match(context, /telemetryMessage\.robot_id === current\.id/);
+});
