@@ -173,7 +173,12 @@ async def preview_task_route(
             status_code=status.HTTP_409_CONFLICT,
             detail="Pickup and destination must belong to the same map",
         )
-    robot = service.select_delivery_robot(payload.robot_id, pickup.map_id)
+    robot = service.select_delivery_robot(
+        payload.robot_id,
+        pickup.map_id,
+        pickup_x=pickup.x,
+        pickup_y=pickup.y,
+    )
     if mapping_store.is_active(robot.id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -313,7 +318,12 @@ async def create_task(
             status_code=status.HTTP_409_CONFLICT,
             detail="Pickup and destination must belong to the same map",
         )
-    robot = service.select_delivery_robot(payload.robot_id, pickup.map_id)
+    robot = service.select_delivery_robot(
+        payload.robot_id,
+        pickup.map_id,
+        pickup_x=pickup.x,
+        pickup_y=pickup.y,
+    )
     if mapping_store.is_active(robot.id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

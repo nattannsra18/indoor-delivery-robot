@@ -74,6 +74,9 @@ type ApiFleetRobot = {
   state: FleetRobot["state"];
   battery: number;
   battery_source: FleetRobot["batterySource"];
+  x: number;
+  y: number;
+  yaw: number;
   enrollment_status: FleetRobot["enrollmentStatus"];
   readiness_status: FleetRobot["readinessStatus"];
   capabilities: string[];
@@ -430,6 +433,9 @@ export async function getFleet(): Promise<FleetRobot[]> {
     state: robot.state,
     battery: robot.battery,
     batterySource: robot.battery_source,
+    x: robot.x,
+    y: robot.y,
+    yaw: robot.yaw,
     enrollmentStatus: robot.enrollment_status,
     readinessStatus: robot.readiness_status,
     capabilities: robot.capabilities,

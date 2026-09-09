@@ -495,6 +495,50 @@ def test_automatic_assignment_uses_each_agents_reported_active_map():
         )
 
 
+def test_automatic_assignment_prefers_nearest_available_robot_to_pickup():
+    with Session() as db:
+        db.add_all([
+            RobotORM(
+                id="a-far-agent",
+                name="Far agent",
+                online=True,
+                x=8.0,
+                y=6.0,
+                enrollment_status=RobotEnrollmentStatus.PAIRED,
+                readiness_status=RobotReadinessStatus.READY,
+                active_map_id="warehouse_map",
+                capabilities_json=json.dumps(["navigation"]),
+            ),
+            RobotORM(
+                id="z-near-agent",
+                name="Near agent",
+                online=True,
+                x=1.5,
+                y=1.0,
+                enrollment_status=RobotEnrollmentStatus.PAIRED,
+                readiness_status=RobotReadinessStatus.READY,
+                active_map_id="warehouse_map",
+                capabilities_json=json.dumps(["navigation"]),
+            ),
+        ])
+        db.commit()
+
+        service = DeliveryService(db)
+        selected = service.select_delivery_robot(
+            None,
+            "warehouse_map",
+            pickup_x=1.0,
+            pickup_y=1.0,
+        )
+
+        assert selected.id == "z-near-agent"
+        fleet_robot = next(
+            item for item in service.list_fleet()
+            if item.id == selected.id
+        )
+        assert (fleet_robot.x, fleet_robot.y) == (1.5, 1.0)
+
+
 def test_robot_without_navigation_capability_is_rejected_from_delivery():
     with Session() as db:
         db.add(RobotORM(

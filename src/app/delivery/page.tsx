@@ -71,6 +71,19 @@ export default function CreateDeliveryPage() {
 
   const pickupStation = useMemo(() => stations.find((item) => item.id === pickup), [pickup, stations]);
   const destinationStation = useMemo(() => stations.find((item) => item.id === destination), [destination, stations]);
+  const rankedFleet = useMemo(() => [...fleet].sort((left, right) => {
+    const leftEligible = left.acceptsDeliveries && (!pickupStation || left.activeMapId === pickupStation.mapId);
+    const rightEligible = right.acceptsDeliveries && (!pickupStation || right.activeMapId === pickupStation.mapId);
+    if (leftEligible !== rightEligible) return leftEligible ? -1 : 1;
+    if (left.availableNow !== right.availableNow) return left.availableNow ? -1 : 1;
+    if (left.queuedCount !== right.queuedCount) return left.queuedCount - right.queuedCount;
+    if (pickupStation) {
+      const leftDistance = Math.hypot(left.x - pickupStation.x, left.y - pickupStation.y);
+      const rightDistance = Math.hypot(right.x - pickupStation.x, right.y - pickupStation.y);
+      if (leftDistance !== rightDistance) return leftDistance - rightDistance;
+    }
+    return left.id.localeCompare(right.id);
+  }), [fleet, pickupStation]);
   const canPlan = Boolean(pickup && destination && pickup !== destination && backendOnline && occupancyMap && !emergencyStop?.latched);
 
   useEffect(() => {
@@ -186,17 +199,25 @@ export default function CreateDeliveryPage() {
           <label className="block text-sm font-semibold text-slate-700" htmlFor="robot-assignment">{flow.robotAssignment}</label>
           <select id="robot-assignment" value={robotId} disabled={fleetLoading} onChange={(event) => { setRobotId(event.target.value); setPreview(undefined); }} className={`${inputClass} mt-2`}>
             <option value="">{fleetLoading ? flow.fleetLoading : flow.automaticAssignment}</option>
-            {fleet.map((item) => {
+            {rankedFleet.map((item) => {
               const mapUnknown = !item.activeMapId;
               const mapMismatch = Boolean(!mapUnknown && pickupStation && item.activeMapId !== pickupStation.mapId);
               const unavailable = !item.acceptsDeliveries || mapMismatch;
+              const pickupDistance = pickupStation
+                ? Math.hypot(item.x - pickupStation.x, item.y - pickupStation.y)
+                : undefined;
               const suffix = mapUnknown
                 ? flow.activeMapUnknown
                 : mapMismatch
                 ? flow.differentMap
                 : !item.acceptsDeliveries
                   ? flow.robotUnavailable
-                  : flow.queueForRobot.replace("{count}", String(item.queuedCount));
+                  : [
+                      pickupDistance === undefined
+                        ? undefined
+                        : flow.distanceToPickup.replace("{distance}", pickupDistance.toFixed(1)),
+                      flow.queueForRobot.replace("{count}", String(item.queuedCount)),
+                    ].filter(Boolean).join(" · ");
               return <option key={item.id} value={item.id} disabled={unavailable}>{item.name} · {suffix}</option>;
             })}
           </select>

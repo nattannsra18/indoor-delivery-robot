@@ -12,6 +12,8 @@ test("delivery creation supports automatic and explicit fleet assignment", () =>
   assert.match(page, /getFleet\(\)/);
   assert.match(page, /flow\.automaticAssignment/);
   assert.match(page, /item\.activeMapId !== pickupStation\.mapId/);
+  assert.match(page, /Math\.hypot\(left\.x - pickupStation\.x/);
+  assert.match(page, /flow\.distanceToPickup/);
   assert.match(page, /flow\.activeMapUnknown/);
   assert.match(page, /robotId: preview\.robotId/);
   assert.match(page, /preview\.queuePosition/);
@@ -19,6 +21,20 @@ test("delivery creation supports automatic and explicit fleet assignment", () =>
   assert.match(api, /"\/api\/robots\/fleet"/);
   assert.match(api, /robot_id: input\.robotId/);
   assert.match(types, /interface FleetRobot/);
+  assert.match(types, /x: number;/);
+});
+
+test("admin dashboard shows a refreshable selectable fleet overview", () => {
+  const dashboard = read("src/app/page.tsx");
+  const fleet = read("src/components/FleetOverview.tsx");
+
+  assert.match(dashboard, /<FleetOverview \/>/);
+  assert.match(fleet, /getFleet\(\)/);
+  assert.match(fleet, /REFRESH_INTERVAL_MS = 3000/);
+  assert.match(fleet, /aria-pressed=\{active\}/);
+  assert.match(fleet, /selected\.x\.toFixed\(2\)/);
+  assert.match(fleet, /selected\.activeMapId/);
+  assert.match(fleet, /selected\.currentTaskId/);
 });
 
 test("robot registry loads operational fleet data", () => {

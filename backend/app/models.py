@@ -277,6 +277,9 @@ class FleetRobot(BaseModel):
     state: RobotState
     battery: int = Field(ge=0, le=100)
     battery_source: BatterySource
+    x: float
+    y: float
+    yaw: float
     enrollment_status: RobotEnrollmentStatus
     readiness_status: RobotReadinessStatus
     capabilities: list[str] = Field(default_factory=list)

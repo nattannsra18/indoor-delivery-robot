@@ -260,6 +260,9 @@ class DeliveryService:
             state=robot.state,
             battery=robot.battery,
             battery_source=robot.battery_source,
+            x=robot.x,
+            y=robot.y,
+            yaw=robot.yaw,
             enrollment_status=robot.enrollment_status,
             readiness_status=robot.readiness_status,
             capabilities=capabilities,
@@ -284,6 +287,8 @@ class DeliveryService:
         requested_robot_id: str | None,
         map_id: str,
         *,
+        pickup_x: float | None = None,
+        pickup_y: float | None = None,
         lock: bool = False,
     ) -> RobotORM:
         robots = self.repo.list_robots()
@@ -324,6 +329,14 @@ class DeliveryService:
             key=lambda item: (
                 0 if item[1].available_now else 1,
                 item[1].queued_count,
+                (
+                    math.hypot(
+                        item[0].x - pickup_x,
+                        item[0].y - pickup_y,
+                    )
+                    if pickup_x is not None and pickup_y is not None
+                    else math.inf
+                ),
                 item[0].id,
             )
         )
@@ -752,6 +765,8 @@ class DeliveryService:
         robot = self.select_delivery_robot(
             robot_id or payload.robot_id,
             pickup.map_id,
+            pickup_x=pickup.x,
+            pickup_y=pickup.y,
             lock=True,
         )
 

@@ -221,6 +221,9 @@ export interface FleetRobot {
   state: RobotState;
   battery: number;
   batterySource: BatterySource;
+  x: number;
+  y: number;
+  yaw: number;
   enrollmentStatus: RobotEnrollmentStatus;
   readinessStatus: RobotReadinessStatus;
   capabilities: string[];

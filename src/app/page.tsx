@@ -10,6 +10,7 @@ import NavigationMetrics from "@/components/NavigationMetrics";
 import EmergencyStopControl from "@/components/EmergencyStopControl";
 import DiagnosticsCards from "@/components/DiagnosticsCards";
 import UserDashboard from "@/components/UserDashboard";
+import FleetOverview from "@/components/FleetOverview";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useAuth } from "@/context/AuthContext";
 import { useLocale } from "@/context/LocaleContext";
@@ -63,6 +64,8 @@ export default function DashboardPage() {
       <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{ui.controlAndSafety}</p>
       <EmergencyStopControl />
     </section>
+
+    <FleetOverview />
 
     <section aria-label={ui.liveOperations} className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <OverviewCard icon="robot" label={ui.robotAvailability} value={robot.online ? ui.online : ui.offline} detail={`${robot.name} · ${robot.batterySource === "SIMULATED" ? ui.simulatedCharge : robot.batterySource === "SENSOR" ? `${robot.battery}%` : ui.batteryUnavailable}`} tone={robot.online ? "emerald" : "red"} />
