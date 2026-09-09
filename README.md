@@ -296,6 +296,19 @@ See the [Production TLS and network deployment guide](docs/PRODUCTION_DEPLOYMENT
 for public-domain and private-LAN setup, secret generation, firewall rules,
 certificate trust, deployment commands, and verification.
 
+## Physical robot integration
+
+New chassis implementations target the versioned
+[Hardware Interface Contract](docs/HARDWARE_INTERFACE_CONTRACT.md). It defines
+the required ROS topics, actions, services, TF ownership, safety boundary,
+network behavior, capability rules, and acceptance gates from static review
+through physical stopping-distance and E-stop tests.
+
+Simulation and Agent readiness can verify the software boundary, but motor
+direction, encoder scale, wheel slip, sensor mounting, stopping distance,
+wireless roaming, and the certified physical E-stop circuit remain explicit
+per-chassis acceptance items.
+
 ## Quality checks
 
 Run the development stack before the browser smoke tests. Install the Chromium runtime once with `npx playwright install chromium`.

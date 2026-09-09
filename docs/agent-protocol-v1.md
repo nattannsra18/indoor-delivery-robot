@@ -13,6 +13,7 @@ Browser -> FastAPI control plane <- WSS <- Robot Agent -> Nav2 adapter -> ROS 2 
 - FastAPI stores only credential hashes. Plaintext credentials are returned once during claim or delivered directly over an authenticated Agent connection during rotation; they are never returned to the browser.
 - Physical emergency-stop and motion safety remain local to the robot. A web stop is an operational command, not a certified safety circuit.
 - Hardware details such as wheel radius, encoder resolution, serial ports, and PID gains stay in robot-side profiles.
+- The ROS and safety boundary for every physical chassis is defined by the [Hardware Interface Contract](HARDWARE_INTERFACE_CONTRACT.md).
 
 The companion ROS repository provides a simulator profile and a physical
 SCUTTLE template under `amr_web_bridge/config/profiles`. These files select
