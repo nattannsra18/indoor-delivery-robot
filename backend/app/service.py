@@ -185,6 +185,8 @@ class DeliveryService:
         to_status: TaskStatus,
         source: str,
         detail: str | None = None,
+        external_message_id: str | None = None,
+        external_message_status: str | None = None,
     ) -> None:
         self.repo.add_task_event(
             TaskEventORM(
@@ -194,6 +196,8 @@ class DeliveryService:
                 to_status=to_status,
                 source=source,
                 detail=detail,
+                external_message_id=external_message_id,
+                external_message_status=external_message_status,
                 created_at=utc_now(),
             )
         )
@@ -609,7 +613,21 @@ class DeliveryService:
             task.robot_id,
             task.id,
             stage,
+            command_id=(
+                task.navigation_command_id
+                if task.navigation_command_stage == stage
+                else None
+            ),
         )
+        if (
+            task.navigation_command_id != command.command_id
+            or task.navigation_command_stage != stage
+        ):
+            task.navigation_command_id = command.command_id
+            task.navigation_command_stage = stage
+            # Persist before transport. A control-plane restart must resend the
+            # same identity so the Agent can safely deduplicate the command.
+            self.db.commit()
         issued_at = utc_now()
         robot = self._robot_or_404(task.robot_id)
 
@@ -906,6 +924,8 @@ class DeliveryService:
         detail: str | None = None,
         actor: TrustedActor | None = None,
         actor_id: str | None = None,
+        external_message_id: str | None = None,
+        external_message_status: str | None = None,
     ) -> DeliveryTaskORM:
         task = self._task_or_404(task_id, lock=True)
         robot = self._robot_or_404(task.robot_id, lock=True)
@@ -972,6 +992,8 @@ class DeliveryService:
             transition.to_status,
             source.value,
             detail,
+            external_message_id,
+            external_message_status,
         )
         self._record_task_change(task, f"task.{event.value.lower()}", actor or actor_id)
 
@@ -1044,6 +1066,10 @@ class DeliveryService:
         task.robot_id = robot.id
         task.started_at = None
         task.completed_at = None
+        # A retry is a new physical navigation attempt and therefore must not
+        # reuse an identity the Agent has already completed.
+        task.navigation_command_id = None
+        task.navigation_command_stage = None
 
         self._log_event(
             task,
@@ -1074,6 +1100,13 @@ class DeliveryService:
             )
         self.db.refresh(task)
         return task
+
+    def navigation_result_receipt(
+        self,
+        command_id: str,
+    ) -> TaskEventORM | None:
+        """Return a committed navigation result for idempotent replay ACKs."""
+        return self.repo.task_event_by_external_message_id(command_id)
 
     def overview(self, owner_id: str | None = None) -> DashboardOverview:
         robot = self._robot_or_404()

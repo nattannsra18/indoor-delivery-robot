@@ -273,3 +273,35 @@ def apply_compatibility_migrations(engine: Engine) -> None:
             connection.execute(
                 text("ALTER TABLE delivery_tasks ADD COLUMN delivery_distance_meters FLOAT")
             )
+        if "navigation_command_id" not in columns:
+            connection.execute(text(
+                "ALTER TABLE delivery_tasks ADD COLUMN navigation_command_id VARCHAR(200)"
+            ))
+        if "navigation_command_stage" not in columns:
+            connection.execute(text(
+                "ALTER TABLE delivery_tasks ADD COLUMN navigation_command_stage VARCHAR(20)"
+            ))
+        connection.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_delivery_tasks_navigation_command_id "
+            "ON delivery_tasks (navigation_command_id)"
+        ))
+
+    if "task_events" not in inspect(engine).get_table_names():
+        return
+    task_event_columns = {
+        column["name"]
+        for column in inspect(engine).get_columns("task_events")
+    }
+    with engine.begin() as connection:
+        if "external_message_id" not in task_event_columns:
+            connection.execute(text(
+                "ALTER TABLE task_events ADD COLUMN external_message_id VARCHAR(200)"
+            ))
+        if "external_message_status" not in task_event_columns:
+            connection.execute(text(
+                "ALTER TABLE task_events ADD COLUMN external_message_status VARCHAR(20)"
+            ))
+        connection.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_task_events_external_message_id "
+            "ON task_events (external_message_id)"
+        ))

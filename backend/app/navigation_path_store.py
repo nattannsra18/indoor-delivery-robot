@@ -28,6 +28,7 @@ class NavigationPathStore:
         robot_id: str,
         task_id: str,
         stage: NavigationStage,
+        command_id: str | None = None,
     ) -> ActiveNavigationCommand:
         with self._lock:
             current = self._commands.get(robot_id)
@@ -40,7 +41,10 @@ class NavigationPathStore:
 
             command = ActiveNavigationCommand(
                 robot_id=robot_id,
-                command_id=f"{task_id}:{stage}:{uuid4().hex}",
+                command_id=(
+                    command_id
+                    or f"{task_id}:{stage}:{uuid4().hex}"
+                ),
                 task_id=task_id,
                 stage=stage,
             )

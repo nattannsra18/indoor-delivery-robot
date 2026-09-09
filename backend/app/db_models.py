@@ -244,6 +244,12 @@ class DeliveryTaskORM(Base):
     delivery_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     pickup_distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
     delivery_distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
+    navigation_command_id: Mapped[str | None] = mapped_column(
+        String(200), nullable=True, index=True
+    )
+    navigation_command_stage: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )
     # Keep owner data available to task DTOs without injecting a nullable
     # OUTER JOIN into queue-locking queries. PostgreSQL rejects FOR UPDATE when
     # it is applied to the nullable side of that join.
@@ -272,6 +278,12 @@ class TaskEventORM(Base):
     )
     source: Mapped[str] = mapped_column(String(40), nullable=False, default="SYSTEM")
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    external_message_id: Mapped[str | None] = mapped_column(
+        String(200), nullable=True, unique=True, index=True
+    )
+    external_message_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )

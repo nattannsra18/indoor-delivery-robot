@@ -313,3 +313,12 @@ class DeliveryRepository:
             .order_by(TaskEventORM.created_at.asc(), TaskEventORM.id.asc())
         )
         return list(self.db.scalars(stmt).all())
+
+    def task_event_by_external_message_id(
+        self,
+        external_message_id: str,
+    ) -> TaskEventORM | None:
+        stmt = select(TaskEventORM).where(
+            TaskEventORM.external_message_id == external_message_id
+        )
+        return self.db.scalar(stmt)

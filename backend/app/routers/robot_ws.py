@@ -1266,6 +1266,45 @@ async def robot_websocket(
                     continue
 
                 db.expire_all()
+                previous_result = service.navigation_result_receipt(
+                    navigation.command_id
+                )
+                if previous_result is not None:
+                    receipt_task = service.get_task(
+                        previous_result.task_id
+                    )
+                    if (
+                        previous_result.task_id != navigation.task_id
+                        or receipt_task.robot_id != robot_id
+                        or previous_result.external_message_status
+                        != navigation.status
+                    ):
+                        await send_error(
+                            websocket,
+                            "RESULT_REPLAY_MISMATCH",
+                            (
+                                "command_id was already processed with "
+                                "different result data"
+                            ),
+                        )
+                        continue
+
+                    await websocket.send_json(
+                        {
+                            "type": "navigation_result_received",
+                            "robot_id": robot_id,
+                            "command_id": navigation.command_id,
+                            "task_id": navigation.task_id,
+                            "stage": navigation.stage,
+                            "navigation_status": navigation.status,
+                            "task_status": previous_result.to_status.value,
+                            "accepted": True,
+                            "duplicate": True,
+                            "server_time": current_utc_time(),
+                        }
+                    )
+                    continue
+
                 association_error = navigation_association_error(
                     service,
                     robot_id,
@@ -1309,6 +1348,8 @@ async def robot_websocket(
                                 f"{navigation.status}"
                             ),
                             actor=TrustedActor.robot(robot_id),
+                            external_message_id=navigation.command_id,
+                            external_message_status=navigation.status,
                         )
                     )
                     publish_committed_notifications(
@@ -1350,6 +1391,7 @@ async def robot_websocket(
                             updated_task.status.value
                         ),
                         "accepted": True,
+                        "duplicate": False,
                         "server_time": (
                             current_utc_time()
                         ),

@@ -105,6 +105,17 @@ def active_command(db):
     return task, command
 
 
+def navigation_result(command, status="succeeded"):
+    return {
+        "type": "navigation_result",
+        "command_id": command["command_id"],
+        "task_id": command["task_id"],
+        "stage": command["stage"],
+        "status": status,
+        "detail": "Nav2 result from the resilience test",
+    }
+
+
 def path_message(command, poses=None):
     return {
         "type": "navigation_path",
@@ -135,6 +146,71 @@ def run_robot(messages, monkeypatch):
     with Session() as db:
         asyncio.run(robot_websocket(websocket, "robot01", db))
     return websocket, events
+
+
+def test_navigation_command_identity_survives_control_plane_restart():
+    with Session() as db:
+        task, first = active_command(db)
+        task_id = task.id
+
+    # These stores are process memory. Clearing them models a FastAPI restart
+    # while the database and the robot's active mission remain intact.
+    navigation_path_store.clear_all()
+
+    with Session() as db:
+        task = DeliveryService(db).get_task(task_id)
+        second = DeliveryService(db).build_navigation_command(task)
+
+    assert second is not None
+    assert second["command_id"] == first["command_id"]
+    assert navigation_path_store.matches(
+        "robot01",
+        first["command_id"],
+        task_id,
+        "pickup",
+    )
+
+
+def test_duplicate_navigation_result_replays_ack_without_transition(
+    monkeypatch,
+):
+    with Session() as db:
+        task, command = active_command(db)
+        task_id = task.id
+
+    result = navigation_result(command)
+    first_socket, _ = run_robot([result], monkeypatch)
+    navigation_path_store.clear_all()
+    conflicting_result = dict(result)
+    conflicting_result["status"] = "aborted"
+    second_socket, _ = run_robot(
+        [dict(result), conflicting_result],
+        monkeypatch,
+    )
+
+    receipts = [
+        message
+        for message in first_socket.sent + second_socket.sent
+        if message.get("type") == "navigation_result_received"
+    ]
+    assert len(receipts) == 2, (first_socket.sent, second_socket.sent)
+    assert receipts[0]["duplicate"] is False
+    assert receipts[1]["duplicate"] is True
+    assert receipts[1]["task_status"] == "WAITING_FOR_LOADING"
+    replay_errors = [
+        message
+        for message in second_socket.sent
+        if message.get("type") == "error"
+    ]
+    assert replay_errors[-1]["code"] == "RESULT_REPLAY_MISMATCH"
+
+    with Session() as db:
+        matching_events = [
+            event
+            for event in DeliveryService(db).get_task_history(task_id)
+            if event.external_message_id == command["command_id"]
+        ]
+    assert len(matching_events) == 1
 
 
 def test_valid_robot_path_is_stored_broadcast_and_cleared_on_disconnect(
