@@ -26,6 +26,8 @@ test("Map Management consumes the robot catalog and reuses the live RobotMap", (
   assert.match(pageSource, /role="dialog"/);
   assert.match(pageSource, /event\.key === "Escape"/);
   assert.match(pageSource, /document\.body\.style\.overflow = "hidden"/);
+  assert.match(pageSource, /stationsOverride=\{activeMapStations\}/);
+  assert.match(pageSource, /Promise\.all\(\[load\(false\), refreshAll\(\)\]\)/);
   assert.match(pageSource, /mapManagementText\[locale\]/);
   assert.match(apiSource, /\/api\/map\/catalog/);
   assert.match(apiSource, /\/api\/map\/catalog\/refresh/);
@@ -36,4 +38,14 @@ test("Map Management consumes the robot catalog and reuses the live RobotMap", (
   assert.match(apiSource, /function robotQuery\(robotId\?: string\)/);
   assert.match(apiSource, /method: "DELETE"/);
   assert.match(apiSource, /\/api\/map\/catalog-operations\//);
+});
+
+test("map switch feedback clears stale robot-scoped map state", () => {
+  const contextSource = read("src/context/ApiDeliveryContext.tsx");
+  const globals = read("src/app/globals.css");
+
+  assert.match(contextSource, /message\.type === "map_switch_changed"/);
+  assert.match(contextSource, /setStations\(\[\]\)/);
+  assert.match(contextSource, /setOccupancyMap\(undefined\)/);
+  assert.doesNotMatch(globals, /\[role="dialog"\][^{]*\{[^}]*max-width/);
 });
