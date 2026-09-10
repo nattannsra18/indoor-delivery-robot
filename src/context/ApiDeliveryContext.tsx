@@ -584,6 +584,24 @@ export function ApiDeliveryProvider({
             if (update.catalog?.robot_id === activeRobotId) {
               void refreshMapMetadata();
             }
+          } else if (message.type === "map_switch_changed") {
+            const update = message as {
+              catalog?: { robot_id?: unknown };
+            };
+            if (update.catalog?.robot_id === activeRobotId) {
+              // Do not draw robot-scoped state from the previous map while
+              // the newly activated map and its stations are being fetched.
+              setStations([]);
+              setOccupancyMap(undefined);
+              setNavigationFeedback(undefined);
+              navigationPathRef.current = undefined;
+              pendingNavigationPathRef.current = undefined;
+              setNavigationPath(undefined);
+              setNavigationPathStatus("unavailable");
+              void refreshMap();
+              void refreshMapMetadata();
+              void refreshAll();
+            }
           } else if (message.type === "workflow_updated") {
             const workflow = message as { robot_id?: unknown };
             if (

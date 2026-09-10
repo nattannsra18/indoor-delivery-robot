@@ -32,7 +32,7 @@ function fileSize(bytes: number, locale: string) {
 }
 
 export default function MapsPage() {
-  const { selectedRobotId } = useDeliveryApi();
+  const { selectedRobotId, stations, refreshAll } = useDeliveryApi();
   const { locale } = useLocale();
   const copy = mapManagementText[locale];
   const actions = mapManagementActionsText[locale];
@@ -60,6 +60,12 @@ export default function MapsPage() {
   const catalogRequestRef = useRef(0);
   const selectedRobotIdRef = useRef(selectedRobotId);
   const readyCount = useMemo(() => catalog?.maps.filter((map) => map.available).length ?? 0, [catalog]);
+  const activeMapStations = useMemo(
+    () => catalog?.activeMapId
+      ? stations.filter((station) => station.mapId === catalog.activeMapId)
+      : [],
+    [catalog?.activeMapId, stations],
+  );
 
   const load = useCallback(async (showLoading = false) => {
     const requestId = ++catalogRequestRef.current;
@@ -174,7 +180,7 @@ export default function MapsPage() {
         return;
       }
       setMessage(copy.switchSucceeded);
-      await load(false);
+      await Promise.all([load(false), refreshAll()]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : copy.switchFailed);
     } finally {
@@ -209,7 +215,7 @@ export default function MapsPage() {
     <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.8fr)]">
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <header className="border-b border-slate-100 px-5 py-4"><h2 className="font-bold text-slate-950">{copy.livePreview}</h2><p className="mt-1 text-sm text-slate-500">{copy.livePreviewHelp}</p></header>
-        <div className="p-3 md:p-4"><RobotMap showStationButtons={false} /></div>
+        <div className="p-3 md:p-4"><RobotMap showStationButtons={false} stationsOverride={activeMapStations} /></div>
       </section>
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <header><h2 className="font-bold text-slate-950">{copy.inventory}</h2><p className="mt-1 text-sm leading-6 text-slate-500">{copy.inventoryHelp}</p></header>
@@ -313,7 +319,7 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
     onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => { if (!event.repeat && (event.key === " " || event.key === "Enter")) startDrive(linear, angular); },
     onKeyUp: releaseDrive,
   });
-  const turnSpeed = Math.min(1, driveSpeed * 4.7);
+  const turnSpeed = Math.min(0.55, driveSpeed * 4);
   useEffect(() => {
     if (!active) return;
     const commands: Record<string, [number, number]> = {
@@ -364,7 +370,7 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
         {session?.detail && !(phase === "IDLE" && session.savedMapId) && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">{session.detail}</p>}
         {session?.startedAt && <p className="mt-3 text-xs text-slate-400">{copy.elapsed}: {formatDate(session.startedAt, locale)}</p>}
         {phase === "IDLE" && <><p className="mt-5 rounded-2xl bg-blue-50 p-4 text-sm leading-6 text-blue-900">{copy.startHelp}</p><button type="button" disabled={busy} onClick={() => void run(() => startMapping(robotId || undefined))} className="mt-4 min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{copy.start}</button></>}
-        {phase === "MAPPING" && <><label className="mt-5 block text-sm font-bold text-slate-700">{copy.speed}<span className="float-right font-mono text-blue-700">{driveSpeed.toFixed(2)} m/s</span><input type="range" min="0.08" max="0.22" step="0.02" value={driveSpeed} onChange={(event) => setDriveSpeed(Number(event.target.value))} className="mt-3 w-full accent-blue-600" /></label><div className="mx-auto mt-4 grid max-w-[230px] grid-cols-3 gap-2 select-none"><span /><DriveButton label={copy.forward} {...driveProps(driveSpeed, 0)}>↑</DriveButton><span /><DriveButton label={copy.left} {...driveProps(0, turnSpeed)}>↶</DriveButton><DriveButton label={copy.stopRobot} onClick={stopDrive}>■</DriveButton><DriveButton label={copy.right} {...driveProps(0, -turnSpeed)}>↷</DriveButton><span /><DriveButton label={copy.backward} {...driveProps(-driveSpeed * 0.75, 0)}>↓</DriveButton><span /></div><p className="mt-3 text-center text-xs font-semibold leading-5 text-slate-500">{copy.keyboardHelp}</p><p className="mt-1 text-center text-xs leading-5 text-slate-400">{copy.safety}</p><button type="button" disabled={busy} onClick={() => void run(() => stopMapping(robotId || undefined))} className="mt-5 min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{copy.stop}</button><button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="mt-2 min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button></>}
+        {phase === "MAPPING" && <><label className="mt-5 block text-sm font-bold text-slate-700">{copy.speed}<span className="float-right font-mono text-blue-700">{driveSpeed.toFixed(2)} m/s</span><input type="range" min="0.06" max="0.16" step="0.01" value={driveSpeed} onChange={(event) => setDriveSpeed(Number(event.target.value))} className="mt-3 w-full accent-blue-600" /></label><div className="mx-auto mt-4 grid max-w-[230px] grid-cols-3 gap-2 select-none"><span /><DriveButton label={copy.forward} {...driveProps(driveSpeed, 0)}>↑</DriveButton><span /><DriveButton label={copy.left} {...driveProps(0, turnSpeed)}>↶</DriveButton><DriveButton label={copy.stopRobot} onClick={stopDrive}>■</DriveButton><DriveButton label={copy.right} {...driveProps(0, -turnSpeed)}>↷</DriveButton><span /><DriveButton label={copy.backward} {...driveProps(-driveSpeed * 0.75, 0)}>↓</DriveButton><span /></div><p className="mt-3 text-center text-xs font-semibold leading-5 text-slate-500">{copy.keyboardHelp}</p><p className="mt-1 text-center text-xs leading-5 text-slate-400">{copy.safety}</p><button type="button" disabled={busy} onClick={() => void run(() => stopMapping(robotId || undefined))} className="mt-5 min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{copy.stop}</button><button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="mt-2 min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button></>}
         {phase === "REVIEW" && <form className="mt-5 space-y-3" onSubmit={(event) => { event.preventDefault(); if (valid && !busy) void run(async () => { const result = await saveMapping({ mapId, name: name.trim(), building: building.trim() || undefined, floor: floor.trim() || undefined, areaDescription: area.trim() || undefined }, robotId || undefined); onSaved(); return result; }); }}><label className="block text-sm font-semibold text-slate-700">{copy.mapId}<input value={mapId} maxLength={120} onChange={(event) => setMapId(event.target.value)} className={field} /><span className="mt-1 block text-xs font-normal text-slate-400">{copy.mapIdHelp}</span></label><label className="block text-sm font-semibold text-slate-700">{copy.mapName}<input value={name} maxLength={160} onChange={(event) => setName(event.target.value)} className={field} /></label><div className="grid grid-cols-2 gap-3"><label className="block text-sm font-semibold text-slate-700">{copy.building}<input value={building} maxLength={120} onChange={(event) => setBuilding(event.target.value)} className={field} /></label><label className="block text-sm font-semibold text-slate-700">{copy.floor}<input value={floor} maxLength={80} onChange={(event) => setFloor(event.target.value)} className={field} /></label></div><label className="block text-sm font-semibold text-slate-700">{copy.area}<textarea value={area} maxLength={240} rows={3} onChange={(event) => setArea(event.target.value)} className={`${field} py-3`} /></label><button type="submit" disabled={!valid || busy} className="min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{busy ? copy.saving : copy.save}</button><button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button></form>}
         {["STARTING", "STOPPING", "SAVING", "RESTORING"].includes(phase) && <div className="mt-5 flex items-center gap-3 rounded-2xl bg-blue-50 p-4 text-sm font-semibold text-blue-800"><span className="size-5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />{phase === "SAVING" ? copy.saving : phase === "RESTORING" ? copy.restoring : copy.preparing}</div>}
         {phase === "FAILED" && <button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="mt-4 min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button>}
