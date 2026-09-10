@@ -63,6 +63,11 @@ curl --fail --show-error https://robot.example.com/health
 openssl s_client -connect robot.example.com:443 -servername robot.example.com </dev/null
 ```
 
+A new production database starts without demo robots, maps, stations, or tasks.
+The bootstrap administrator is the only application record created
+automatically. Robots appear after an Agent submits a pairing request and an
+administrator approves it.
+
 Configure each Robot Agent with the same public origin. The Agent converts the
 HTTPS origin to WSS for its WebSocket transport:
 

@@ -40,7 +40,11 @@ INITIAL_STATIONS = [
 ]
 
 
-def seed_database(db: Session) -> None:
+def seed_database(db: Session, *, app_env: str = "development") -> None:
+    """Populate demo records outside production environments only."""
+    if app_env.strip().lower() == "production":
+        return
+
     if db.scalar(select(StationORM.id).limit(1)) is None:
         db.add_all([StationORM(**station) for station in INITIAL_STATIONS])
 

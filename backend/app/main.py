@@ -37,7 +37,7 @@ async def lifespan(_: FastAPI):
     apply_compatibility_migrations(engine)
 
     with SessionLocal() as db:
-        seed_database(db)
+        seed_database(db, app_env=security_settings().app_env)
         bootstrap_admin(db)
         DeliveryService(db).clear_stale_paired_connections()
 
