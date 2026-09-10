@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import RobotMap from "@/components/RobotMap";
 import ActionToast from "@/components/ActionToast";
@@ -16,7 +16,7 @@ type DraftPose = { x: number; y: number; yaw: number };
 export default function StationsPage() {
   const { locale, format } = useLocale();
   const copy = stationText[locale];
-  const { occupancyMap, addStation, updateStation, removeStation, backendOnline, refreshAll } = useDeliveryApi();
+  const { occupancyMap, addStation, updateStation, removeStation, backendOnline, refreshAll, selectedRobotId } = useDeliveryApi();
   const [catalog, setCatalog] = useState<RobotMapCatalog>();
   const [selectedMapId, setSelectedMapId] = useState("");
   const [mapStations, setMapStations] = useState<Station[]>([]);
@@ -32,39 +32,62 @@ export default function StationsPage() {
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
   const [busy, setBusy] = useState(false);
+  const catalogRequestRef = useRef(0);
+  const stationRequestRef = useRef(0);
 
   const selectedMap = useMemo(() => catalog?.maps.find((item) => item.id === selectedMapId), [catalog, selectedMapId]);
   const isActiveMap = Boolean(selectedMapId && selectedMapId === catalog?.activeMapId);
 
   const loadCatalog = useCallback(async () => {
+    const requestId = ++catalogRequestRef.current;
     try {
-      const next = await api.getMapCatalog();
+      const next = await api.getMapCatalog(selectedRobotId || undefined);
+      if (requestId !== catalogRequestRef.current) return;
       setCatalog(next);
       setCatalogError("");
       setSelectedMapId((current) => current && next.maps.some((map) => map.id === current) ? current : next.activeMapId ?? next.maps[0]?.id ?? "");
     } catch (error) {
+      if (requestId !== catalogRequestRef.current) return;
       try {
-        await api.refreshMapCatalog();
+        await api.refreshMapCatalog(selectedRobotId || undefined);
         await new Promise((resolve) => window.setTimeout(resolve, 600));
-        const next = await api.getMapCatalog();
+        const next = await api.getMapCatalog(selectedRobotId || undefined);
+        if (requestId !== catalogRequestRef.current) return;
         setCatalog(next);
         setCatalogError("");
         setSelectedMapId(next.activeMapId ?? next.maps[0]?.id ?? "");
       } catch {
+        if (requestId !== catalogRequestRef.current) return;
         setCatalogError(error instanceof Error ? error.message : copy.catalogUnavailable);
       }
     }
-  }, [copy.catalogUnavailable]);
+  }, [copy.catalogUnavailable, selectedRobotId]);
 
   const loadStations = useCallback(async (mapId: string) => {
+    const requestId = ++stationRequestRef.current;
     if (!mapId) return setMapStations([]);
     try {
-      setMapStations(await api.getStations(mapId));
+      const next = await api.getStations(mapId, selectedRobotId || undefined);
+      if (requestId === stationRequestRef.current) setMapStations(next);
     } catch (error) {
+      if (requestId !== stationRequestRef.current) return;
       setIsError(true);
       setMessage(error instanceof Error ? error.message : copy.addFailure);
     }
-  }, [copy.addFailure]);
+  }, [copy.addFailure, selectedRobotId]);
+
+  useEffect(() => {
+    catalogRequestRef.current += 1;
+    stationRequestRef.current += 1;
+    setCatalog(undefined);
+    setSelectedMapId("");
+    setMapStations([]);
+    setCatalogError("");
+    setPendingRemove(undefined);
+    setMessage("");
+    setIsError(false);
+    resetStationForm();
+  }, [selectedRobotId]);
 
   useEffect(() => { void loadCatalog(); }, [loadCatalog]);
   useEffect(() => { void loadStations(selectedMapId); }, [loadStations, selectedMapId]);
@@ -96,7 +119,7 @@ export default function StationsPage() {
     if (!selectedMap || selectedMap.active || !selectedMap.available) return;
     setActivating(true); setMessage(""); setIsError(false);
     try {
-      let operation = await api.activateRobotMap(selectedMap.id);
+      let operation = await api.activateRobotMap(selectedMap.id, selectedRobotId || undefined);
       while (operation.status === "PENDING") {
         await new Promise((resolve) => window.setTimeout(resolve, 300));
         operation = await api.getMapOperation(operation.commandId);

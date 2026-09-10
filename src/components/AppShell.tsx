@@ -8,6 +8,7 @@ import { API_BASE_URL } from "@/lib/api";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import AlertCenter from "@/components/AlertCenter";
 import AccountRequestNotice from "@/components/AccountRequestNotice";
+import GlobalRobotSelector from "@/components/GlobalRobotSelector";
 import { routeAllowedForRole } from "@/lib/roleDashboard";
 import { LocaleProvider } from "@/context/LocaleContext";
 import { useLocale } from "@/context/LocaleContext";
@@ -52,6 +53,7 @@ function ShellContent({ children }: { children: ReactNode }) {
       <Sidebar />
       <main className="min-w-0 flex-1 p-4 md:p-6 lg:p-8">
         <div className="mx-auto w-full max-w-[1600px]">
+        {user?.role === "ADMIN" && <GlobalRobotSelector />}
         {user?.role === "ADMIN" && <AlertCenter />}
         {user?.role === "ADMIN" && <AccountRequestNotice />}
         {!loading && !backendOnline && (

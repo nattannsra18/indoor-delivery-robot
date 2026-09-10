@@ -1,49 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useLocale } from "@/context/LocaleContext";
-import { getFleet } from "@/lib/api";
 import { adminUiText, robotStateLabel } from "@/lib/i18n";
-import type { FleetRobot, FleetUnavailableReason } from "@/types";
-
-const REFRESH_INTERVAL_MS = 3000;
+import type { FleetUnavailableReason } from "@/types";
 
 export default function FleetOverview() {
   const { locale } = useLocale();
   const copy = adminUiText[locale];
-  const [fleet, setFleet] = useState<FleetRobot[]>([]);
-  const [selectedId, setSelectedId] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const { fleet, selectedRobotId, selectRobot, loading } = useDeliveryApi();
 
-  useEffect(() => {
-    let cancelled = false;
-    async function refresh() {
-      try {
-        const robots = await getFleet();
-        if (cancelled) return;
-        setFleet(robots);
-        setSelectedId((current) => (
-          robots.some((robot) => robot.id === current)
-            ? current
-            : robots[0]?.id ?? ""
-        ));
-        setError("");
-      } catch {
-        if (!cancelled) setError(copy.fleetLoadFailed);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), REFRESH_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [copy.fleetLoadFailed]);
-
-  const selected = fleet.find((robot) => robot.id === selectedId) ?? fleet[0];
+  const selected = fleet.find((robot) => robot.id === selectedRobotId) ?? fleet[0];
   const summary = useMemo(() => ({
     connected: fleet.filter((robot) => robot.online).length,
     active: fleet.filter((robot) => Boolean(robot.currentTaskId)).length,
@@ -66,7 +34,6 @@ export default function FleetOverview() {
     </div>
 
     {loading && fleet.length === 0 ? <p className="p-6 text-sm text-slate-500">{copy.fleetLoading}</p> : null}
-    {error ? <p role="alert" className="mx-5 mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
     {!loading && fleet.length === 0 ? <p className="p-6 text-sm text-slate-500">{copy.fleetEmpty}</p> : null}
 
     {fleet.length > 0 ? <div className="grid gap-5 p-5 md:p-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,.65fr)]">
@@ -77,7 +44,7 @@ export default function FleetOverview() {
             key={robot.id}
             type="button"
             aria-pressed={active}
-            onClick={() => setSelectedId(robot.id)}
+            onClick={() => selectRobot(robot.id)}
             className={`rounded-2xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${active ? "border-blue-400 bg-blue-50/70" : "border-slate-200 hover:border-blue-200 hover:bg-slate-50"}`}
           >
             <div className="flex items-start justify-between gap-3">

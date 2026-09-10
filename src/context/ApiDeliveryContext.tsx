@@ -25,6 +25,7 @@ import {
 import {
   EmergencyStop,
   DeliveryTask,
+  FleetRobot,
   DiagnosticLevel,
   DiagnosticStatus,
   NavigationFeedback,
@@ -92,6 +93,9 @@ type NavigationFeedbackMessage = {
 };
 
 type ApiDeliveryContextValue = {
+  fleet: FleetRobot[];
+  selectedRobotId: string;
+  selectRobot: (robotId: string) => void;
   globalQueuedCount: number;
   robotAvailableSeconds?: number;
   occupancyMap?: OccupancyGridMap;
@@ -252,6 +256,8 @@ export function ApiDeliveryProvider({
   children: ReactNode;
 }) {
   const { loseSession, user } = useAuth();
+  const [fleet, setFleet] = useState<FleetRobot[]>([]);
+  const [selectedRobotId, setSelectedRobotId] = useState("");
   const [occupancyMap, setOccupancyMap] =
     useState<OccupancyGridMap | undefined>();
   const [mapMetadata, setMapMetadata] =
@@ -287,6 +293,7 @@ export function ApiDeliveryProvider({
   const occupancyMapRef = useRef<OccupancyGridMap | undefined>(
     undefined
   );
+  const selectedRobotIdRef = useRef("");
   const robotRef = useRef<Robot>(EMPTY_ROBOT);
   const activeTaskRef = useRef<DeliveryTask | undefined>(undefined);
   const mountedRef = useRef(false);
@@ -299,19 +306,51 @@ export function ApiDeliveryProvider({
   }, []);
 
   const activeTask = useMemo(
-    () =>
-      tasks.find((task) =>
-        ACTIVE_STATUSES.includes(task.status)
-      ),
-    [tasks]
+    () => tasks.find((task) => (
+      task.robotId === robot.id
+      && ACTIVE_STATUSES.includes(task.status)
+    )),
+    [robot.id, tasks]
   );
+
+  const selectRobot = useCallback((robotId: string) => {
+    selectedRobotIdRef.current = robotId;
+    setSelectedRobotId(robotId);
+    window.localStorage.setItem("idr:selected-robot", robotId);
+    setDiagnostics(undefined);
+    setOccupancyMap(undefined);
+    setNavigationFeedback(undefined);
+    navigationPathRef.current = undefined;
+    pendingNavigationPathRef.current = undefined;
+    setNavigationPath(undefined);
+    setNavigationPathStatus("unavailable");
+  }, []);
+
+  useEffect(() => {
+    if (user?.role !== "ADMIN") return;
+    const stored = window.localStorage.getItem("idr:selected-robot");
+    if (stored) {
+      selectedRobotIdRef.current = stored;
+      setSelectedRobotId(stored);
+    }
+  }, [user?.role]);
 
   const refreshAll = useCallback(async () => {
     try {
-      const [overview, stationData, taskData] = await Promise.all([
-        api.getOverview(),
-        api.getStations(),
-        api.getTasks()
+      const fleetData = user?.role === "ADMIN" ? await api.getFleet() : [];
+      const requestedRobotId = fleetData.some((item) => item.id === selectedRobotId)
+        ? selectedRobotId
+        : undefined;
+      const [overview, taskData] = await Promise.all([
+        api.getOverview(requestedRobotId),
+        api.getTasks(),
+      ]);
+      const resolvedRobotId = overview.robot.id;
+      const [stationData, selectedDiagnostics] = await Promise.all([
+        api.getStations(undefined, user?.role === "ADMIN" ? resolvedRobotId : undefined),
+        user?.role === "ADMIN"
+          ? api.getRobotDiagnostics(resolvedRobotId)
+          : Promise.resolve(undefined),
       ]);
       const requestedData = dashboardRequestsForRole(user?.role ?? "USER");
       const stopState = requestedData.includes("emergency-stop")
@@ -319,12 +358,26 @@ export function ApiDeliveryProvider({
         : undefined;
       const estimates = await api.getTaskEstimates();
       if (!mountedRef.current) return;
+      const currentSelection = selectedRobotIdRef.current;
+      if (
+        user?.role === "ADMIN"
+        && currentSelection
+        && currentSelection !== resolvedRobotId
+        && fleetData.some((item) => item.id === currentSelection)
+      ) return;
+      setFleet(fleetData);
+      if (user?.role === "ADMIN" && resolvedRobotId !== selectedRobotId) {
+        selectedRobotIdRef.current = resolvedRobotId;
+        setSelectedRobotId(resolvedRobotId);
+        window.localStorage.setItem("idr:selected-robot", resolvedRobotId);
+      }
       setGlobalQueuedCount(overview.globalQueuedCount);
       setRobotAvailableSeconds(overview.robotAvailableSeconds);
       setRobot(overview.robot);
       setStations(stationData);
       setTasks(taskData);
       setEmergencyStop(stopState);
+      setDiagnostics(selectedDiagnostics);
       setTaskEstimates(estimates);
       setBackendOnline(true);
       setError(null);
@@ -345,7 +398,7 @@ export function ApiDeliveryProvider({
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [loseSession, user?.role]);
+  }, [loseSession, selectedRobotId, user?.role]);
 
   useEffect(() => {
     occupancyMapRef.current = occupancyMap;
@@ -412,12 +465,25 @@ export function ApiDeliveryProvider({
 
   const refreshMap = useCallback(async () => {
     try {
-      const map = await api.getMap();
+      const requestedRobotId = user?.role === "ADMIN"
+        ? selectedRobotId || undefined
+        : undefined;
+      const map = await api.getMap(requestedRobotId);
+      if (
+        user?.role === "ADMIN"
+        && selectedRobotIdRef.current
+        && selectedRobotIdRef.current !== requestedRobotId
+      ) return;
       if (mountedRef.current) setOccupancyMap(map);
     } catch {
+      if (
+        user?.role === "ADMIN"
+        && selectedRobotIdRef.current
+        && selectedRobotIdRef.current !== selectedRobotId
+      ) return;
       if (mountedRef.current) setOccupancyMap(undefined);
     }
-  }, []);
+  }, [selectedRobotId, user?.role]);
 
   const refreshMapMetadata = useCallback(async () => {
     try {
@@ -457,6 +523,7 @@ export function ApiDeliveryProvider({
           ) as {
             type?: string;
           };
+          const activeRobotId = selectedRobotIdRef.current || robotRef.current.id;
 
           if (message.type === "notification_created") {
             window.dispatchEvent(new CustomEvent("idr:notification", {
@@ -476,7 +543,10 @@ export function ApiDeliveryProvider({
             };
             const data = telemetryMessage.data;
             if (data && typeof data.x === "number" && typeof data.y === "number" && typeof data.yaw === "number") {
-              setRobot((current) => telemetryMessage.robot_id === current.id ? ({
+              setRobot((current) => (
+                telemetryMessage.robot_id === activeRobotId
+                && current.id === activeRobotId
+              ) ? ({
                   ...current,
                   x: data.x as number,
                   y: data.y as number,
@@ -485,8 +555,14 @@ export function ApiDeliveryProvider({
                 }) : current);
             }
           } else if (message.type === "map_updated") {
-            void refreshMap();
+            const update = message as { robot_id?: unknown };
+            if (update.robot_id === activeRobotId) void refreshMap();
           } else if (message.type === "workflow_updated") {
+            const workflow = message as { robot_id?: unknown };
+            if (
+              typeof workflow.robot_id === "string"
+              && workflow.robot_id !== activeRobotId
+            ) return;
             pendingNavigationPathRef.current = undefined;
             navigationPathRef.current = undefined;
             setNavigationPath(undefined);
@@ -510,7 +586,7 @@ export function ApiDeliveryProvider({
               && currentTask
               && expectedStage === nextPath.stage
               && nextPath.taskId === currentTask.id
-              && nextPath.robotId === robotRef.current.id
+              && nextPath.robotId === activeRobotId
               && (
                 !currentMap
                 || framesAreCompatible(
@@ -541,7 +617,7 @@ export function ApiDeliveryProvider({
 
             if (
               clear
-              && clear.robotId === robotRef.current.id
+              && clear.robotId === activeRobotId
               && clear.taskId === currentTask?.id
               && clear.stage === expectedStage
               && (
@@ -563,6 +639,7 @@ export function ApiDeliveryProvider({
             const feedbackMessage =
               message as NavigationFeedbackMessage;
 
+            if (feedbackMessage.robot_id !== activeRobotId) return;
             setNavigationFeedback({
               robotId: feedbackMessage.robot_id,
               commandId: feedbackMessage.command_id,
@@ -603,15 +680,20 @@ export function ApiDeliveryProvider({
             const nextDiagnostics =
               parseRobotDiagnostics(message);
 
-            if (nextDiagnostics) {
+            if (
+              nextDiagnostics
+              && nextDiagnostics.robotId === activeRobotId
+            ) {
               setDiagnostics(nextDiagnostics);
             }
           } else if (
             user?.role === "ADMIN"
             && message.type === "emergency_stop_changed"
           ) {
-            const value = (message as { emergency_stop?: EmergencyStop }).emergency_stop;
-            if (value) setEmergencyStop(value);
+            const event = message as { robot_id?: unknown; emergency_stop?: EmergencyStop };
+            if (event.robot_id === activeRobotId && event.emergency_stop) {
+              setEmergencyStop(event.emergency_stop);
+            }
           }
         } catch {
           // Ignore malformed WebSocket messages.
@@ -755,7 +837,7 @@ export function ApiDeliveryProvider({
   const addStation = useCallback(
     async (station: Omit<Station, "id">) => {
       try {
-        const created = await api.addStation(station);
+        const created = await api.addStation(station, selectedRobotId || undefined);
         await refreshAll();
         return created;
       } catch (err) {
@@ -767,7 +849,7 @@ export function ApiDeliveryProvider({
         throw err;
       }
     },
-    [refreshAll]
+    [refreshAll, selectedRobotId]
   );
 
   const updateMapMetadata = useCallback(
@@ -790,7 +872,11 @@ export function ApiDeliveryProvider({
   const updateStation = useCallback(
     async (stationId: string, station: Omit<Station, "id">) => {
       try {
-        const updated = await api.updateStation(stationId, station);
+        const updated = await api.updateStation(
+          stationId,
+          station,
+          selectedRobotId || undefined,
+        );
         await refreshAll();
         return updated;
       } catch (err) {
@@ -801,7 +887,7 @@ export function ApiDeliveryProvider({
         throw err;
       }
     },
-    [refreshAll]
+    [refreshAll, selectedRobotId]
   );
 
   const removeStation = useCallback(
@@ -869,6 +955,9 @@ export function ApiDeliveryProvider({
 
   const value = useMemo<ApiDeliveryContextValue>(
     () => ({
+      fleet,
+      selectedRobotId,
+      selectRobot,
       occupancyMap,
       mapMetadata,
       navigationFeedback,
@@ -902,6 +991,9 @@ export function ApiDeliveryProvider({
       stationName
     }),
     [
+      fleet,
+      selectedRobotId,
+      selectRobot,
       occupancyMap,
       mapMetadata,
       navigationFeedback,

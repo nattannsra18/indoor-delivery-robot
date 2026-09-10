@@ -27,14 +27,22 @@ test("delivery creation supports automatic and explicit fleet assignment", () =>
 test("admin dashboard shows a refreshable selectable fleet overview", () => {
   const dashboard = read("src/app/page.tsx");
   const fleet = read("src/components/FleetOverview.tsx");
+  const selector = read("src/components/GlobalRobotSelector.tsx");
+  const shell = read("src/components/AppShell.tsx");
+  const context = read("src/context/ApiDeliveryContext.tsx");
 
   assert.match(dashboard, /<FleetOverview \/>/);
-  assert.match(fleet, /getFleet\(\)/);
-  assert.match(fleet, /REFRESH_INTERVAL_MS = 3000/);
+  assert.match(fleet, /const \{ fleet, selectedRobotId, selectRobot, loading \} = useDeliveryApi\(\)/);
   assert.match(fleet, /aria-pressed=\{active\}/);
   assert.match(fleet, /selected\.x\.toFixed\(2\)/);
   assert.match(fleet, /selected\.activeMapId/);
   assert.match(fleet, /selected\.currentTaskId/);
+  assert.match(shell, /<GlobalRobotSelector \/>/);
+  assert.match(selector, /value=\{selectedRobotId\}/);
+  assert.match(selector, /selectRobot\(event\.target\.value\)/);
+  assert.match(context, /api\.getOverview\(requestedRobotId\)/);
+  assert.match(context, /api\.getMap\(/);
+  assert.match(context, /api\.getRobotDiagnostics\(resolvedRobotId\)/);
 });
 
 test("robot registry loads operational fleet data", () => {
@@ -51,5 +59,9 @@ test("robot registry loads operational fleet data", () => {
 
 test("dashboard telemetry cannot overwrite a different selected robot", () => {
   const context = read("src/context/ApiDeliveryContext.tsx");
-  assert.match(context, /telemetryMessage\.robot_id === current\.id/);
+  assert.match(context, /const activeRobotId = selectedRobotIdRef\.current \|\| robotRef\.current\.id/);
+  assert.match(context, /telemetryMessage\.robot_id === activeRobotId/);
+  assert.match(context, /workflow\.robot_id !== activeRobotId/);
+  assert.match(context, /nextDiagnostics\.robotId === activeRobotId/);
+  assert.match(context, /update\.robot_id === activeRobotId/);
 });

@@ -15,6 +15,7 @@ import type {
   RobotMapCatalog,
   OccupancyGridMap,
   Robot,
+  RobotDiagnostics,
   RobotEnrollment,
   RobotRegistryEntry,
   Station,
@@ -471,6 +472,35 @@ export async function getFleet(): Promise<FleetRobot[]> {
   }));
 }
 
+export async function getRobotDiagnostics(robotId: string): Promise<RobotDiagnostics> {
+  const value = await request<{
+    robot_id: string;
+    overall_level: RobotDiagnostics["overallLevel"];
+    statuses: Array<{
+      name: string;
+      level: RobotDiagnostics["overallLevel"];
+      message: string;
+      hardware_id: string;
+      values: Array<{ key: string; value: string }>;
+    }>;
+    timestamp: string | null;
+    server_time: string;
+  }>(`/api/robots/${encodeURIComponent(robotId)}/diagnostics`);
+  return {
+    robotId: value.robot_id,
+    overallLevel: value.overall_level,
+    statuses: value.statuses.map((item) => ({
+      name: item.name,
+      level: item.level,
+      message: item.message,
+      hardwareId: item.hardware_id,
+      values: item.values,
+    })),
+    timestamp: value.timestamp ?? undefined,
+    serverTime: value.server_time,
+  };
+}
+
 export async function revokeRobotCredential(robotId: string): Promise<RobotRegistryEntry> {
   return toRobotRegistryEntry(await request<ApiRobotRegistryEntry>(`/api/robot-registry/robots/${robotId}/revoke`, { method: "POST" }));
 }
@@ -503,8 +533,8 @@ export function resetEmergencyStop(robotId: string): Promise<EmergencyStop> {
   return request<EmergencyStop>(`/api/robots/${robotId}/emergency-stop/reset`, { method: "POST" });
 }
 
-export async function getOverview() {
-  const data = await request<ApiOverview>("/api/overview");
+export async function getOverview(robotId?: string) {
+  const data = await request<ApiOverview>(`/api/overview${robotQuery(robotId)}`);
   return {
     robot: toRobot(data.robot),
     activeTask: data.active_task ? toTask(data.active_task) : undefined,
@@ -522,13 +552,16 @@ function toStation(station: ApiStation): Station {
   return { ...station, mapId: station.map_id };
 }
 
-export async function getStations(mapId?: string): Promise<Station[]> {
-  const query = mapId ? `?map_id=${encodeURIComponent(mapId)}` : "";
+export async function getStations(mapId?: string, robotId?: string): Promise<Station[]> {
+  const parameters = new URLSearchParams();
+  if (mapId) parameters.set("map_id", mapId);
+  if (robotId) parameters.set("robot_id", robotId);
+  const query = parameters.size ? `?${parameters}` : "";
   return (await request<ApiStation[]>(`/api/stations${query}`)).map(toStation);
 }
 
-export async function getMap(): Promise<OccupancyGridMap> {
-  const map = await request<ApiOccupancyGridMap>("/api/map");
+export async function getMap(robotId?: string): Promise<OccupancyGridMap> {
+  const map = await request<ApiOccupancyGridMap>(`/api/map${robotQuery(robotId)}`);
 
   return {
     frameId: map.frame_id,
@@ -1018,9 +1051,9 @@ export async function recoverRobot(robotId: string): Promise<Robot> {
   return toRobot(await request<ApiRobot>(`/api/robots/${robotId}/recover`, { method: "POST" }));
 }
 
-export async function addStation(station: Omit<Station, "id">): Promise<Station> {
+export async function addStation(station: Omit<Station, "id">, robotId?: string): Promise<Station> {
   const { mapId, ...fields } = station;
-  return toStation(await request<ApiStation>("/api/stations", {
+  return toStation(await request<ApiStation>(`/api/stations${robotQuery(robotId)}`, {
     method: "POST",
     body: JSON.stringify({ ...fields, map_id: mapId })
   }));
@@ -1028,10 +1061,11 @@ export async function addStation(station: Omit<Station, "id">): Promise<Station>
 
 export async function updateStation(
   stationId: string,
-  station: Omit<Station, "id">
+  station: Omit<Station, "id">,
+  robotId?: string,
 ): Promise<Station> {
   const { mapId, ...fields } = station;
-  return toStation(await request<ApiStation>(`/api/stations/${stationId}`, {
+  return toStation(await request<ApiStation>(`/api/stations/${stationId}${robotQuery(robotId)}`, {
     method: "PUT",
     body: JSON.stringify({ ...fields, map_id: mapId })
   }));

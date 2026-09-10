@@ -515,8 +515,12 @@ class DeliveryService:
         catalog = map_catalog_store.get(robot_id, robot_online=True)
         return catalog.active_map_id if catalog and catalog.active_map_id else "warehouse_map"
 
-    def list_stations(self, map_id: str | None = None) -> list[StationORM]:
-        return self.repo.list_stations(map_id or self.active_map_id())
+    def list_stations(
+        self,
+        map_id: str | None = None,
+        robot_id: str | None = None,
+    ) -> list[StationORM]:
+        return self.repo.list_stations(map_id or self.active_map_id(robot_id))
 
     def get_station(self, station_id: str) -> StationORM:
         station = self.repo.get_station(station_id)
@@ -530,8 +534,13 @@ class DeliveryService:
             raise HTTPException(status_code=404, detail="Station not found")
         return station
 
-    def add_station(self, payload: StationCreate, actor_id: str | None = None) -> StationORM:
-        self._validate_station_pose(payload)
+    def add_station(
+        self,
+        payload: StationCreate,
+        actor_id: str | None = None,
+        robot_id: str | None = None,
+    ) -> StationORM:
+        self._validate_station_pose(payload, robot_id)
         station = StationORM(id=self.repo.next_station_id(), **payload.model_dump())
         self.repo.add_station(station)
         AuditService(self.db).log(actor_id, "station.created", "station", station.id)
@@ -540,10 +549,14 @@ class DeliveryService:
         return station
 
     def update_station(
-        self, station_id: str, payload: StationCreate, actor_id: str | None = None
+        self,
+        station_id: str,
+        payload: StationCreate,
+        actor_id: str | None = None,
+        robot_id: str | None = None,
     ) -> StationORM:
         station = self.get_station(station_id)
-        self._validate_station_pose(payload)
+        self._validate_station_pose(payload, robot_id)
         for field, value in payload.model_dump().items():
             setattr(station, field, value)
         AuditService(self.db).log(actor_id, "station.updated", "station", station.id)
@@ -551,14 +564,19 @@ class DeliveryService:
         self.db.refresh(station)
         return station
 
-    def _validate_station_pose(self, payload: StationCreate) -> None:
-        active_map_id = self.active_map_id()
+    def _validate_station_pose(
+        self,
+        payload: StationCreate,
+        robot_id: str | None = None,
+    ) -> None:
+        robot_id = robot_id or self.primary_robot().id
+        active_map_id = self.active_map_id(robot_id)
         if payload.map_id != active_map_id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Activate the map before editing its stations",
             )
-        snapshot = map_store.get()
+        snapshot = map_store.get(robot_id)
         if snapshot is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -1148,8 +1166,12 @@ class DeliveryService:
         """Return a committed navigation result for idempotent replay ACKs."""
         return self.repo.task_event_by_external_message_id(command_id)
 
-    def overview(self, owner_id: str | None = None) -> DashboardOverview:
-        robot = self._robot_or_404()
+    def overview(
+        self,
+        owner_id: str | None = None,
+        robot_id: str | None = None,
+    ) -> DashboardOverview:
+        robot = self._robot_or_404(robot_id)
         global_active = self.active_task_for_robot(robot.id)
         active = global_active
         robot_view = Robot.model_validate(robot)

@@ -2,7 +2,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends
 
 from ..command_dispatch import schedule_navigation_path_clear
 from ..dependencies import get_service
-from ..models import FleetRobot, Robot
+from ..diagnostics_store import diagnostics_store
+from ..models import FleetRobot, Robot, utc_now
 from ..service import DeliveryService
 from ..auth import require_admin, require_user
 from ..db_models import UserORM
@@ -21,6 +22,29 @@ def list_fleet(
     _: UserORM = Depends(require_admin),
 ):
     return service.list_fleet()
+
+
+@router.get("/{robot_id}/diagnostics")
+def get_robot_diagnostics(
+    robot_id: str,
+    service: DeliveryService = Depends(get_service),
+    _: UserORM = Depends(require_admin),
+):
+    service.get_robot(robot_id)
+    statuses = diagnostics_store.snapshot(robot_id)
+    severity = {"OK": 0, "WARN": 1, "ERROR": 2, "STALE": 3}
+    overall_level = (
+        max((item.level for item in statuses), key=severity.__getitem__)
+        if statuses else "STALE"
+    )
+    return {
+        "type": "robot_diagnostics",
+        "robot_id": robot_id,
+        "overall_level": overall_level,
+        "statuses": [item.model_dump() for item in statuses],
+        "timestamp": None,
+        "server_time": utc_now().isoformat(),
+    }
 
 
 @router.get("/{robot_id}", response_model=Robot)

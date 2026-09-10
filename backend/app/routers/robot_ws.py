@@ -646,7 +646,8 @@ async def robot_websocket(
                     continue
 
                 snapshot = map_store.update(
-                    map_message.data
+                    map_message.data,
+                    robot_id=robot_id,
                 )
 
                 await websocket.send_json(
@@ -663,6 +664,7 @@ async def robot_websocket(
                 await browser_connection_manager.broadcast_json(
                     {
                         "type": "map_updated",
+                        "robot_id": robot_id,
                         "revision": snapshot.revision,
                     },
                     admin_only=True,
@@ -744,7 +746,7 @@ async def robot_websocket(
                     )
                     db.commit()
                     if switch_result.accepted:
-                        map_store.clear()
+                        map_store.clear(robot_id)
                         catalog = map_catalog_store.set_active(
                             robot_id,
                             switch_result.map_id,

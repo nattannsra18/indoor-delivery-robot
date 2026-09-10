@@ -84,6 +84,10 @@ class DiagnosticsStore:
         with self._lock:
             self._statuses.pop(robot_id, None)
 
+    def snapshot(self, robot_id: str) -> list[DiagnosticStatusPayload]:
+        with self._lock:
+            return self._snapshot_locked(robot_id, self._clock())
+
     def clear(self) -> None:
         with self._lock:
             self._statuses.clear()

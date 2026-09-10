@@ -113,6 +113,65 @@ def payload(
     )
 
 
+def test_live_map_snapshots_are_isolated_by_robot():
+    first = map_store.update(
+        OccupancyGridPayload(
+            frame_id="sim01/map",
+            resolution=0.05,
+            width=2,
+            height=1,
+            origin_x=1.0,
+            origin_y=2.0,
+            origin_yaw=0.0,
+            data=[0, 100],
+        ),
+        robot_id="sim01",
+    )
+    second = map_store.update(
+        OccupancyGridPayload(
+            frame_id="sim02/map",
+            resolution=0.10,
+            width=1,
+            height=2,
+            origin_x=-2.0,
+            origin_y=-3.0,
+            origin_yaw=0.0,
+            data=[-1, 0],
+        ),
+        robot_id="sim02",
+    )
+
+    assert first.revision == second.revision == 1
+    assert map_store.get("sim01").frame_id == "sim01/map"
+    assert map_store.get("sim02").frame_id == "sim02/map"
+
+    map_store.clear("sim01")
+    assert map_store.get("sim01") is None
+    assert map_store.get("sim02") is not None
+
+
+def test_admin_overview_can_target_a_specific_robot():
+    with Session() as db:
+        db.add(RobotORM(
+            id="fleet-selected",
+            name="Selected Fleet Robot",
+            online=True,
+            state=RobotState.IDLE,
+            x=7.5,
+            y=-1.25,
+            enrollment_status=RobotEnrollmentStatus.PAIRED,
+            readiness_status=RobotReadinessStatus.READY,
+            active_map_id="building-b-map",
+            capabilities_json=json.dumps(["navigation", "diagnostics"]),
+        ))
+        db.commit()
+
+        overview = DeliveryService(db).overview(robot_id="fleet-selected")
+
+        assert overview.robot.id == "fleet-selected"
+        assert overview.robot.x == 7.5
+
+
 def test_create_schema_defaults_normal_and_normalizes_optional_text():
     request = payload(recipient_name="  Ada Lovelace  ", delivery_note="  Lab 2  ")
     assert request.priority == TaskPriority.NORMAL
@@ -364,11 +423,21 @@ def test_task_api_dispatches_navigation_commands_to_two_selected_robots():
             db.commit()
             service = DeliveryService(db)
             admin = db.get(UserORM, "admin")
-            snapshot = map_store.get()
-            assert snapshot is not None
-
             for robot_id, socket in sockets.items():
                 await robot_connection_manager.connect(robot_id, socket)
+                snapshot = map_store.update(
+                    OccupancyGridPayload(
+                        frame_id="map",
+                        resolution=1.0,
+                        width=1,
+                        height=1,
+                        origin_x=0.0,
+                        origin_y=0.0,
+                        origin_yaw=0.0,
+                        data=[0],
+                    ),
+                    robot_id=robot_id,
+                )
                 preview_id = route_preview_coordinator.issue_validation(
                     owner_id=admin.id,
                     robot_id=robot_id,

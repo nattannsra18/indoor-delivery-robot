@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import RobotMap from "@/components/RobotMap";
 import LocalizationWorkspace from "@/components/LocalizationWorkspace";
+import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useLocale } from "@/context/LocaleContext";
 import {
   activateRobotMap,
@@ -31,6 +32,7 @@ function fileSize(bytes: number, locale: string) {
 }
 
 export default function MapsPage() {
+  const { selectedRobotId } = useDeliveryApi();
   const { locale } = useLocale();
   const copy = mapManagementText[locale];
   const actions = mapManagementActionsText[locale];
@@ -55,19 +57,37 @@ export default function MapsPage() {
   const [floor, setFloor] = useState("");
   const [areaDescription, setAreaDescription] = useState("");
   const [newMapId, setNewMapId] = useState("");
+  const catalogRequestRef = useRef(0);
+  const selectedRobotIdRef = useRef(selectedRobotId);
   const readyCount = useMemo(() => catalog?.maps.filter((map) => map.available).length ?? 0, [catalog]);
 
   const load = useCallback(async (showLoading = false) => {
+    const requestId = ++catalogRequestRef.current;
+    const robotId = selectedRobotIdRef.current || undefined;
     if (showLoading) setLoading(true);
     try {
-      setCatalog(await getMapCatalog());
+      const next = await getMapCatalog(robotId);
+      if (requestId !== catalogRequestRef.current) return;
+      setCatalog(next);
       setError("");
     } catch (reason) {
+      if (requestId !== catalogRequestRef.current) return;
       setError(reason instanceof Error ? reason.message : copy.loadFailed);
     } finally {
-      if (showLoading) setLoading(false);
+      if (showLoading && requestId === catalogRequestRef.current) setLoading(false);
     }
   }, [copy.loadFailed]);
+
+  useEffect(() => {
+    selectedRobotIdRef.current = selectedRobotId;
+    catalogRequestRef.current += 1;
+    setCatalog(undefined);
+    setMapping(undefined);
+    setSelectedMap(undefined);
+    setManagedMap(undefined);
+    setMessage("");
+    setError("");
+  }, [selectedRobotId]);
 
   useEffect(() => {
     void load(true);
@@ -79,7 +99,7 @@ export default function MapsPage() {
     let cancelled = false;
     const refresh = async () => {
       try {
-        const next = await getMappingStatus();
+        const next = await getMappingStatus(selectedRobotId || undefined);
         if (cancelled) return;
         setMapping(next);
         if (next.phase !== "IDLE") setView("mapping");
@@ -90,12 +110,12 @@ export default function MapsPage() {
     void refresh();
     const interval = window.setInterval(() => void refresh(), 1000);
     return () => { cancelled = true; window.clearInterval(interval); };
-  }, [mappingCopy.unavailable]);
+  }, [mappingCopy.unavailable, selectedRobotId]);
 
   async function requestRefresh() {
     setRefreshing(true); setMessage(""); setError("");
     try {
-      await refreshMapCatalog();
+      await refreshMapCatalog(selectedRobotId || undefined);
       setMessage(actions.syncSucceeded);
       window.setTimeout(() => void load(false), 500);
     } catch (reason) {
@@ -118,10 +138,10 @@ export default function MapsPage() {
     setOperationBusy(true); setMessage(""); setError("");
     try {
       let operation = manageMode === "metadata"
-        ? await updateRobotMapDetails(managedMap.id, { name: mapName.trim(), building: building.trim() || undefined, floor: floor.trim() || undefined, areaDescription: areaDescription.trim() || undefined })
+        ? await updateRobotMapDetails(managedMap.id, { name: mapName.trim(), building: building.trim() || undefined, floor: floor.trim() || undefined, areaDescription: areaDescription.trim() || undefined }, selectedRobotId || undefined)
         : manageMode === "rename"
-          ? await renameRobotMap(managedMap.id, newMapId.trim())
-          : await deleteRobotMap(managedMap.id);
+          ? await renameRobotMap(managedMap.id, newMapId.trim(), selectedRobotId || undefined)
+          : await deleteRobotMap(managedMap.id, selectedRobotId || undefined);
       while (operation.status === "PENDING") {
         await new Promise((resolve) => window.setTimeout(resolve, 300));
         operation = await getMapCatalogOperation(operation.commandId);
@@ -144,7 +164,7 @@ export default function MapsPage() {
     setMessage("");
     setError("");
     try {
-      let operation = await activateRobotMap(mapId);
+      let operation = await activateRobotMap(mapId, selectedRobotId || undefined);
       while (operation.status === "PENDING") {
         await new Promise((resolve) => window.setTimeout(resolve, 300));
         operation = await getMapOperation(operation.commandId);
@@ -172,7 +192,7 @@ export default function MapsPage() {
       <button type="button" role="tab" aria-selected={view === "mapping"} onClick={() => setView("mapping")} className={`min-h-10 rounded-lg px-4 text-sm font-bold ${view === "mapping" ? "bg-blue-600 text-white" : "text-slate-600"}`}>{mappingCopy.create}</button>
       <button type="button" role="tab" aria-selected={view === "localization"} onClick={() => setView("localization")} className={`min-h-10 rounded-lg px-4 text-sm font-bold ${view === "localization" ? "bg-blue-600 text-white" : "text-slate-600"}`}>{localizationCopy.tab}</button>
     </div>
-    {view === "localization" ? <LocalizationWorkspace /> : view === "mapping" ? <MappingWorkspace session={mapping} busy={mappingBusy} error={mappingError} copy={mappingCopy} locale={locale} onBusy={setMappingBusy} onError={setMappingError} onSession={setMapping} onSaved={() => { void load(false); }} onOpenLibrary={() => setView("library")} /> : <>
+    {view === "localization" ? <LocalizationWorkspace /> : view === "mapping" ? <MappingWorkspace robotId={selectedRobotId} session={mapping} busy={mappingBusy} error={mappingError} copy={mappingCopy} locale={locale} onBusy={setMappingBusy} onError={setMappingError} onSession={setMapping} onSaved={() => { void load(false); }} onOpenLibrary={() => setView("library")} /> : <>
     <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3">
       <p className="max-w-3xl text-sm leading-6 text-blue-900">{actions.sourcePolicy}</p>
       <button type="button" disabled={refreshing} onClick={() => void requestRefresh()} className="min-h-11 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{refreshing ? actions.syncing : actions.sync}</button>
@@ -221,7 +241,7 @@ export default function MapsPage() {
   </>;
 }
 
-function MappingWorkspace({ session, busy, error, copy, locale, onBusy, onError, onSession, onSaved, onOpenLibrary }: { session?: MappingSession; busy: boolean; error: string; copy: (typeof webMappingText)[keyof typeof webMappingText]; locale: keyof typeof webMappingText; onBusy: (value: boolean) => void; onError: (value: string) => void; onSession: (value: MappingSession) => void; onSaved: () => void; onOpenLibrary: () => void }) {
+function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy, onError, onSession, onSaved, onOpenLibrary }: { robotId: string; session?: MappingSession; busy: boolean; error: string; copy: (typeof webMappingText)[keyof typeof webMappingText]; locale: keyof typeof webMappingText; onBusy: (value: boolean) => void; onError: (value: string) => void; onSession: (value: MappingSession) => void; onSaved: () => void; onOpenLibrary: () => void }) {
   const [mapId, setMapId] = useState("");
   const [name, setName] = useState("");
   const [building, setBuilding] = useState("");
@@ -251,8 +271,8 @@ function MappingWorkspace({ session, busy, error, copy, locale, onBusy, onError,
   }, []);
   const stopDrive = useCallback(() => {
     clearDriveTimers();
-    if (active) void driveMappingRobot(0, 0).catch(() => undefined);
-  }, [active, clearDriveTimers]);
+    if (active) void driveMappingRobot(0, 0, robotId || undefined).catch(() => undefined);
+  }, [active, clearDriveTimers, robotId]);
   const releaseDrive = useCallback(() => {
     if (driveTimer.current === undefined) return;
     window.clearInterval(driveTimer.current);
@@ -260,16 +280,16 @@ function MappingWorkspace({ session, busy, error, copy, locale, onBusy, onError,
     const remaining = Math.max(0, 300 - (performance.now() - driveStartedAt.current));
     driveStopTimer.current = window.setTimeout(() => {
       driveStopTimer.current = undefined;
-      if (active) void driveMappingRobot(0, 0).catch(() => undefined);
+      if (active) void driveMappingRobot(0, 0, robotId || undefined).catch(() => undefined);
     }, remaining);
-  }, [active]);
+  }, [active, robotId]);
   const startDrive = useCallback((linear: number, angular: number) => {
     if (!active) return;
     clearDriveTimers();
     driveStartedAt.current = performance.now();
-    void driveMappingRobot(linear, angular).catch((reason) => onError(reason instanceof Error ? reason.message : copy.commandFailed));
-    driveTimer.current = window.setInterval(() => void driveMappingRobot(linear, angular).catch(stopDrive), 180);
-  }, [active, clearDriveTimers, copy.commandFailed, onError, stopDrive]);
+    void driveMappingRobot(linear, angular, robotId || undefined).catch((reason) => onError(reason instanceof Error ? reason.message : copy.commandFailed));
+    driveTimer.current = window.setInterval(() => void driveMappingRobot(linear, angular, robotId || undefined).catch(stopDrive), 180);
+  }, [active, clearDriveTimers, copy.commandFailed, onError, robotId, stopDrive]);
   useEffect(() => stopDrive, [stopDrive]);
   useEffect(() => {
     if (!error) return;
@@ -343,14 +363,14 @@ function MappingWorkspace({ session, busy, error, copy, locale, onBusy, onError,
       <aside className="space-y-4"><section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-lg font-black text-slate-950">{phase === "REVIEW" ? copy.review : phase === "FAILED" ? copy.failed : copy.title}</h2><p className="mt-2 text-sm leading-6 text-slate-500">{phase === "REVIEW" ? copy.reviewHelp : phase === "MAPPING" ? copy.liveHelp : phase === "FAILED" ? copy.retryHint : copy.description}</p>
         {session?.detail && !(phase === "IDLE" && session.savedMapId) && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">{session.detail}</p>}
         {session?.startedAt && <p className="mt-3 text-xs text-slate-400">{copy.elapsed}: {formatDate(session.startedAt, locale)}</p>}
-        {phase === "IDLE" && <><p className="mt-5 rounded-2xl bg-blue-50 p-4 text-sm leading-6 text-blue-900">{copy.startHelp}</p><button type="button" disabled={busy} onClick={() => void run(() => startMapping())} className="mt-4 min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{copy.start}</button></>}
-        {phase === "MAPPING" && <><label className="mt-5 block text-sm font-bold text-slate-700">{copy.speed}<span className="float-right font-mono text-blue-700">{driveSpeed.toFixed(2)} m/s</span><input type="range" min="0.08" max="0.22" step="0.02" value={driveSpeed} onChange={(event) => setDriveSpeed(Number(event.target.value))} className="mt-3 w-full accent-blue-600" /></label><div className="mx-auto mt-4 grid max-w-[230px] grid-cols-3 gap-2 select-none"><span /><DriveButton label={copy.forward} {...driveProps(driveSpeed, 0)}>↑</DriveButton><span /><DriveButton label={copy.left} {...driveProps(0, turnSpeed)}>↶</DriveButton><DriveButton label={copy.stopRobot} onClick={stopDrive}>■</DriveButton><DriveButton label={copy.right} {...driveProps(0, -turnSpeed)}>↷</DriveButton><span /><DriveButton label={copy.backward} {...driveProps(-driveSpeed * 0.75, 0)}>↓</DriveButton><span /></div><p className="mt-3 text-center text-xs font-semibold leading-5 text-slate-500">{copy.keyboardHelp}</p><p className="mt-1 text-center text-xs leading-5 text-slate-400">{copy.safety}</p><button type="button" disabled={busy} onClick={() => void run(() => stopMapping())} className="mt-5 min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{copy.stop}</button><button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="mt-2 min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button></>}
-        {phase === "REVIEW" && <form className="mt-5 space-y-3" onSubmit={(event) => { event.preventDefault(); if (valid && !busy) void run(async () => { const result = await saveMapping({ mapId, name: name.trim(), building: building.trim() || undefined, floor: floor.trim() || undefined, areaDescription: area.trim() || undefined }); onSaved(); return result; }); }}><label className="block text-sm font-semibold text-slate-700">{copy.mapId}<input value={mapId} maxLength={120} onChange={(event) => setMapId(event.target.value)} className={field} /><span className="mt-1 block text-xs font-normal text-slate-400">{copy.mapIdHelp}</span></label><label className="block text-sm font-semibold text-slate-700">{copy.mapName}<input value={name} maxLength={160} onChange={(event) => setName(event.target.value)} className={field} /></label><div className="grid grid-cols-2 gap-3"><label className="block text-sm font-semibold text-slate-700">{copy.building}<input value={building} maxLength={120} onChange={(event) => setBuilding(event.target.value)} className={field} /></label><label className="block text-sm font-semibold text-slate-700">{copy.floor}<input value={floor} maxLength={80} onChange={(event) => setFloor(event.target.value)} className={field} /></label></div><label className="block text-sm font-semibold text-slate-700">{copy.area}<textarea value={area} maxLength={240} rows={3} onChange={(event) => setArea(event.target.value)} className={`${field} py-3`} /></label><button type="submit" disabled={!valid || busy} className="min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{busy ? copy.saving : copy.save}</button><button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button></form>}
+        {phase === "IDLE" && <><p className="mt-5 rounded-2xl bg-blue-50 p-4 text-sm leading-6 text-blue-900">{copy.startHelp}</p><button type="button" disabled={busy} onClick={() => void run(() => startMapping(robotId || undefined))} className="mt-4 min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{copy.start}</button></>}
+        {phase === "MAPPING" && <><label className="mt-5 block text-sm font-bold text-slate-700">{copy.speed}<span className="float-right font-mono text-blue-700">{driveSpeed.toFixed(2)} m/s</span><input type="range" min="0.08" max="0.22" step="0.02" value={driveSpeed} onChange={(event) => setDriveSpeed(Number(event.target.value))} className="mt-3 w-full accent-blue-600" /></label><div className="mx-auto mt-4 grid max-w-[230px] grid-cols-3 gap-2 select-none"><span /><DriveButton label={copy.forward} {...driveProps(driveSpeed, 0)}>↑</DriveButton><span /><DriveButton label={copy.left} {...driveProps(0, turnSpeed)}>↶</DriveButton><DriveButton label={copy.stopRobot} onClick={stopDrive}>■</DriveButton><DriveButton label={copy.right} {...driveProps(0, -turnSpeed)}>↷</DriveButton><span /><DriveButton label={copy.backward} {...driveProps(-driveSpeed * 0.75, 0)}>↓</DriveButton><span /></div><p className="mt-3 text-center text-xs font-semibold leading-5 text-slate-500">{copy.keyboardHelp}</p><p className="mt-1 text-center text-xs leading-5 text-slate-400">{copy.safety}</p><button type="button" disabled={busy} onClick={() => void run(() => stopMapping(robotId || undefined))} className="mt-5 min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{copy.stop}</button><button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="mt-2 min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button></>}
+        {phase === "REVIEW" && <form className="mt-5 space-y-3" onSubmit={(event) => { event.preventDefault(); if (valid && !busy) void run(async () => { const result = await saveMapping({ mapId, name: name.trim(), building: building.trim() || undefined, floor: floor.trim() || undefined, areaDescription: area.trim() || undefined }, robotId || undefined); onSaved(); return result; }); }}><label className="block text-sm font-semibold text-slate-700">{copy.mapId}<input value={mapId} maxLength={120} onChange={(event) => setMapId(event.target.value)} className={field} /><span className="mt-1 block text-xs font-normal text-slate-400">{copy.mapIdHelp}</span></label><label className="block text-sm font-semibold text-slate-700">{copy.mapName}<input value={name} maxLength={160} onChange={(event) => setName(event.target.value)} className={field} /></label><div className="grid grid-cols-2 gap-3"><label className="block text-sm font-semibold text-slate-700">{copy.building}<input value={building} maxLength={120} onChange={(event) => setBuilding(event.target.value)} className={field} /></label><label className="block text-sm font-semibold text-slate-700">{copy.floor}<input value={floor} maxLength={80} onChange={(event) => setFloor(event.target.value)} className={field} /></label></div><label className="block text-sm font-semibold text-slate-700">{copy.area}<textarea value={area} maxLength={240} rows={3} onChange={(event) => setArea(event.target.value)} className={`${field} py-3`} /></label><button type="submit" disabled={!valid || busy} className="min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{busy ? copy.saving : copy.save}</button><button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button></form>}
         {["STARTING", "STOPPING", "SAVING", "RESTORING"].includes(phase) && <div className="mt-5 flex items-center gap-3 rounded-2xl bg-blue-50 p-4 text-sm font-semibold text-blue-800"><span className="size-5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />{phase === "SAVING" ? copy.saving : phase === "RESTORING" ? copy.restoring : copy.preparing}</div>}
         {phase === "FAILED" && <button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="mt-4 min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button>}
       </section></aside>
     </div>
-    {confirmDiscard && <ConfirmDialog title={copy.confirmDiscard} body={copy.confirmDiscardBody} cancel={copy.cancel} confirm={copy.confirm} onCancel={() => setConfirmDiscard(false)} onConfirm={() => { setConfirmDiscard(false); void run(() => discardMapping()); }} />}
+    {confirmDiscard && <ConfirmDialog title={copy.confirmDiscard} body={copy.confirmDiscardBody} cancel={copy.cancel} confirm={copy.confirm} onCancel={() => setConfirmDiscard(false)} onConfirm={() => { setConfirmDiscard(false); void run(() => discardMapping(robotId || undefined)); }} />}
   </div>;
 }
 

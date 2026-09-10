@@ -13,7 +13,8 @@ const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeou
 export default function LocalizationWorkspace() {
   const { locale } = useLocale();
   const copy = localizationText[locale];
-  const { robot } = useDeliveryApi();
+  const { robot, selectedRobotId } = useDeliveryApi();
+  const targetRobotId = selectedRobotId || robot.id;
   const [status, setStatus] = useState<LocalizationStatus>();
   const [draft, setDraft] = useState<{ x: number; y: number; yaw: number }>();
   const [positionUncertainty, setPositionUncertainty] = useState(0.5);
@@ -28,14 +29,26 @@ export default function LocalizationWorkspace() {
   const driveStopTimer = useRef<number | undefined>(undefined);
   const driveStartedAt = useRef(0);
   const activeDriveKey = useRef<string | undefined>(undefined);
+  const targetRobotIdRef = useRef(targetRobotId);
+
+  useEffect(() => {
+    targetRobotIdRef.current = targetRobotId;
+    setStatus(undefined);
+    setDraft(undefined);
+    setToast(undefined);
+    setConfirmGlobal(false);
+  }, [targetRobotId]);
 
   const load = useCallback(async () => {
+    const requestedRobotId = targetRobotId;
     try {
-      setStatus(await getLocalizationStatus());
+      const next = await getLocalizationStatus(requestedRobotId);
+      if (targetRobotIdRef.current === requestedRobotId) setStatus(next);
     } catch (reason) {
+      if (targetRobotIdRef.current !== requestedRobotId) return;
       setToast({ kind: "error", title: copy.commandFailed, body: reason instanceof Error ? reason.message : copy.loadFailed });
     }
-  }, [copy.commandFailed, copy.loadFailed]);
+  }, [copy.commandFailed, copy.loadFailed, targetRobotId]);
 
   useEffect(() => {
     void load();
@@ -67,7 +80,8 @@ export default function LocalizationWorkspace() {
     if (!commandId) return;
     for (let attempt = 0; attempt < 30; attempt += 1) {
       await wait(350);
-      const next = await getLocalizationStatus();
+      const next = await getLocalizationStatus(targetRobotId);
+      if (targetRobotIdRef.current !== targetRobotId) return;
       setStatus(next);
       if (!next.pendingCommandId && next.lastCommandId === commandId) {
         if (!next.lastCommandSucceeded) throw new Error(next.detail || copy.commandFailed);
@@ -81,7 +95,7 @@ export default function LocalizationWorkspace() {
     if (!draft) return;
     setBusy(true); setToast(undefined);
     try {
-      const pending = await setLocalizationInitialPose({ pose: { frameId: "map", ...draft }, positionUncertainty, yawUncertainty: yawUncertaintyDegrees * Math.PI / 180 });
+      const pending = await setLocalizationInitialPose({ robotId: targetRobotId, pose: { frameId: "map", ...draft }, positionUncertainty, yawUncertainty: yawUncertaintyDegrees * Math.PI / 180 });
       setStatus(pending);
       await awaitCommand(pending.pendingCommandId);
       setToast({ kind: "success", title: copy.poseSuccess, body: copy.ready });
@@ -93,7 +107,7 @@ export default function LocalizationWorkspace() {
   const globalRelocalize = async () => {
     setConfirmGlobal(false); setBusy(true); setToast(undefined);
     try {
-      const pending = await runGlobalLocalization();
+      const pending = await runGlobalLocalization(targetRobotId);
       setStatus(pending);
       await awaitCommand(pending.pendingCommandId);
       setToast({ kind: "success", title: copy.globalSuccess, body: copy.globalHelp });
@@ -110,8 +124,8 @@ export default function LocalizationWorkspace() {
   }, []);
   const stopDrive = useCallback(() => {
     clearDriveTimers();
-    if (status?.recoveryActive) void driveLocalizationRecovery(0, 0).catch(() => undefined);
-  }, [clearDriveTimers, status?.recoveryActive]);
+    if (status?.recoveryActive) void driveLocalizationRecovery(0, 0, targetRobotId).catch(() => undefined);
+  }, [clearDriveTimers, status?.recoveryActive, targetRobotId]);
   const releaseDrive = useCallback(() => {
     if (driveTimer.current === undefined) return;
     window.clearInterval(driveTimer.current);
@@ -119,26 +133,26 @@ export default function LocalizationWorkspace() {
     const remaining = Math.max(0, 300 - (performance.now() - driveStartedAt.current));
     driveStopTimer.current = window.setTimeout(() => {
       driveStopTimer.current = undefined;
-      if (status?.recoveryActive) void driveLocalizationRecovery(0, 0).catch(() => undefined);
+      if (status?.recoveryActive) void driveLocalizationRecovery(0, 0, targetRobotId).catch(() => undefined);
     }, remaining);
-  }, [status?.recoveryActive]);
+  }, [status?.recoveryActive, targetRobotId]);
   const startDrive = useCallback((linear: number, angular: number) => {
     if (!status?.recoveryActive) return;
     clearDriveTimers();
     driveStartedAt.current = performance.now();
-    const send = () => void driveLocalizationRecovery(linear, angular).catch((reason) => {
+    const send = () => void driveLocalizationRecovery(linear, angular, targetRobotId).catch((reason) => {
       stopDrive();
       setToast({ kind: "error", title: copy.commandFailed, body: reason instanceof Error ? reason.message : copy.commandFailed });
     });
     send();
     driveTimer.current = window.setInterval(send, 180);
-  }, [clearDriveTimers, copy.commandFailed, status?.recoveryActive, stopDrive]);
+  }, [clearDriveTimers, copy.commandFailed, status?.recoveryActive, stopDrive, targetRobotId]);
   const turnSpeed = Math.min(0.4, driveSpeed * 3.3);
   const toggleAutomaticScan = async () => {
     setBusy(true);
     try {
-      if (status?.automaticScanActive) await stopLocalizationScan();
-      else await startLocalizationScan();
+      if (status?.automaticScanActive) await stopLocalizationScan(targetRobotId);
+      else await startLocalizationScan(targetRobotId);
       await wait(550);
       await load();
     } catch (reason) {
@@ -179,7 +193,7 @@ export default function LocalizationWorkspace() {
   const healthLabel = status?.health === "LOCALIZED" ? copy.localized : status?.health === "DEGRADED" ? copy.degraded : status?.health === "LOST" ? copy.lost : copy.unknown;
   const healthTone = status?.health === "LOCALIZED" ? "text-emerald-700 bg-emerald-50" : status?.health === "DEGRADED" ? "text-amber-700 bg-amber-50" : status?.health === "LOST" ? "text-rose-700 bg-rose-50" : "text-slate-600 bg-slate-50";
   const reason = reasonLabel(status?.reason, copy);
-  const commandReady = robot.online && robot.state === "IDLE" && !robot.currentTaskId && !status?.pendingCommandId;
+  const commandReady = robot.id === targetRobotId && robot.online && robot.state === "IDLE" && !robot.currentTaskId && !status?.pendingCommandId;
 
   return <>
     {toast && <div className={`fixed right-5 top-5 z-[70] max-w-sm rounded-2xl border p-4 shadow-xl ${toast.kind === "success" ? "border-emerald-200 bg-white" : "border-rose-200 bg-white"}`} role={toast.kind === "error" ? "alert" : "status"}><div className="flex items-start gap-3"><span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${toast.kind === "success" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>{toast.kind === "success" ? "✓" : "!"}</span><div className="min-w-0 flex-1"><p className="font-bold text-slate-950">{toast.title}</p><p className="mt-1 text-sm leading-5 text-slate-600">{toast.body}</p></div><button type="button" onClick={() => setToast(undefined)} aria-label={copy.close} className="rounded-lg px-2 text-xl text-slate-400 hover:bg-slate-100">×</button></div></div>}

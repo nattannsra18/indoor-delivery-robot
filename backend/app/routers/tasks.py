@@ -184,7 +184,7 @@ async def preview_task_route(
             status_code=status.HTTP_409_CONFLICT,
             detail="Route preview is unavailable while the robot is mapping",
         )
-    snapshot = map_store.get()
+    snapshot = map_store.get(robot.id)
 
     if snapshot is None:
         raise HTTPException(
@@ -248,7 +248,7 @@ async def preview_task_route(
             status_code=status.HTTP_409_CONFLICT,
             detail="Nav2 preview frame does not match the active ROS map",
         )
-    latest_snapshot = map_store.get()
+    latest_snapshot = map_store.get(robot.id)
     if latest_snapshot is None or latest_snapshot.revision != snapshot.revision:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -329,7 +329,7 @@ async def create_task(
             status_code=status.HTTP_409_CONFLICT,
             detail="Delivery creation is unavailable while the robot is mapping",
         )
-    snapshot = map_store.get()
+    snapshot = map_store.get(robot.id)
     validation = None
     if snapshot is not None:
         validation = route_preview_coordinator.consume_validation(

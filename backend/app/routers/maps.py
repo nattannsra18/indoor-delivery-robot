@@ -66,8 +66,12 @@ def update_map_metadata(
 
 
 @router.get("", response_model=MapSnapshot)
-def get_map() -> MapSnapshot:
-    snapshot = map_store.get()
+def get_map(
+    robot_id: str | None = None,
+    db: Session = Depends(get_db),
+) -> MapSnapshot:
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
+    snapshot = map_store.get(robot_id)
 
     if snapshot is None:
         raise HTTPException(

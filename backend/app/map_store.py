@@ -12,33 +12,42 @@ from .models import (
 class MapStore:
     def __init__(self) -> None:
         self._lock = Lock()
-        self._revision = 0
-        self._snapshot: MapSnapshot | None = None
+        self._revisions: dict[str, int] = {}
+        self._snapshots: dict[str, MapSnapshot] = {}
 
     def update(
         self,
         payload: OccupancyGridPayload,
+        *,
+        robot_id: str = "robot01",
     ) -> MapSnapshot:
         with self._lock:
-            self._revision += 1
-            self._snapshot = MapSnapshot(
+            revision = self._revisions.get(robot_id, 0) + 1
+            self._revisions[robot_id] = revision
+            snapshot = MapSnapshot(
                 **payload.model_dump(),
-                revision=self._revision,
+                revision=revision,
                 received_at=utc_now(),
             )
-            return self._snapshot.model_copy(deep=True)
+            self._snapshots[robot_id] = snapshot
+            return snapshot.model_copy(deep=True)
 
-    def get(self) -> MapSnapshot | None:
+    def get(self, robot_id: str = "robot01") -> MapSnapshot | None:
         with self._lock:
-            if self._snapshot is None:
+            snapshot = self._snapshots.get(robot_id)
+            if snapshot is None:
                 return None
 
-            return self._snapshot.model_copy(deep=True)
+            return snapshot.model_copy(deep=True)
 
-    def clear(self) -> None:
+    def clear(self, robot_id: str | None = None) -> None:
         with self._lock:
-            self._revision = 0
-            self._snapshot = None
+            if robot_id is None:
+                self._revisions.clear()
+                self._snapshots.clear()
+                return
+            self._revisions.pop(robot_id, None)
+            self._snapshots.pop(robot_id, None)
 
 
 map_store = MapStore()
