@@ -63,12 +63,17 @@ def test_pairing_claims_one_time_per_robot_credential_and_never_stores_plaintext
     assert enrollment is not None
     assert verify_password(created.pairing_code, enrollment.pairing_code_hash)
     assert created.pairing_code not in enrollment.pairing_code_hash
-    assert registry.list_enrollments()[0].capabilities == [
+    db.commit()
+    db.expire_all()
+    summary = registry.list_enrollments()[0]
+    assert summary.capabilities == [
         "localization", "mapping", "navigation"
     ]
-    assert registry.list_enrollments()[0].fingerprint_sha256 == token_digest(
+    assert summary.fingerprint_sha256 == token_digest(
         enrollment_payload().hardware_fingerprint
     )
+    assert summary.created_at.utcoffset() == timedelta(0)
+    assert summary.expires_at.utcoffset() == timedelta(0)
 
     approved = registry.approve(created.enrollment_id, created.pairing_code, "admin")
     assert approved.status == RobotEnrollmentStatus.UNPAIRED
@@ -78,6 +83,7 @@ def test_pairing_claims_one_time_per_robot_credential_and_never_stores_plaintext
         created.pairing_code,
         enrollment_payload().hardware_fingerprint,
     )
+    db.commit()
     stored = db.scalar(
         select(RobotCredentialORM).where(RobotCredentialORM.robot_id == claimed.robot_id)
     )
@@ -598,6 +604,32 @@ def test_connection_manager_closes_active_socket_when_credential_is_revoked():
     assert robot_connection_manager.is_connected("revoked-robot") is False
 
 
+def test_agent_connection_ack_is_sent_without_an_open_database_transaction():
+    async def scenario():
+        db = session()
+        _, claimed = paired_robot(db)
+
+        class TransactionCheckingSocket(QueueSocket):
+            async def send_json(self, value):
+                if value.get("type") == "connection_ack":
+                    assert db.in_transaction() is False
+                await super().send_json(value)
+
+        socket = TransactionCheckingSocket(
+            claimed.credential,
+            agent_hello(claimed.robot_id, "boot-transaction-check"),
+        )
+        websocket_run = asyncio.create_task(
+            robot_websocket(socket, claimed.robot_id, db)
+        )
+        await socket.wait_for("connection_ack")
+        socket.disconnect()
+        await asyncio.wait_for(websocket_run, timeout=1.0)
+        db.close()
+
+    asyncio.run(scenario())
+
+
 def test_active_mission_survives_disconnect_alerts_and_resends_on_reconnect():
     async def scenario():
         db = session()
@@ -747,6 +779,7 @@ def test_paired_websocket_rejects_shared_token_and_requires_protocol_hello(monke
         created.pairing_code,
         enrollment_payload().hardware_fingerprint,
     )
+    db.commit()
 
     impersonation = StubSocket("legacy-shared-token", [])
     asyncio.run(robot_websocket(impersonation, claimed.robot_id, db))

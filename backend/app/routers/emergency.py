@@ -36,7 +36,11 @@ async def broadcast_alert(db: Session, key: str, event: str) -> None:
 
 @router.get("/{robot_id}/emergency-stop", response_model=EmergencyStop)
 def get_state(robot_id: str, db: Session = Depends(get_db), _: UserORM = Depends(require_user)):
-    return EmergencyStopService(db).get(robot_id)
+    state = EmergencyStop.model_validate(EmergencyStopService(db).get(robot_id))
+    # The default NORMAL state is created lazily; GET must persist it instead
+    # of leaving an INSERT open until the request-scoped session is closed.
+    db.commit()
+    return state
 
 
 @router.post("/{robot_id}/emergency-stop", response_model=EmergencyStop)

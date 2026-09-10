@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from app.audit_service import AuditService
 from app.auth import hash_password
 from app.database import Base
-from app.db_models import AuditRecordORM, NotificationORM, RobotORM, UserORM
+from app.db_models import AuditRecordORM, EmergencyStopORM, NotificationORM, RobotORM, UserORM
 from app.models import EmergencyStopState, NotificationCategory, RobotState, UserRole
 from app.notification_service import NotificationService
 from app.schema import apply_compatibility_migrations
@@ -581,6 +581,88 @@ def test_dashboard_ping_revalidation_releases_transaction_before_next_frame(monk
         writer.close()
 
         from app.auth import revoke_session
+        assert revoke_session(db, token) is not None
+        socket.messages.put_nowait({"type": "ping"})
+        await handler
+        assert socket.closed == (1008, "Authentication required")
+        manager.clear()
+
+    asyncio.run(exercise())
+
+
+def test_emergency_state_snapshot_persists_defaults_and_releases_transaction():
+    db = session()
+    db.add(
+        RobotORM(
+            id="robot01",
+            name="Robot 01",
+            online=True,
+            state=RobotState.IDLE,
+        )
+    )
+    db.commit()
+
+    states = EmergencyStopService(db).list_states()
+
+    assert [(item.robot_id, item.state) for item in states] == [
+        ("robot01", EmergencyStopState.NORMAL)
+    ]
+    assert not db.in_transaction()
+    reader = sessionmaker(bind=db.get_bind(), expire_on_commit=False)()
+    assert reader.get(EmergencyStopORM, "robot01") is not None
+    reader.close()
+
+
+def test_admin_dashboard_never_sends_emergency_snapshot_inside_transaction(monkeypatch):
+    async def exercise():
+        from app.auth import create_session, revoke_session
+
+        db = session()
+        admin = UserORM(
+            id="admin",
+            username="admin",
+            password_hash=hash_password("admin", iterations=1000),
+            role=UserRole.ADMIN,
+        )
+        db.add_all([
+            admin,
+            RobotORM(
+                id="robot01",
+                name="Robot 01",
+                online=True,
+                state=RobotState.IDLE,
+            ),
+        ])
+        db.commit()
+        token, _ = create_session(db, admin)
+
+        class Socket:
+            def __init__(self):
+                self.cookies = {"idr_session": token}
+                self.messages: asyncio.Queue[dict] = asyncio.Queue()
+                self.waiting = asyncio.Event()
+                self.closed = None
+
+            async def accept(self):
+                pass
+
+            async def send_json(self, value):
+                if value.get("type") == "emergency_stop_snapshot":
+                    assert not db.in_transaction()
+
+            async def receive_json(self):
+                self.waiting.set()
+                return await self.messages.get()
+
+            async def close(self, code=1000, reason=""):
+                self.closed = (code, reason)
+
+        manager = BrowserConnectionManager()
+        monkeypatch.setattr(dashboard_ws, "browser_connection_manager", manager)
+        socket = Socket()
+        handler = asyncio.create_task(dashboard_ws.dashboard_websocket(socket, db))
+        await socket.waiting.wait()
+        assert db.get(EmergencyStopORM, "robot01") is not None
         assert revoke_session(db, token) is not None
         socket.messages.put_nowait({"type": "ping"})
         await handler

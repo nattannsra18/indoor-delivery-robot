@@ -50,11 +50,18 @@ async def dashboard_websocket(
         await websocket.close(code=1008, reason="Authentication required")
         return
     user, session = resolved
+    user_id = user.id
+    user_role = user.role
+    session_id = session.id
+    # Authentication is a database read. Release its transaction before the
+    # first network await so this socket can never hold database resources
+    # while a slow/disconnected browser is being accepted.
+    db.rollback()
     await browser_connection_manager.connect(
         websocket,
-        user.role,
-        user.id,
-        session.id,
+        user_role,
+        user_id,
+        session_id,
     )
 
     await websocket.send_json(
@@ -65,21 +72,27 @@ async def dashboard_websocket(
         }
     )
 
-    notifications, unread_count, _ = NotificationService(db).list(user.id, 0, 30)
+    notifications, unread_count, _ = NotificationService(db).list(user_id, 0, 30)
+    notification_payload = [
+        Notification.model_validate(item).model_dump(mode="json")
+        for item in notifications
+    ]
+    db.rollback()
     await websocket.send_json(
         {
             "type": "notification_snapshot",
-            "notifications": [Notification.model_validate(item).model_dump(mode="json") for item in notifications],
+            "notifications": notification_payload,
             "unread_count": unread_count,
             "server_time": current_utc_time(),
         }
     )
 
+    path_payloads: list[dict[str, Any]] = []
     for robot_id, path in navigation_path_store.all_paths():
         task = db.get(DeliveryTaskORM, path.task_id)
-        if user.role != UserRole.ADMIN and (task is None or task.owner_id != user.id):
+        if user_role != UserRole.ADMIN and (task is None or task.owner_id != user_id):
             continue
-        await websocket.send_json(
+        path_payloads.append(
             {
                 "type": "navigation_path",
                 "robot_id": robot_id,
@@ -87,25 +100,36 @@ async def dashboard_websocket(
                 "server_time": current_utc_time(),
             }
         )
+    db.rollback()
+    for payload in path_payloads:
+        await websocket.send_json(
+            payload
+        )
 
-    if user.role == UserRole.ADMIN:
+    if user_role == UserRole.ADMIN:
+        alert_payload = [
+            Alert.model_validate(item).model_dump(mode="json")
+            for item in AlertService(db).list(active_only=True)
+        ]
+        db.rollback()
+        emergency_stop_payload = [
+            item.model_dump(mode="json")
+            for item in EmergencyStopService(db).list_states()
+        ]
+        # list_states commits lazily-created defaults. Keep this explicit
+        # rollback as a guard if its implementation changes later.
+        db.rollback()
         await websocket.send_json(
             {
                 "type": "alert_snapshot",
-                "alerts": [
-                    Alert.model_validate(item).model_dump(mode="json")
-                    for item in AlertService(db).list(active_only=True)
-                ],
+                "alerts": alert_payload,
                 "server_time": current_utc_time(),
             }
         )
         await websocket.send_json(
             {
                 "type": "emergency_stop_snapshot",
-                "emergency_stops": [
-                    item.model_dump(mode="json")
-                    for item in EmergencyStopService(db).list_states()
-                ],
+                "emergency_stops": emergency_stop_payload,
                 "server_time": current_utc_time(),
             }
         )

@@ -196,6 +196,7 @@ async def robot_websocket(
         )
     )
     if credential is None and not legacy_valid:
+        db.rollback()
         await websocket.close(code=1008, reason="Robot authentication failed")
         return
 
@@ -203,23 +204,12 @@ async def robot_websocket(
     # robot.  The long-lived receive loop is released separately below.
     db.rollback()
 
-    try:
-        robot = service.get_robot(robot_id)
-    except HTTPException:
-        await websocket.close(
-            code=1008,
-            reason="Robot does not exist",
-        )
-        return
-
     hello: RobotAgentHello | None = None
     if credential is not None:
         await websocket.accept()
         try:
             first_message = await asyncio.wait_for(websocket.receive_json(), timeout=5.0)
             hello = RobotAgentHello.model_validate(first_message)
-            registry.apply_hello(robot, hello)
-            registry.reconcile_authenticated_credential(robot_id, credential.version)
         except (asyncio.TimeoutError, ValidationError, HTTPException, WebSocketDisconnect):
             await websocket.send_json(
                 {
@@ -232,6 +222,44 @@ async def robot_websocket(
             await websocket.close(code=1008, reason="Invalid Agent Protocol handshake")
             return
 
+    # Do not retain a database transaction while waiting for agent_hello.
+    # Load and validate the robot only after the first network read completes.
+    try:
+        robot = service.get_robot(robot_id)
+    except HTTPException:
+        db.rollback()
+        await websocket.close(
+            code=1008,
+            reason="Robot does not exist",
+        )
+        return
+    robot_public_id = robot.id
+    robot_name = robot.name
+    if credential is not None:
+        assert hello is not None
+        try:
+            registry.apply_hello(robot, hello)
+            registry.reconcile_authenticated_credential(robot_id, credential.version)
+        except HTTPException:
+            db.rollback()
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "code": "INVALID_AGENT_HELLO",
+                    "detail": "A valid Agent Protocol v1 hello is required",
+                    "server_time": current_utc_time(),
+                }
+            )
+            await websocket.close(code=1008, reason="Invalid Agent Protocol handshake")
+            return
+    else:
+        db.rollback()
+
+    # All ORM attributes needed by the acknowledgement are copied above.
+    # Neither the connection-manager await nor the acknowledgement send should
+    # trigger a lazy database read and leave an idle transaction open.
+    db.rollback()
+
     await robot_connection_manager.connect(
         robot_id,
         websocket,
@@ -241,12 +269,13 @@ async def robot_websocket(
     publish_committed_notifications(
         db, service.record_robot_connection(robot_id, True)
     )
+    db.rollback()
 
     await websocket.send_json(
         {
             "type": "connection_ack",
-            "robot_id": robot.id,
-            "robot_name": robot.name,
+            "robot_id": robot_public_id,
+            "robot_name": robot_name,
             "connected": True,
             "protocol_version": "1.0",
             "authentication": "robot_credential" if credential is not None else "legacy_transition",
@@ -262,13 +291,16 @@ async def robot_websocket(
         offline_alerts.pending_notification_ids,
     )
     if offline_alert is not None:
+        offline_alert_payload = Alert.model_validate(offline_alert).model_dump(mode="json")
+        db.rollback()
         await browser_connection_manager.broadcast_json(
-            {"type": "alert_changed", "event": "resolved", "alert": Alert.model_validate(offline_alert).model_dump(mode="json")},
+            {"type": "alert_changed", "event": "resolved", "alert": offline_alert_payload},
             admin_only=True,
         )
 
     emergency_command = EmergencyStopService(db).reconnect_command(robot_id)
     if emergency_command is not None:
+        db.rollback()
         await websocket.send_json(emergency_command)
 
     # A cancellation request has priority over
@@ -289,6 +321,7 @@ async def robot_websocket(
         )
 
         if cancel_command is not None:
+            db.rollback()
             await websocket.send_json(
                 cancel_command
             )
@@ -309,6 +342,7 @@ async def robot_websocket(
             )
 
             if pending_command is not None:
+                db.rollback()
                 await websocket.send_json(
                     pending_command
                 )
@@ -319,6 +353,10 @@ async def robot_websocket(
 
     try:
         while True:
+            # Every message handler must finish its database work before this
+            # indefinite network wait. This also guards read-only branches
+            # that do not otherwise commit.
+            db.rollback()
             message = await websocket.receive_json()
 
             if not isinstance(message, dict):

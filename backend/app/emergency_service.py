@@ -61,7 +61,15 @@ class EmergencyStopService:
     def list_states(self) -> list[EmergencyStop]:
         for robot in self.repo.list_robots():
             self.get(robot.id)
-        return [EmergencyStop.model_validate(item) for item in self.db.scalars(select(EmergencyStopORM)).all()]
+        states = [
+            EmergencyStop.model_validate(item)
+            for item in self.db.scalars(select(EmergencyStopORM)).all()
+        ]
+        # ``get`` creates the NORMAL row lazily. Persist those defaults here so
+        # callers never retain an uncommitted INSERT while waiting on network
+        # I/O (notably the long-lived dashboard WebSocket).
+        self.db.commit()
+        return states
 
     def is_latched(self, robot_id: str) -> bool:
         state = self._load_state(robot_id)

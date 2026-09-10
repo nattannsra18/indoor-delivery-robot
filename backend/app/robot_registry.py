@@ -34,6 +34,10 @@ def _aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
+def _aware_optional(value: datetime | None) -> datetime | None:
+    return _aware(value) if value is not None else None
+
+
 def _capabilities(raw: str) -> list[str]:
     try:
         value = json.loads(raw)
@@ -61,10 +65,10 @@ def enrollment_summary(item: RobotEnrollmentORM) -> RobotEnrollmentSummary:
         profile_version=item.profile_version,
         capabilities=_capabilities(item.capabilities_json),
         status=item.status,
-        expires_at=item.expires_at,
-        created_at=item.created_at,
-        approved_at=item.approved_at,
-        claimed_at=item.claimed_at,
+        expires_at=_aware(item.expires_at),
+        created_at=_aware(item.created_at),
+        approved_at=_aware_optional(item.approved_at),
+        claimed_at=_aware_optional(item.claimed_at),
         robot_id=item.robot_id,
     )
 
@@ -150,7 +154,7 @@ class RobotRegistryService:
         return RobotEnrollmentCreated(
             enrollment_id=enrollment.id,
             pairing_code=pairing_code,
-            expires_at=enrollment.expires_at,
+            expires_at=_aware(enrollment.expires_at),
         )
 
     def list_enrollments(self) -> list[RobotEnrollmentSummary]:

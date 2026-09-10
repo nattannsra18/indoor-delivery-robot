@@ -37,7 +37,7 @@ export default function FleetOverview() {
     {!loading && fleet.length === 0 ? <p className="p-6 text-sm text-slate-500">{copy.fleetEmpty}</p> : null}
 
     {fleet.length > 0 ? <div className="grid gap-5 p-5 md:p-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,.65fr)]">
-      <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-3">
         {fleet.map((robot) => {
           const active = robot.id === selected?.id;
           return <button
@@ -61,7 +61,7 @@ export default function FleetOverview() {
         })}
       </div>
 
-      {selected ? <aside aria-live="polite" className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+      {selected ? <aside aria-live="polite" className="h-fit rounded-2xl border border-slate-200 bg-slate-50 p-5">
         <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-400">{copy.fleetSelectedRobot}</p>
         <div className="mt-2 flex items-start justify-between gap-3"><div><h3 className="text-xl font-bold text-slate-950">{selected.name}</h3><p className="font-mono text-xs text-slate-500">{selected.id}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${selected.acceptsDeliveries ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{selected.acceptsDeliveries ? copy.fleetAccepting : copy.fleetUnavailable}</span></div>
         <dl className="mt-5 grid grid-cols-2 gap-3">

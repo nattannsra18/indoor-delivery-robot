@@ -1684,6 +1684,13 @@ def test_admin_map_metadata_is_applied_only_after_matching_robot_ack():
             }],
         })
         assert websocket.receive_json()["type"] == "map_catalog_ack"
+        metadata = client.get("/api/map/metadata?robot_id=robot01")
+        assert metadata.status_code == 200
+        assert metadata.json()["map_name"] == "Warehouse Map"
+        assert metadata.json()["building"] == ""
+        missing = client.get("/api/map/metadata?robot_id=unknown-robot")
+        assert missing.status_code == 404
+        assert missing.json()["detail"] == "Robot has not reported active map metadata"
 
         response = client.put(
             "/api/map/catalog/warehouse_map/metadata",

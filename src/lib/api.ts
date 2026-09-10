@@ -596,8 +596,8 @@ function toMapMetadata(metadata: ApiMapMetadata): MapMetadata {
   };
 }
 
-export async function getMapMetadata(): Promise<MapMetadata> {
-  return toMapMetadata(await request<ApiMapMetadata>("/api/map/metadata"));
+export async function getMapMetadata(robotId?: string): Promise<MapMetadata> {
+  return toMapMetadata(await request<ApiMapMetadata>(`/api/map/metadata${robotQuery(robotId)}`));
 }
 
 export async function updateMapMetadata(
