@@ -410,6 +410,7 @@ def test_accepted_navigation_result_clears_matching_feedback(monkeypatch):
     monkeypatch.setattr(navigation_feedback_store, "clear_matching", capture_clear)
     with Session() as db:
         task, _, _ = create_global_queue(db)
+        task_id = task.id
         command = DeliveryService(db).build_navigation_command(task)
         assert command is not None
         navigation_feedback_store.set("robot01", feedback(task.id, "pickup"))
@@ -424,7 +425,7 @@ def test_accepted_navigation_result_clears_matching_feedback(monkeypatch):
         ])
         asyncio.run(robot_websocket(websocket, "robot01", db))
 
-    assert ("robot01", task.id, "pickup") in calls
+    assert ("robot01", task_id, "pickup") in calls
 
 
 def test_aborted_navigation_auto_dispatches_and_sends_next_command():

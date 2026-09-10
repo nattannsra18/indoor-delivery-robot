@@ -131,6 +131,92 @@ docker compose --env-file deploy/production/.env.production \
 ./deploy/production/deploy.sh
 ```
 
-Back up the `postgres_data` volume and protect the production environment file
-with owner-only permissions. Credential rotation and revocation remain the
-preferred response if a robot credential may have been exposed.
+`deploy.sh` now waits until the database, API, and frontend health checks pass.
+Container logs are capped at five 10 MB files per service. PostgreSQL also
+terminates sessions that remain idle inside a transaction for 30 seconds; this
+is a last-resort lock safeguard, not a replacement for correct transaction
+boundaries.
+
+### Backups and restore drills
+
+Create an owner-readable custom-format PostgreSQL backup outside the container:
+
+```bash
+./deploy/production/backup_postgres.sh
+```
+
+The optional second argument selects a backup directory, ideally an encrypted
+EBS volume or a directory uploaded to an encrypted, versioned S3 bucket. The
+script never deletes older backups automatically. Define retention in the
+off-host storage policy only after recovery copies have been verified.
+
+Test a restore against a disposable database before relying on a backup:
+
+```bash
+docker compose --env-file deploy/production/.env.production \
+  -f deploy/production/compose.yml exec -T postgres \
+  sh -c 'createdb --username="$POSTGRES_USER" indoor_delivery_restore_test'
+docker compose --env-file deploy/production/.env.production \
+  -f deploy/production/compose.yml exec -T postgres \
+  sh -c 'pg_restore --exit-on-error --username="$POSTGRES_USER" \
+  --dbname=indoor_delivery_restore_test' < BACKUP_FILE.dump
+```
+
+Drop only that explicitly named disposable database after validating record
+counts and application migrations. Never run a restore over the live database
+without a maintenance window and a separately verified backup.
+
+### Availability monitoring
+
+Docker health checks report failures but Docker Compose does not restart a
+container merely because it is `unhealthy`. Install a one-minute system timer,
+cron job, or external uptime monitor for the public endpoint. The repository
+watchdog performs three bounded checks and restarts only the backend if all
+checks fail:
+
+```bash
+./deploy/production/health_watchdog.sh \
+  https://robot.example.com/health
+```
+
+Send its output to journald or CloudWatch Logs and alert on a failed recovery.
+Also create CloudWatch alarms for EC2 status checks, CPU credit balance on
+burstable instances, disk usage, and memory/swap through the CloudWatch Agent.
+Use an external HTTPS monitor so a host-level or DNS failure is still visible.
+
+### Stable address, domain, and secrets
+
+- Associate an Elastic IP with the EC2 instance before production use. A normal
+  public IPv4 address can change after stop/start.
+- Replace the temporary `sslip.io` hostname with an owned DNS name. Point its A
+  record to the Elastic IP, update every origin/host value in
+  `.env.production`, validate with `check_config.py`, and redeploy so Caddy
+  obtains the new certificate.
+- Keep `.env.production` mode `0600`. For a long-lived deployment, store source
+  secrets in AWS Systems Manager Parameter Store or Secrets Manager and render
+  the environment file on the instance through a least-privilege IAM role.
+  Never place AWS access keys or application secrets in Git.
+- Keep SSH limited to the administrator's current IP and use Session Manager
+  when possible. Only ports 80 and 443 are public application ingress.
+
+### Safe update and rollback
+
+Create a database backup first, then record the currently deployed revision and
+deploy an explicit tested commit:
+
+```bash
+git rev-parse HEAD
+./deploy/production/backup_postgres.sh
+git fetch --prune origin
+git switch --detach DEPLOY_COMMIT
+./deploy/production/deploy.sh
+curl --fail --show-error https://robot.example.com/health
+```
+
+If health or the smoke workflow fails, switch back to the recorded revision and
+run `deploy.sh` again. Database migrations must remain backward compatible; if a
+release requires a database rollback, restore only through the tested
+maintenance procedure above.
+
+Credential rotation and revocation remain the preferred response if a robot
+credential may have been exposed.

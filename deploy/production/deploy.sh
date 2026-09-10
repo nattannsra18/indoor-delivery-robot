@@ -21,7 +21,7 @@ docker compose \
 docker compose \
   --env-file "${environment_file}" \
   -f "${compose_file}" \
-  up --detach --no-build
+  up --detach --no-build --wait --wait-timeout 180
 
 echo "Production stack started. Check status with:"
 echo "docker compose --env-file ${environment_file} -f ${compose_file} ps"

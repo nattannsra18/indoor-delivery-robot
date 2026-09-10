@@ -57,6 +57,11 @@ const DIAGNOSTIC_LEVELS: DiagnosticLevel[] = [
   "STALE"
 ];
 
+// WebSocket messages are the primary realtime transport. Polling is only a
+// recovery path for a missed event or an interrupted socket.
+const DASHBOARD_FALLBACK_REFRESH_MS = 15_000;
+const MAP_FALLBACK_REFRESH_MS = 10_000;
+
 const EMPTY_ROBOT: Robot = {
   id: "robot01",
   name: "SCUTTLE-01",
@@ -487,18 +492,33 @@ export function ApiDeliveryProvider({
 
   const refreshMapMetadata = useCallback(async () => {
     try {
-      const metadata = await api.getMapMetadata();
+      const requestedRobotId = user?.role === "ADMIN"
+        ? selectedRobotId || undefined
+        : undefined;
+      const metadata = await api.getMapMetadata(requestedRobotId);
+      if (
+        user?.role === "ADMIN"
+        && selectedRobotIdRef.current
+        && selectedRobotIdRef.current !== requestedRobotId
+      ) return;
       if (mountedRef.current) setMapMetadata(metadata);
     } catch {
+      if (
+        user?.role === "ADMIN"
+        && selectedRobotIdRef.current
+        && selectedRobotIdRef.current !== selectedRobotId
+      ) return;
       if (mountedRef.current) setMapMetadata(undefined);
     }
-  }, []);
+  }, [selectedRobotId, user?.role]);
 
   useEffect(() => {
     void refreshAll();
     const interval = window.setInterval(
-      () => void refreshAll(),
-      1000
+      () => {
+        if (document.visibilityState === "visible") void refreshAll();
+      },
+      DASHBOARD_FALLBACK_REFRESH_MS
     );
     return () => window.clearInterval(interval);
   }, [refreshAll]);
@@ -557,6 +577,13 @@ export function ApiDeliveryProvider({
           } else if (message.type === "map_updated") {
             const update = message as { robot_id?: unknown };
             if (update.robot_id === activeRobotId) void refreshMap();
+          } else if (message.type === "map_catalog_changed") {
+            const update = message as {
+              catalog?: { robot_id?: unknown };
+            };
+            if (update.catalog?.robot_id === activeRobotId) {
+              void refreshMapMetadata();
+            }
           } else if (message.type === "workflow_updated") {
             const workflow = message as { robot_id?: unknown };
             if (
@@ -735,7 +762,7 @@ export function ApiDeliveryProvider({
 
       websocket?.close();
     };
-  }, [loseSession, refreshAll, refreshMap, user?.role]);
+  }, [loseSession, refreshAll, refreshMap, refreshMapMetadata, user?.role]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -758,10 +785,11 @@ export function ApiDeliveryProvider({
     void refreshMapMetadata();
     const interval = window.setInterval(
       () => {
+        if (document.visibilityState !== "visible") return;
         void refreshMap();
         void refreshMapMetadata();
       },
-      5000
+      MAP_FALLBACK_REFRESH_MS
     );
     return () => window.clearInterval(interval);
   }, [refreshMap, refreshMapMetadata]);

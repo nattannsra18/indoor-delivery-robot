@@ -37,12 +37,15 @@ test("admin dashboard shows a refreshable selectable fleet overview", () => {
   assert.match(fleet, /selected\.x\.toFixed\(2\)/);
   assert.match(fleet, /selected\.activeMapId/);
   assert.match(fleet, /selected\.currentTaskId/);
+  assert.match(fleet, /repeat\(auto-fit,minmax\(min\(100%,16rem\),1fr\)\)/);
   assert.match(shell, /<GlobalRobotSelector \/>/);
   assert.match(selector, /value=\{selectedRobotId\}/);
   assert.match(selector, /selectRobot\(event\.target\.value\)/);
   assert.match(context, /api\.getOverview\(requestedRobotId\)/);
   assert.match(context, /api\.getMap\(/);
   assert.match(context, /api\.getRobotDiagnostics\(resolvedRobotId\)/);
+  assert.match(context, /DASHBOARD_FALLBACK_REFRESH_MS = 15_000/);
+  assert.match(context, /api\.getMapMetadata\(requestedRobotId\)/);
 });
 
 test("robot registry loads operational fleet data", () => {

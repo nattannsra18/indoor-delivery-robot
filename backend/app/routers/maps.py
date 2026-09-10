@@ -35,7 +35,49 @@ router = APIRouter(
 
 
 @router.get("/metadata", response_model=MapMetadata)
-def get_map_metadata(db: Session = Depends(get_db)) -> MapMetadataORM:
+def get_map_metadata(
+    robot_id: str | None = None,
+    db: Session = Depends(get_db),
+) -> MapMetadata | MapMetadataORM:
+    resolved_robot_id = robot_id
+    if resolved_robot_id is None:
+        try:
+            resolved_robot_id = DeliveryService(db).primary_robot().id
+        except HTTPException:
+            # Legacy installations may have global metadata before their first
+            # robot is registered. Preserve that read path when no explicit
+            # robot was requested.
+            resolved_robot_id = None
+    catalog = (
+        map_catalog_store.get(
+            resolved_robot_id,
+            robot_online=robot_connection_manager.is_connected(resolved_robot_id),
+        )
+        if resolved_robot_id is not None
+        else None
+    )
+    if catalog is not None and catalog.active_map_id is not None:
+        active = next(
+            (item for item in catalog.maps if item.id == catalog.active_map_id),
+            None,
+        )
+        if active is not None:
+            return MapMetadata(
+                map_name=active.name,
+                building=active.building or "",
+                floor=active.floor or "",
+                area_description=active.area_description,
+                updated_at=active.modified_at or catalog.received_at,
+            )
+
+    if robot_id is not None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Robot has not reported active map metadata",
+        )
+
+    # Backward-compatible fallback for installations that configured metadata
+    # before per-robot map catalogs were introduced.
     metadata = db.get(MapMetadataORM, "active")
     if metadata is None:
         raise HTTPException(
