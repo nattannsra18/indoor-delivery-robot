@@ -46,7 +46,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Indoor Delivery Robot API",
-    version="0.4.0",
+    version="0.5.0",
     description=(
         "FastAPI backend for an indoor autonomous delivery "
         "robot. It provides a validated delivery workflow, "
