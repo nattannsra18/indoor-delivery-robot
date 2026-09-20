@@ -22,7 +22,7 @@
 
 This project demonstrates an end-to-end autonomous delivery workflow: a user selects pickup and destination stations on a live map, the backend validates and queues the request, and a ROS-connected robot executes the mission while both users and operators receive real-time progress, telemetry, alerts, and audit history.
 
-> **Project status:** feature-complete for the current Gazebo simulation scope. The latest acceptance run covered account approval, sign-in, route planning, queueing, pickup/loading, delivery/unloading, notifications, history, and audit records.
+> **Project status:** `v0.5.0` is feature-complete for the current multi-robot Gazebo simulation and production control-plane scope. The latest acceptance runs cover secure Robot Agent pairing, fleet assignment, account approval, sign-in, route planning, queueing, pickup/loading, delivery/unloading, notifications, history, and audit records. Physical chassis validation remains in progress.
 
 ## Video demo
 
@@ -47,6 +47,8 @@ Watch the complete four-minute workflow, including live operations, delivery cre
 | Real robotics integration | Live occupancy grids, AMCL pose, Nav2 paths, mission feedback, diagnostics, and velocity control flow through a dedicated ROS bridge. |
 | Product-focused UX | Separate bilingual experiences for delivery users and operators, with map-first task creation and clear queue/arrival estimates. |
 | Mapping and localization | Administrators can inventory and activate maps, create new maps with SLAM, set an initial pose, and run assisted global relocalization from the browser. |
+| Multi-robot fleet control | A global robot selector, readiness-aware dispatcher, per-robot queues, active-map isolation, and distance-aware assignment keep operations scoped to the correct Robot Agent. |
+| Robot identity and readiness | Secure pairing, unique revocable credentials, credential rotation, profile validation, capability reporting, and anomaly detection establish a per-robot trust boundary. |
 | Operational safety | Role-based controls, a software emergency stop, dead-man teleoperation, alerts, task recovery, and a persistent audit log. |
 | Full-stack engineering | Next.js and TypeScript on the frontend, FastAPI and SQLAlchemy on the backend, and PostgreSQL for durable operational state. |
 
@@ -134,7 +136,7 @@ Routine AMCL localization can be managed without RViz: inspect localization heal
 
 ## Product vision
 
-The platform is designed for campus and facility delivery scenarios; `v0.4.0` demonstrates that workflow in the Gazebo simulation environment.
+The platform is designed for campus and facility delivery scenarios. `v0.5.0` extends the complete Gazebo delivery workflow with secure multi-robot registration, readiness-aware fleet dispatch, robot-scoped maps and telemetry, resilient Agent reconnect behavior, and a production HTTPS/WSS deployment topology.
 
 <p align="center">
   <img src="public/auth/campus-delivery-illustration.png" alt="Indoor delivery robot in a campus environment" width="900" />
@@ -150,7 +152,7 @@ The platform is designed for campus and facility delivery scenarios; `v0.4.0` de
 
 <p align="center"><sub>Open the diagram to inspect the full-resolution architecture.</sub></p>
 
-The web platform lives in this repository. Robot-side ROS 2 packages, simulation assets, Nav2 integration, and the WebSocket bridge live in the companion repository: [amr-navigation-vision-diagnostics](https://github.com/nattannsra18/amr-navigation-vision-diagnostics).
+The web platform lives in this repository. Robot-side ROS 2 packages, simulation assets, Nav2 integration, the WebSocket Agent, profile validator, installer, and Fleet Lab live on the default branch of the companion repository: [amr-navigation-vision-diagnostics](https://github.com/nattannsra18/amr-navigation-vision-diagnostics).
 
 ## Product experience
 
@@ -323,7 +325,7 @@ cd backend
 PYTHONPATH=. PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python -m pytest -q
 ```
 
-The current suite contains 79 frontend contract/UX checks and 174 backend tests. Continuous integration runs both suites, zero-warning TypeScript/ESLint validation, a production build, and Chromium smoke tests against a real FastAPI/PostgreSQL stack on every pull request.
+The current suite contains 81 frontend contract/UX checks and 182 backend tests. Continuous integration runs both suites, zero-warning TypeScript/ESLint validation, a production build, and Chromium smoke tests against a real FastAPI/PostgreSQL stack on every pull request.
 
 ## Repository layout
 
