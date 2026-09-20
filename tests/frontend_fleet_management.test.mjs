@@ -18,8 +18,12 @@ test("delivery creation supports automatic and explicit fleet assignment", () =>
   assert.match(page, /robotId: preview\.robotId/);
   assert.match(page, /preview\.queuePosition/);
   assert.match(page, /preview\.estimatedStartSeconds/);
+  assert.match(page, /allowsSupervisedNavigation/);
+  assert.match(page, /flow\.supervisedConfirm/);
+  assert.match(page, /supervisedMode: preview\.supervisedMode/);
   assert.match(api, /"\/api\/robots\/fleet"/);
   assert.match(api, /robot_id: input\.robotId/);
+  assert.match(api, /supervised_mode: input\.supervisedMode/);
   assert.match(types, /interface FleetRobot/);
   assert.match(types, /x: number;/);
 });

@@ -288,6 +288,7 @@ class FleetRobot(BaseModel):
     queued_count: int = Field(default=0, ge=0)
     available_now: bool
     accepts_deliveries: bool
+    allows_supervised_navigation: bool = False
     unavailable_reason: Optional[str] = None
 
 
@@ -1126,6 +1127,7 @@ class DeliveryTask(BaseModel):
     priority: TaskPriority = TaskPriority.NORMAL
     recipient_name: Optional[str] = None
     delivery_note: Optional[str] = None
+    supervised_mode: bool = False
     pickup_distance_meters: Optional[float] = Field(default=None, ge=0.0)
     delivery_distance_meters: Optional[float] = Field(default=None, ge=0.0)
 
@@ -1222,6 +1224,7 @@ class DeliveryTaskCreate(BaseModel):
     delivery_note: Optional[str] = Field(default=None, max_length=500)
     preview_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
     robot_id: Optional[str] = Field(default=None, min_length=1, max_length=40)
+    supervised_mode: bool = False
 
     @field_validator("recipient_name", "delivery_note", mode="before")
     @classmethod
@@ -1237,6 +1240,8 @@ class DeliveryTaskCreate(BaseModel):
     def validate_stations(self):
         if self.pickup_station_id == self.destination_station_id:
             raise ValueError("pickup_station_id and destination_station_id must be different")
+        if self.supervised_mode and self.robot_id is None:
+            raise ValueError("supervised_mode requires an explicitly selected robot_id")
         return self
 
 
@@ -1245,17 +1250,21 @@ class TaskRoutePreviewRequest(BaseModel):
     destination_station_id: str
     priority: TaskPriority = TaskPriority.NORMAL
     robot_id: Optional[str] = Field(default=None, min_length=1, max_length=40)
+    supervised_mode: bool = False
 
     @model_validator(mode="after")
     def validate_stations(self):
         if self.pickup_station_id == self.destination_station_id:
             raise ValueError("pickup_station_id and destination_station_id must be different")
+        if self.supervised_mode and self.robot_id is None:
+            raise ValueError("supervised_mode requires an explicitly selected robot_id")
         return self
 
 
 class TaskRoutePreview(BaseModel):
     preview_id: str
     robot_id: str
+    supervised_mode: bool = False
     status: Literal["AVAILABLE"]
     frame_id: str
     map_revision: int = Field(ge=1)

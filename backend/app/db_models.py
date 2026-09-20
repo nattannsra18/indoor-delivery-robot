@@ -242,6 +242,9 @@ class DeliveryTaskORM(Base):
     )
     recipient_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     delivery_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    supervised_mode: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     pickup_distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
     delivery_distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
     navigation_command_id: Mapped[str | None] = mapped_column(

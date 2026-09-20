@@ -103,7 +103,11 @@ class DeliveryService:
                 self.pending_notification_ids.append(notification.id)
         AuditService(self.db).log(
             actor, action, "task", task.id,
-            {"task_status": task.status.value, "priority": task.priority.value},
+            {
+                "task_status": task.status.value,
+                "priority": task.priority.value,
+                "supervised_mode": task.supervised_mode,
+            },
         )
 
     def record_robot_connection(self, robot_id: str, connected: bool) -> list[str]:
@@ -257,6 +261,17 @@ class DeliveryService:
             reason = "MAPPING_ACTIVE"
 
         queued_count = len(self.repo.queued_tasks_for_robot(robot.id))
+        allows_supervised_navigation = (
+            robot.online
+            and robot.enrollment_status == RobotEnrollmentStatus.PAIRED
+            and robot.readiness_status == RobotReadinessStatus.DEGRADED
+            and "navigation" in capabilities
+            and bool(robot.active_map_id)
+            and not EmergencyStopService(self.db).is_latched(robot.id)
+            and not mapping_store.is_active(robot.id)
+            and self._robot_available(robot)
+            and queued_count == 0
+        )
         return FleetRobot(
             id=robot.id,
             name=robot.name,
@@ -283,6 +298,7 @@ class DeliveryService:
                 and queued_count == 0
             ),
             accepts_deliveries=reason is None,
+            allows_supervised_navigation=allows_supervised_navigation,
             unavailable_reason=reason,
         )
 
@@ -294,6 +310,7 @@ class DeliveryService:
         pickup_x: float | None = None,
         pickup_y: float | None = None,
         lock: bool = False,
+        supervised_mode: bool = False,
     ) -> RobotORM:
         robots = self.repo.list_robots()
         allow_legacy = not any(
@@ -303,7 +320,10 @@ class DeliveryService:
         if requested_robot_id:
             robot = self._robot_or_404(requested_robot_id, lock=lock)
             fleet = self._fleet_robot(robot, allow_legacy=allow_legacy)
-            if not fleet.accepts_deliveries:
+            eligible = fleet.accepts_deliveries or (
+                supervised_mode and fleet.allows_supervised_navigation
+            )
+            if not eligible:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Selected robot cannot accept deliveries: {fleet.unavailable_reason}",
@@ -314,6 +334,12 @@ class DeliveryService:
                     detail="Selected robot is not using the stations' map",
                 )
             return robot
+
+        if supervised_mode:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Supervised navigation requires an explicitly selected robot",
+            )
 
         candidates = [
             (robot, self._fleet_robot(robot, allow_legacy=allow_legacy))
@@ -844,6 +870,7 @@ class DeliveryService:
             pickup_x=pickup.x,
             pickup_y=pickup.y,
             lock=True,
+            supervised_mode=payload.supervised_mode,
         )
 
         task = DeliveryTaskORM(
@@ -858,6 +885,7 @@ class DeliveryService:
             priority=payload.priority,
             recipient_name=payload.recipient_name,
             delivery_note=payload.delivery_note,
+            supervised_mode=payload.supervised_mode,
             pickup_distance_meters=pickup_distance_meters,
             delivery_distance_meters=delivery_distance_meters,
         )

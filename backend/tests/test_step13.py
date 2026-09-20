@@ -109,6 +109,29 @@ def test_path_distance_uses_real_polyline_segments():
     assert path_distance(result.pickup_path + result.delivery_path[1:]) == pytest.approx(10.0)
 
 
+def test_supervised_route_validation_cannot_be_reused_as_automatic():
+    preview_id = route_preview_coordinator.issue_validation(
+        owner_id="admin",
+        robot_id="prototype",
+        pickup_station_id="A",
+        destination_station_id="B",
+        priority=TaskPriority.NORMAL,
+        map_revision=1,
+        supervised_mode=True,
+    )
+
+    assert route_preview_coordinator.consume_validation(
+        preview_id,
+        owner_id="admin",
+        robot_id="prototype",
+        pickup_station_id="A",
+        destination_station_id="B",
+        priority=TaskPriority.NORMAL,
+        map_revision=1,
+        supervised_mode=False,
+    ) is None
+
+
 def test_preview_coordinator_correlates_only_the_expected_robot(monkeypatch):
     sent = []
 

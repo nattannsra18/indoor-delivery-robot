@@ -99,6 +99,7 @@ type ApiFleetRobot = {
   queued_count: number;
   available_now: boolean;
   accepts_deliveries: boolean;
+  allows_supervised_navigation: boolean;
   unavailable_reason: FleetRobot["unavailableReason"] | null;
 };
 
@@ -117,6 +118,7 @@ type ApiDeliveryTask = {
   priority: DeliveryTask["priority"];
   recipient_name: string | null;
   delivery_note: string | null;
+  supervised_mode: boolean;
   pickup_distance_meters: number | null;
   delivery_distance_meters: number | null;
 };
@@ -147,6 +149,7 @@ type ApiTaskEstimate = {
 type ApiTaskRoutePreview = {
   preview_id: string;
   robot_id: string;
+  supervised_mode: boolean;
   status: "AVAILABLE";
   frame_id: string;
   map_revision: number;
@@ -225,6 +228,7 @@ function toTask(task: ApiDeliveryTask): DeliveryTask {
     priority: task.priority,
     recipientName: task.recipient_name ?? undefined,
     deliveryNote: task.delivery_note ?? undefined,
+    supervisedMode: task.supervised_mode,
     pickupDistanceMeters: task.pickup_distance_meters ?? undefined,
     deliveryDistanceMeters: task.delivery_distance_meters ?? undefined
   };
@@ -468,6 +472,7 @@ export async function getFleet(): Promise<FleetRobot[]> {
     queuedCount: robot.queued_count,
     availableNow: robot.available_now,
     acceptsDeliveries: robot.accepts_deliveries,
+    allowsSupervisedNavigation: robot.allows_supervised_navigation,
     unavailableReason: robot.unavailable_reason ?? undefined,
   }));
 }
@@ -974,6 +979,7 @@ export async function createTask(
       recipient_name: input.recipientName?.trim() || null,
       delivery_note: input.deliveryNote?.trim() || null,
       preview_id: input.previewId,
+      supervised_mode: input.supervisedMode ?? false,
       ...(input.robotId ? { robot_id: input.robotId } : {})
     })
   });
@@ -989,12 +995,14 @@ export async function previewTaskRoute(
       pickup_station_id: input.pickupStationId,
       destination_station_id: input.destinationStationId,
       priority: input.priority,
+      supervised_mode: input.supervisedMode ?? false,
       ...(input.robotId ? { robot_id: input.robotId } : {})
     })
   });
   return {
     previewId: preview.preview_id,
     robotId: preview.robot_id,
+    supervisedMode: preview.supervised_mode,
     status: preview.status,
     frameId: preview.frame_id,
     mapRevision: preview.map_revision,

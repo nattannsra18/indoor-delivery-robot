@@ -36,6 +36,7 @@ export default function CreateDeliveryPage() {
   const [note, setNote] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("NORMAL");
   const [robotId, setRobotId] = useState("");
+  const [supervisedMode, setSupervisedMode] = useState(false);
   const [fleet, setFleet] = useState<FleetRobot[]>([]);
   const [fleetLoading, setFleetLoading] = useState(false);
   const [selectionMode, setSelectionMode] = useState<StationSelectionMode>("pickup");
@@ -72,8 +73,8 @@ export default function CreateDeliveryPage() {
   const pickupStation = useMemo(() => stations.find((item) => item.id === pickup), [pickup, stations]);
   const destinationStation = useMemo(() => stations.find((item) => item.id === destination), [destination, stations]);
   const rankedFleet = useMemo(() => [...fleet].sort((left, right) => {
-    const leftEligible = left.acceptsDeliveries && (!pickupStation || left.activeMapId === pickupStation.mapId);
-    const rightEligible = right.acceptsDeliveries && (!pickupStation || right.activeMapId === pickupStation.mapId);
+    const leftEligible = (left.acceptsDeliveries || left.allowsSupervisedNavigation) && (!pickupStation || left.activeMapId === pickupStation.mapId);
+    const rightEligible = (right.acceptsDeliveries || right.allowsSupervisedNavigation) && (!pickupStation || right.activeMapId === pickupStation.mapId);
     if (leftEligible !== rightEligible) return leftEligible ? -1 : 1;
     if (left.availableNow !== right.availableNow) return left.availableNow ? -1 : 1;
     if (left.queuedCount !== right.queuedCount) return left.queuedCount - right.queuedCount;
@@ -84,7 +85,20 @@ export default function CreateDeliveryPage() {
     }
     return left.id.localeCompare(right.id);
   }), [fleet, pickupStation]);
-  const canPlan = Boolean(pickup && destination && pickup !== destination && backendOnline && occupancyMap && !emergencyStop?.latched);
+  const selectedFleetRobot = useMemo(
+    () => fleet.find((item) => item.id === robotId),
+    [fleet, robotId],
+  );
+  const requiresSupervisedMode = Boolean(
+    selectedFleetRobot?.readinessStatus === "DEGRADED"
+      && selectedFleetRobot.allowsSupervisedNavigation,
+  );
+  const supervisedAuthorized = requiresSupervisedMode && supervisedMode;
+  const canPlan = Boolean(
+    pickup && destination && pickup !== destination && backendOnline
+      && occupancyMap && !emergencyStop?.latched
+      && (!requiresSupervisedMode || supervisedMode),
+  );
 
   useEffect(() => {
     if (!canPlan) {
@@ -98,6 +112,7 @@ export default function CreateDeliveryPage() {
           pickupStationId: pickup, destinationStationId: destination,
           priority: allowedPriority(user?.role, priority),
           robotId: user?.role === "ADMIN" && robotId ? robotId : undefined,
+          supervisedMode: user?.role === "ADMIN" && supervisedAuthorized,
         });
         if (!cancelled) setPreview(result);
       } catch (error) {
@@ -107,7 +122,7 @@ export default function CreateDeliveryPage() {
       }
     }, 250);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [canPlan, copy.routeUnavailable, destination, occupancyMap?.revision, pickup, previewAttempt, previewTaskRoute, priority, robotId, user?.role]);
+  }, [canPlan, copy.routeUnavailable, destination, occupancyMap?.revision, pickup, previewAttempt, previewTaskRoute, priority, robotId, supervisedAuthorized, user?.role]);
 
   const primaryBusy = !backendOnline || !robot.online || robot.state !== "IDLE";
   const busy = preview ? preview.queuePosition > 0 : primaryBusy;
@@ -145,6 +160,7 @@ export default function CreateDeliveryPage() {
         priority: allowedPriority(user?.role, priority), recipientName: recipient,
         deliveryNote: note, previewId: preview.previewId,
         robotId: preview.robotId,
+        supervisedMode: preview.supervisedMode,
       });
       setSuccess({ taskId: task.id, queuePosition, start, completion });
       setStep("success");
@@ -197,12 +213,12 @@ export default function CreateDeliveryPage() {
 
         {user?.role === "ADMIN" && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <label className="block text-sm font-semibold text-slate-700" htmlFor="robot-assignment">{flow.robotAssignment}</label>
-          <select id="robot-assignment" value={robotId} disabled={fleetLoading} onChange={(event) => { setRobotId(event.target.value); setPreview(undefined); }} className={`${inputClass} mt-2`}>
+          <select id="robot-assignment" value={robotId} disabled={fleetLoading} onChange={(event) => { setRobotId(event.target.value); setSupervisedMode(false); setPreview(undefined); }} className={`${inputClass} mt-2`}>
             <option value="">{fleetLoading ? flow.fleetLoading : flow.automaticAssignment}</option>
             {rankedFleet.map((item) => {
               const mapUnknown = !item.activeMapId;
               const mapMismatch = Boolean(!mapUnknown && pickupStation && item.activeMapId !== pickupStation.mapId);
-              const unavailable = !item.acceptsDeliveries || mapMismatch;
+              const unavailable = (!item.acceptsDeliveries && !item.allowsSupervisedNavigation) || mapMismatch;
               const pickupDistance = pickupStation
                 ? Math.hypot(item.x - pickupStation.x, item.y - pickupStation.y)
                 : undefined;
@@ -210,6 +226,8 @@ export default function CreateDeliveryPage() {
                 ? flow.activeMapUnknown
                 : mapMismatch
                 ? flow.differentMap
+                : item.allowsSupervisedNavigation && !item.acceptsDeliveries
+                  ? flow.supervisedOnly
                 : !item.acceptsDeliveries
                   ? flow.robotUnavailable
                   : [
@@ -222,6 +240,13 @@ export default function CreateDeliveryPage() {
             })}
           </select>
           <p className="mt-2 text-xs leading-5 text-slate-500">{flow.assignmentHelp}</p>
+          {requiresSupervisedMode && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+            <label className="flex cursor-pointer items-start gap-3 font-semibold">
+              <input type="checkbox" checked={supervisedMode} onChange={(event) => { setSupervisedMode(event.target.checked); setPreview(undefined); }} className="mt-1 h-4 w-4" />
+              <span>{flow.supervisedConfirm}</span>
+            </label>
+            <p className="mt-2 text-xs leading-5 text-amber-800">{flow.supervisedHelp}</p>
+          </div>}
           {preview && <div className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-xs text-blue-800"><span className="font-semibold">{flow.selectedRobot}:</span> {fleet.find((item) => item.id === preview.robotId)?.name ?? preview.robotId}</div>}
         </section>}
 
@@ -235,7 +260,8 @@ export default function CreateDeliveryPage() {
             {previewing && <RouteState tone="loading" title={flow.checkingRoute} detail={flow.checkingRouteDetail} />}
             {!previewing && preview && <RouteState tone="success" title={flow.routeAvailable} detail={`${preview.totalDistanceMeters.toFixed(1)} m · ${formatDuration(travel, locale)}`} />}
             {!previewing && previewError && <><RouteState tone="error" title={flow.routeUnavailable} detail={previewError} /><button type="button" onClick={() => setPreviewAttempt((value) => value + 1)} className="mt-2 text-sm font-semibold text-blue-700 underline">{flow.tryAgain}</button></>}
-            {!previewing && !preview && !previewError && <RouteState tone="idle" title={flow.selectTwoStations} detail={flow.routeWillAppear} />}
+            {!previewing && !preview && !previewError && requiresSupervisedMode && !supervisedMode && <RouteState tone="idle" title={flow.supervisedRequired} detail={flow.supervisedHelp} />}
+            {!previewing && !preview && !previewError && (!requiresSupervisedMode || supervisedMode) && <RouteState tone="idle" title={flow.selectTwoStations} detail={flow.routeWillAppear} />}
           </div>
           <div className="mt-5 rounded-xl bg-blue-50 p-4 text-sm text-blue-950">
             <Metric label={flow.estimatedStart} value={formatDuration(start, locale)} />
@@ -277,6 +303,7 @@ export default function CreateDeliveryPage() {
         <ReviewRow label={flow.routeDistance} value={preview ? `${preview.totalDistanceMeters.toFixed(1)} m` : flow.unavailable} /><ReviewRow label={flow.travelTime} value={formatDuration(travel, locale)} />
         <ReviewRow label={flow.estimatedStart} value={formatDuration(start, locale)} /><ReviewRow label={flow.estimatedCompletion} value={formatDuration(completion, locale)} />
         <ReviewRow label={flow.selectedRobot} value={fleet.find((item) => item.id === preview?.robotId)?.name ?? preview?.robotId ?? flow.automaticAssignment} />
+        {preview?.supervisedMode && <ReviewRow label={flow.supervisedReview} value={flow.supervisedOnly} />}
         <div className="my-1 border-t border-slate-200" /><ReviewRow label={copy.recipient} value={recipient.trim() || copy.notSpecified} /><ReviewRow label={copy.deliveryNote} value={note.trim() || copy.noNote} /><ReviewRow label={copy.priority} value={priority === "HIGH" ? copy.highPriority : copy.normalPriority} />
       </dl>
       {submitError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">{submitError}</p>}

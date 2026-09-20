@@ -113,6 +113,15 @@ def payload(
     )
 
 
+def test_supervised_task_requires_explicit_robot_id():
+    with pytest.raises(ValidationError, match="explicitly selected robot_id"):
+        DeliveryTaskCreate(
+            pickup_station_id="A",
+            destination_station_id="B",
+            supervised_mode=True,
+        )
+
+
 def test_live_map_snapshots_are_isolated_by_robot():
     first = map_store.update(
         OccupancyGridPayload(
@@ -529,6 +538,67 @@ def test_selected_robot_must_be_ready_navigation_capable_and_on_map():
 
         assert rejected.value.status_code == 409
         assert "ROBOT_NOT_READY" in rejected.value.detail
+
+
+def test_degraded_robot_requires_explicit_supervised_mode_and_records_it():
+    with Session() as db:
+        db.add(RobotORM(
+            id="prototype",
+            name="Attended prototype",
+            online=True,
+            state=RobotState.IDLE,
+            enrollment_status=RobotEnrollmentStatus.PAIRED,
+            readiness_status=RobotReadinessStatus.DEGRADED,
+            active_map_id="warehouse_map",
+            capabilities_json=json.dumps(["navigation"]),
+        ))
+        db.commit()
+
+        service = DeliveryService(db)
+        fleet = next(item for item in service.list_fleet() if item.id == "prototype")
+        assert fleet.accepts_deliveries is False
+        assert fleet.allows_supervised_navigation is True
+
+        with pytest.raises(HTTPException, match="ROBOT_NOT_READY"):
+            service.select_delivery_robot("prototype", "warehouse_map")
+        with pytest.raises(HTTPException, match="No connected and ready robot"):
+            service.select_delivery_robot(None, "warehouse_map")
+
+        selected = service.select_delivery_robot(
+            "prototype",
+            "warehouse_map",
+            supervised_mode=True,
+        )
+        assert selected.id == "prototype"
+
+        request = payload()
+        request.robot_id = "prototype"
+        request.supervised_mode = True
+        task = service.create_task(request, owner_id="admin")
+        assert task.robot_id == "prototype"
+        assert task.supervised_mode is True
+
+
+def test_not_ready_robot_cannot_use_supervised_mode():
+    with Session() as db:
+        db.add(RobotORM(
+            id="unsafe-prototype",
+            name="Unsafe prototype",
+            online=True,
+            state=RobotState.IDLE,
+            enrollment_status=RobotEnrollmentStatus.PAIRED,
+            readiness_status=RobotReadinessStatus.NOT_READY,
+            active_map_id="warehouse_map",
+            capabilities_json=json.dumps(["navigation"]),
+        ))
+        db.commit()
+
+        with pytest.raises(HTTPException, match="ROBOT_NOT_READY"):
+            DeliveryService(db).select_delivery_robot(
+                "unsafe-prototype",
+                "warehouse_map",
+                supervised_mode=True,
+            )
 
 
 def test_automatic_assignment_uses_each_agents_reported_active_map():

@@ -80,6 +80,14 @@ def authorize_robot_selection(user: UserORM, robot_id: str | None) -> None:
         )
 
 
+def authorize_supervised_mode(user: UserORM, supervised_mode: bool) -> None:
+    if supervised_mode and user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can authorize supervised navigation",
+        )
+
+
 @router.get("/estimates", response_model=list[TaskEstimate])
 def list_task_estimates(
     service: DeliveryService = Depends(get_service),
@@ -166,6 +174,7 @@ async def preview_task_route(
 ):
     authorize_priority(user, payload.priority)
     authorize_robot_selection(user, payload.robot_id)
+    authorize_supervised_mode(user, payload.supervised_mode)
     pickup = service.get_station(payload.pickup_station_id)
     destination = service.get_station(payload.destination_station_id)
     if pickup.map_id != destination.map_id:
@@ -178,6 +187,7 @@ async def preview_task_route(
         pickup.map_id,
         pickup_x=pickup.x,
         pickup_y=pickup.y,
+        supervised_mode=payload.supervised_mode,
     )
     if mapping_store.is_active(robot.id):
         raise HTTPException(
@@ -272,12 +282,14 @@ async def preview_task_route(
         destination_station_id=payload.destination_station_id,
         priority=payload.priority,
         map_revision=snapshot.revision,
+        supervised_mode=payload.supervised_mode,
         pickup_distance_meters=pickup_distance,
         delivery_distance_meters=delivery_distance,
     )
     return TaskRoutePreview(
         preview_id=preview_id,
         robot_id=robot.id,
+        supervised_mode=payload.supervised_mode,
         status="AVAILABLE",
         frame_id=result.frame_id,
         map_revision=snapshot.revision,
@@ -311,6 +323,7 @@ async def create_task(
     user: UserORM = Depends(require_user),
 ):
     authorize_priority(user, payload.priority)
+    authorize_supervised_mode(user, payload.supervised_mode)
     pickup = service.get_station(payload.pickup_station_id)
     destination = service.get_station(payload.destination_station_id)
     if pickup.map_id != destination.map_id:
@@ -323,6 +336,7 @@ async def create_task(
         pickup.map_id,
         pickup_x=pickup.x,
         pickup_y=pickup.y,
+        supervised_mode=payload.supervised_mode,
     )
     if mapping_store.is_active(robot.id):
         raise HTTPException(
@@ -340,6 +354,7 @@ async def create_task(
             destination_station_id=payload.destination_station_id,
             priority=payload.priority,
             map_revision=snapshot.revision,
+            supervised_mode=payload.supervised_mode,
         )
     if validation is None:
         raise HTTPException(

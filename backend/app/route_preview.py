@@ -41,6 +41,7 @@ class PreviewValidation:
     destination_station_id: str
     priority: TaskPriority
     map_revision: int
+    supervised_mode: bool
     expires_at: float
     pickup_distance_meters: float | None = None
     delivery_distance_meters: float | None = None
@@ -125,6 +126,7 @@ class RoutePreviewCoordinator:
         destination_station_id: str,
         priority: TaskPriority,
         map_revision: int,
+        supervised_mode: bool = False,
         pickup_distance_meters: float | None = None,
         delivery_distance_meters: float | None = None,
         validity_seconds: float = PREVIEW_VALIDITY_SECONDS,
@@ -138,6 +140,7 @@ class RoutePreviewCoordinator:
             destination_station_id=destination_station_id,
             priority=priority,
             map_revision=map_revision,
+            supervised_mode=supervised_mode,
             expires_at=now + validity_seconds,
             pickup_distance_meters=pickup_distance_meters,
             delivery_distance_meters=delivery_distance_meters,
@@ -157,6 +160,7 @@ class RoutePreviewCoordinator:
         destination_station_id: str,
         priority: TaskPriority,
         map_revision: int,
+        supervised_mode: bool = False,
     ) -> PreviewValidation | None:
         if not preview_id:
             return None
@@ -172,6 +176,7 @@ class RoutePreviewCoordinator:
             and validation.destination_station_id == destination_station_id
             and validation.priority == priority
             and validation.map_revision == map_revision
+            and validation.supervised_mode == supervised_mode
         )
         return validation if matches else None
 

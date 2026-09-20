@@ -265,6 +265,11 @@ def apply_compatibility_migrations(engine: Engine) -> None:
             connection.execute(
                 text("ALTER TABLE delivery_tasks ADD COLUMN delivery_note TEXT")
             )
+        if "supervised_mode" not in columns:
+            connection.execute(text(
+                "ALTER TABLE delivery_tasks ADD COLUMN supervised_mode "
+                "BOOLEAN NOT NULL DEFAULT false"
+            ))
         if "pickup_distance_meters" not in columns:
             connection.execute(
                 text("ALTER TABLE delivery_tasks ADD COLUMN pickup_distance_meters FLOAT")

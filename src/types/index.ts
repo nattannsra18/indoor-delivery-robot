@@ -28,6 +28,7 @@ export interface TaskCreateInput {
   deliveryNote?: string;
   previewId: string;
   robotId?: string;
+  supervisedMode?: boolean;
 }
 
 export interface TaskRoutePreviewInput {
@@ -35,11 +36,13 @@ export interface TaskRoutePreviewInput {
   destinationStationId: string;
   priority: TaskPriority;
   robotId?: string;
+  supervisedMode?: boolean;
 }
 
 export interface TaskRoutePreview {
   previewId: string;
   robotId: string;
+  supervisedMode: boolean;
   status: "AVAILABLE";
   frameId: string;
   mapRevision: number;
@@ -232,6 +235,7 @@ export interface FleetRobot {
   queuedCount: number;
   availableNow: boolean;
   acceptsDeliveries: boolean;
+  allowsSupervisedNavigation: boolean;
   unavailableReason?: FleetUnavailableReason;
 }
 
@@ -379,6 +383,7 @@ export interface DeliveryTask {
   priority: TaskPriority;
   recipientName?: string;
   deliveryNote?: string;
+  supervisedMode: boolean;
   pickupDistanceMeters?: number;
   deliveryDistanceMeters?: number;
 }
