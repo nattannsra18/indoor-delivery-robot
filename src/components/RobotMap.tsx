@@ -65,12 +65,15 @@ export default function RobotMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const poseGesture = useRef<{ pointerId: number; x: number; y: number; yaw: number } | undefined>(undefined);
+  const panGesture = useRef<{ pointerId: number; clientX: number; clientY: number; startX: number; startY: number; moved: boolean } | undefined>(undefined);
+  const suppressClick = useRef(false);
   const occupancyCanvasRef = useRef<HTMLCanvasElement | undefined>(
     undefined
   );
   const [canvasSize, setCanvasSize] = useState<CanvasSize>({
     width: 900, height: 540
   });
+  const [view, setView] = useState({ zoom: 1, rotation: 0, x: 0, y: 0 });
   const {
     occupancyMap, navigationPath, navigationPathStatus, robot: liveRobot,
     stations: contextStations, activeTask, stationName
@@ -129,8 +132,11 @@ export default function RobotMap({
     if (!context) return;
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     context.clearRect(0, 0, canvasSize.width, canvasSize.height);
-    context.fillStyle = "#e2e8f0";
-    context.fillRect(0, 0, canvasSize.width, canvasSize.height);
+    context.save();
+    context.translate(canvasSize.width / 2 + view.x, canvasSize.height / 2 + view.y);
+    context.rotate(view.rotation * Math.PI / 180);
+    context.scale(view.zoom, view.zoom);
+    context.translate(-canvasSize.width / 2, -canvasSize.height / 2);
     const viewport = calculateMapViewport(occupancyMap, canvasSize);
     drawOccupancyGrid(context, mapCanvas, viewport);
     if (routePreview && framesAreCompatible(occupancyMap.frameId, routePreview.frameId)) {
@@ -168,20 +174,21 @@ export default function RobotMap({
       const draftPoint = worldToCanvas(occupancyMap, viewport, draftPose.x, draftPose.y);
       if (draftPoint) drawDraftPose(context, occupancyMap, draftPoint, draftPose.yaw);
     }
+    context.restore();
   }, [
     canvasSize, interactive, occupancyMap, renderablePath, robot,
     selectedDestinationStationId, selectedPickupStationId,
-    routePreview, selectionMode, showStations, stations, draftPose
+    routePreview, selectionMode, showStations, stations, draftPose, view
   ]);
 
   function handleMapClick(event: MouseEvent<HTMLCanvasElement>) {
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      return;
+    }
     if (onMapPoseSelect) return;
     if ((!interactive && !onMapPointSelect) || !occupancyMap) return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const click = {
-      x: (event.clientX - bounds.left) * (canvasSize.width / bounds.width),
-      y: (event.clientY - bounds.top) * (canvasSize.height / bounds.height)
-    };
+    const click = canvasPointFromClient(event.currentTarget, event.clientX, event.clientY);
     const viewport = calculateMapViewport(occupancyMap, canvasSize);
     if (onMapPointSelect) {
       const point = canvasToWorld(occupancyMap, viewport, click.x, click.y);
@@ -205,18 +212,45 @@ export default function RobotMap({
 
   function worldPointFromPointer(event: React.PointerEvent<HTMLCanvasElement>) {
     if (!occupancyMap) return undefined;
-    const bounds = event.currentTarget.getBoundingClientRect();
     const viewport = calculateMapViewport(occupancyMap, canvasSize);
+    const point = canvasPointFromClient(event.currentTarget, event.clientX, event.clientY);
     return canvasToWorld(
       occupancyMap,
       viewport,
-      (event.clientX - bounds.left) * (canvasSize.width / bounds.width),
-      (event.clientY - bounds.top) * (canvasSize.height / bounds.height),
+      point.x,
+      point.y,
     );
   }
 
+  function canvasPointFromClient(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+    const bounds = canvas.getBoundingClientRect();
+    const screenX = (clientX - bounds.left) * (canvasSize.width / bounds.width);
+    const screenY = (clientY - bounds.top) * (canvasSize.height / bounds.height);
+    const centerX = canvasSize.width / 2;
+    const centerY = canvasSize.height / 2;
+    const radians = view.rotation * Math.PI / 180;
+    const dx = screenX - centerX - view.x;
+    const dy = screenY - centerY - view.y;
+    return {
+      x: (Math.cos(radians) * dx + Math.sin(radians) * dy) / view.zoom + centerX,
+      y: (-Math.sin(radians) * dx + Math.cos(radians) * dy) / view.zoom + centerY,
+    };
+  }
+
   function handlePosePointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
-    if (!onMapPoseSelect) return;
+    if (!onMapPoseSelect) {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      panGesture.current = {
+        pointerId: event.pointerId,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        startX: view.x,
+        startY: view.y,
+        moved: false,
+      };
+      return;
+    }
     const point = worldPointFromPointer(event);
     if (!point) return;
     event.preventDefault();
@@ -227,6 +261,14 @@ export default function RobotMap({
   }
 
   function handlePosePointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
+    const pan = panGesture.current;
+    if (pan && pan.pointerId === event.pointerId) {
+      const dx = event.clientX - pan.clientX;
+      const dy = event.clientY - pan.clientY;
+      if (Math.hypot(dx, dy) > 4) pan.moved = true;
+      setView((current) => ({ ...current, x: pan.startX + dx, y: pan.startY + dy }));
+      return;
+    }
     const start = poseGesture.current;
     if (!start || start.pointerId !== event.pointerId || !onMapPoseSelect) return;
     const point = worldPointFromPointer(event);
@@ -237,12 +279,31 @@ export default function RobotMap({
   }
 
   function finishPoseGesture(event: React.PointerEvent<HTMLCanvasElement>) {
+    const pan = panGesture.current;
+    if (pan?.pointerId === event.pointerId) {
+      suppressClick.current = pan.moved;
+      panGesture.current = undefined;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      return;
+    }
     if (poseGesture.current?.pointerId !== event.pointerId) return;
     handlePosePointerMove(event);
     poseGesture.current = undefined;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
+  }
+
+  function zoomBy(amount: number) {
+    setView((current) => ({ ...current, zoom: Math.min(4, Math.max(0.6, Number((current.zoom + amount).toFixed(2)))) }));
+  }
+
+  function rotateBy(degrees: number) {
+    setView((current) => ({ ...current, rotation: (current.rotation + degrees + 360) % 360 }));
+  }
+
+  function resetView() {
+    setView({ zoom: 1, rotation: 0, x: 0, y: 0 });
   }
 
   if (!occupancyMap) {
@@ -264,12 +325,12 @@ export default function RobotMap({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
-      <div ref={containerRef} className="w-full overflow-hidden">
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div ref={containerRef} className="relative w-full overflow-hidden bg-white">
         <canvas
           ref={canvasRef}
           tabIndex={interactive || onMapPointSelect || onMapPoseSelect ? 0 : undefined}
-          className={`block max-w-full ${interactive || onMapPointSelect || onMapPoseSelect ? "cursor-crosshair touch-none" : ""}`}
+          className={`block max-w-full touch-none ${onMapPoseSelect ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}`}
           aria-label={mapAriaLabel ?? (showTechnicalDetails
             ? (locale === "th" ? `แผนที่ ROS พร้อมเส้นทาง Nav2${showStations ? " สถานี" : ""} และตำแหน่งหุ่นยนต์` : `ROS occupancy grid with live Nav2 path${showStations ? ", stations" : ""} and robot pose`)
             : (locale === "th" ? "แผนที่จัดส่งพร้อมเส้นทาง สถานี และตำแหน่งหุ่นยนต์" : "Delivery map with route, stations and robot position"))}
@@ -278,7 +339,21 @@ export default function RobotMap({
           onPointerMove={handlePosePointerMove}
           onPointerUp={finishPoseGesture}
           onPointerCancel={finishPoseGesture}
+          onWheel={(event) => {
+            event.preventDefault();
+            zoomBy(event.deltaY < 0 ? 0.15 : -0.15);
+          }}
         />
+        <div className="absolute right-4 top-4 z-10 flex overflow-hidden rounded-2xl border border-slate-200 bg-white/95 p-1 shadow-lg shadow-slate-900/10 backdrop-blur" aria-label={locale === "th" ? "เครื่องมือควบคุมแผนที่" : "Map view controls"}>
+          <MapControlButton onClick={() => zoomBy(0.2)} label={locale === "th" ? "ซูมเข้า" : "Zoom in"}><span className="text-lg leading-none">+</span></MapControlButton>
+          <MapControlButton onClick={() => zoomBy(-0.2)} label={locale === "th" ? "ซูมออก" : "Zoom out"}><span className="text-lg leading-none">−</span></MapControlButton>
+          <MapControlButton onClick={() => rotateBy(-15)} label={locale === "th" ? "หมุนทวนเข็มนาฬิกา 15 องศา" : "Rotate counterclockwise 15 degrees"}><RotateIcon /></MapControlButton>
+          <MapControlButton onClick={() => rotateBy(15)} label={locale === "th" ? "หมุนตามเข็มนาฬิกา 15 องศา" : "Rotate clockwise 15 degrees"}><span className="-scale-x-100"><RotateIcon /></span></MapControlButton>
+          <MapControlButton onClick={resetView} label={locale === "th" ? "รีเซ็ตมุมมอง" : "Reset view"}><ResetIcon /></MapControlButton>
+        </div>
+        <div className="pointer-events-none absolute bottom-4 left-4 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 font-mono text-[10px] font-semibold text-slate-600 shadow-sm backdrop-blur">
+          {Math.round(view.zoom * 100)}% · {Math.round(view.rotation)}°
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-200 bg-white px-4 py-2 text-xs text-slate-600">
         {!routePreview && (
@@ -414,7 +489,7 @@ function createOccupancyCanvas(map: OccupancyGridMap): HTMLCanvasElement {
       image.data[canvasIndex] = red;
       image.data[canvasIndex + 1] = green;
       image.data[canvasIndex + 2] = blue;
-      image.data[canvasIndex + 3] = 255;
+      image.data[canvasIndex + 3] = map.data[mapIndex] < 0 ? 0 : 255;
     }
   }
   context.putImageData(image, 0, 0);
@@ -426,15 +501,8 @@ function drawOccupancyGrid(
   mapCanvas: HTMLCanvasElement,
   viewport: MapViewport
 ) {
-  context.save();
-  context.shadowColor = "rgba(15, 23, 42, 0.18)";
-  context.shadowBlur = 10;
-  context.shadowOffsetY = 3;
   context.imageSmoothingEnabled = true;
   context.drawImage(mapCanvas, viewport.x, viewport.y, viewport.width, viewport.height);
-  context.restore();
-  context.strokeStyle = "#94a3b8";
-  context.strokeRect(viewport.x, viewport.y, viewport.width, viewport.height);
 }
 
 function occupancyColor(value: number): [number, number, number] {
@@ -580,4 +648,16 @@ function Legend({ color, label, line = false }: {
       {label}
     </span>
   );
+}
+
+function MapControlButton({ onClick, label, children }: { onClick: () => void; label: string; children: React.ReactNode }) {
+  return <button type="button" onClick={onClick} aria-label={label} title={label} className="grid h-9 w-9 place-items-center rounded-xl text-slate-600 transition hover:bg-slate-100 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">{children}</button>;
+}
+
+function RotateIcon() {
+  return <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12a8 8 0 1 0 2.35-5.65"/><path d="M4 4v5h5"/></svg>;
+}
+
+function ResetIcon() {
+  return <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11a8 8 0 1 1-2.34-5.66"/><path d="M20 4v7h-7"/></svg>;
 }

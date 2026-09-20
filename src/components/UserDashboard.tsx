@@ -86,7 +86,7 @@ export default function UserDashboard() {
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
         <div className="flex items-center justify-between gap-3">
           <div><h2 className="text-lg font-bold text-slate-950">{copy.recent}</h2><p className="mt-1 text-sm text-slate-500">{copy.recentDetail}</p></div>
-          <Link href="/tasks" className="text-sm font-semibold text-blue-700 hover:text-blue-800">{copy.viewTasks} →</Link>
+          <Link href="/tasks" className="rounded-lg px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 hover:text-blue-800">{copy.viewTasks}</Link>
         </div>
         {recentTasks.length === 0 ? <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">{copy.noRecent}</p> : (
           <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm">
@@ -180,7 +180,7 @@ function QueuePreview({ queued, globalQueuedCount, stationName }: { queued: Arra
         <span className="text-xs font-semibold text-slate-600">{formatApproximateDuration(estimate?.startEtaSeconds, locale)}</span>
       </div>)}</div>
       {remainingOwnedCount > 0 && <Link href="/tasks" className="mt-2 flex items-center justify-between rounded-lg bg-blue-50 px-3 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100">
-        <span>{locale === "th" ? `+${remainingOwnedCount} งานของคุณในคิว` : `+${remainingOwnedCount} more of your tasks`}</span><span aria-hidden="true">→</span>
+        <span>{locale === "th" ? `+${remainingOwnedCount} งานของคุณในคิว` : `+${remainingOwnedCount} more of your tasks`}</span>
       </Link>}
       {privateQueueCount > 0 && <p className="mt-2 text-xs leading-5 text-slate-500">
         {locale === "th" ? `มีงานของผู้ใช้อื่นอีก ${privateQueueCount} งาน โดยซ่อนรายละเอียดไว้` : `${privateQueueCount} other queued tasks have private details.`}

@@ -224,6 +224,7 @@ class RobotRegistryService:
         robot.identity_fingerprint_hash = item.hardware_fingerprint_hash
         robot.identity_anomaly_code = None
         robot.identity_anomaly_detected_at = None
+        robot.archived_at = None
         latest_version = self.db.scalar(
             select(RobotCredentialORM.version)
             .where(RobotCredentialORM.robot_id == robot_id)
@@ -327,8 +328,11 @@ class RobotRegistryService:
         )
         self.db.commit()
 
-    def list_registry(self) -> list[RobotRegistryEntry]:
-        robots = self.db.scalars(select(RobotORM).order_by(RobotORM.name, RobotORM.id)).all()
+    def list_registry(self, *, include_archived: bool = False) -> list[RobotRegistryEntry]:
+        statement = select(RobotORM)
+        if not include_archived:
+            statement = statement.where(RobotORM.archived_at.is_(None))
+        robots = self.db.scalars(statement.order_by(RobotORM.name, RobotORM.id)).all()
         result: list[RobotRegistryEntry] = []
         for robot in robots:
             credentials = list(self.db.scalars(
@@ -371,6 +375,7 @@ class RobotRegistryService:
                     readiness_detail=robot.readiness_detail,
                     readiness_updated_at=robot.readiness_updated_at,
                     validation_results=_validation_results(robot.readiness_checks_json),
+                    archived_at=robot.archived_at,
                 )
             )
         return result
@@ -503,6 +508,34 @@ class RobotRegistryService:
         robot.state = RobotState.OFFLINE
         self.db.flush()
         return next(item for item in self.list_registry() if item.id == robot_id)
+
+    def archive(self, robot_id: str) -> RobotRegistryEntry:
+        robot = self.db.get(RobotORM, robot_id)
+        if robot is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Robot not found")
+        if robot.archived_at is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Robot is already archived")
+        if robot.enrollment_status != RobotEnrollmentStatus.REVOKED:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Revoke the robot credential before archiving it",
+            )
+        if robot.online or robot.current_task_id is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Robot must be offline with no active task before archiving",
+            )
+        if self.has_active_credentials(robot_id):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Robot still has an active credential",
+            )
+        robot.archived_at = utc_now()
+        self.db.flush()
+        return next(
+            item for item in self.list_registry(include_archived=True)
+            if item.id == robot_id
+        )
 
     def _enrollment(self, enrollment_id: str) -> RobotEnrollmentORM:
         item = self.db.get(RobotEnrollmentORM, enrollment_id)

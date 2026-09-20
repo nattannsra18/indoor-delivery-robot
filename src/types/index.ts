@@ -289,6 +289,7 @@ export interface RobotRegistryEntry {
   readinessDetail?: string;
   readinessUpdatedAt?: string;
   validationResults: RobotProfileValidationResult[];
+  archivedAt?: string;
 }
 
 export interface NavigationFeedbackPose {

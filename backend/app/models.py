@@ -454,6 +454,7 @@ class RobotRegistryEntry(BaseModel):
     readiness_detail: Optional[str] = None
     readiness_updated_at: Optional[datetime] = None
     validation_results: list[RobotProfileValidationResult] = Field(default_factory=list)
+    archived_at: Optional[datetime] = None
 
 
 class RobotCredentialRotated(BaseModel):

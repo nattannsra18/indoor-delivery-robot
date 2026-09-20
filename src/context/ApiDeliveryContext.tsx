@@ -452,7 +452,10 @@ export function ApiDeliveryProvider({
       && pending.taskId === activeTask.id
       && pending.stage === nextStage
       && pending.robotId === robotRef.current.id
-      && Date.now() - pending.receivedAt <= 5000
+      // A navigation path can arrive immediately before the workflow event
+      // that makes the task active. Keep that path long enough for the
+      // dashboard refresh rather than dropping a valid plan after 5 seconds.
+      && Date.now() - pending.receivedAt <= 30_000
       && (
         !currentMap
         || framesAreCompatible(
@@ -608,7 +611,6 @@ export function ApiDeliveryProvider({
               typeof workflow.robot_id === "string"
               && workflow.robot_id !== activeRobotId
             ) return;
-            pendingNavigationPathRef.current = undefined;
             navigationPathRef.current = undefined;
             setNavigationPath(undefined);
             setNavigationPathStatus("waiting");
@@ -781,22 +783,6 @@ export function ApiDeliveryProvider({
       websocket?.close();
     };
   }, [loseSession, refreshAll, refreshMap, refreshMapMetadata, user?.role]);
-
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      const current = navigationPathRef.current;
-      if (
-        current
-        && Date.now() - current.receivedAt > 5000
-      ) {
-        navigationPathRef.current = undefined;
-        setNavigationPath(undefined);
-        setNavigationPathStatus("stale");
-      }
-    }, 1000);
-
-    return () => window.clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     void refreshMap();

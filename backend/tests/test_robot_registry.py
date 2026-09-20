@@ -403,6 +403,61 @@ def test_expired_pairing_code_and_revoked_credential_are_rejected():
     assert registry.authenticate(reclaimed.robot_id, reclaimed.credential) is not None
 
 
+def test_revoked_robot_can_be_archived_without_losing_registry_history():
+    db = session()
+    registry = RobotRegistryService(db)
+    created = registry.create_enrollment(enrollment_payload(), ttl_seconds=600)
+    registry.approve(created.enrollment_id, created.pairing_code, "admin")
+    claimed = registry.claim(
+        created.enrollment_id,
+        created.pairing_code,
+        enrollment_payload().hardware_fingerprint,
+    )
+
+    registry.revoke(claimed.robot_id)
+    archived = registry.archive(claimed.robot_id)
+    db.commit()
+
+    assert archived.archived_at is not None
+    assert registry.list_registry() == []
+    historical = registry.list_registry(include_archived=True)
+    assert [item.id for item in historical] == [claimed.robot_id]
+    assert historical[0].credential_revoked is True
+    assert DeliveryService(db).list_robots() == []
+
+
+def test_robot_must_be_revoked_before_archive_and_reenrollment_restores_record():
+    db = session()
+    registry = RobotRegistryService(db)
+    created = registry.create_enrollment(enrollment_payload(), ttl_seconds=600)
+    registry.approve(created.enrollment_id, created.pairing_code, "admin")
+    claimed = registry.claim(
+        created.enrollment_id,
+        created.pairing_code,
+        enrollment_payload().hardware_fingerprint,
+    )
+
+    with pytest.raises(HTTPException) as active_robot:
+        registry.archive(claimed.robot_id)
+    assert active_robot.value.status_code == 409
+
+    registry.revoke(claimed.robot_id)
+    registry.archive(claimed.robot_id)
+    replacement = registry.create_enrollment(enrollment_payload(), ttl_seconds=600)
+    registry.approve(replacement.enrollment_id, replacement.pairing_code, "admin")
+    reclaimed = registry.claim(
+        replacement.enrollment_id,
+        replacement.pairing_code,
+        enrollment_payload().hardware_fingerprint,
+    )
+    db.commit()
+
+    assert reclaimed.robot_id == claimed.robot_id
+    restored = registry.list_registry()
+    assert [item.id for item in restored] == [claimed.robot_id]
+    assert restored[0].archived_at is None
+
+
 def test_primary_robot_prefers_connected_ready_pair_over_legacy_seed():
     db = session()
     db.add(

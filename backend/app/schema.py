@@ -217,6 +217,10 @@ def apply_compatibility_migrations(engine: Engine) -> None:
                     "ALTER TABLE robots ADD COLUMN identity_anomaly_detected_at "
                     "TIMESTAMP WITH TIME ZONE"
                 ))
+            if "archived_at" not in robot_columns:
+                connection.execute(text(
+                    "ALTER TABLE robots ADD COLUMN archived_at TIMESTAMP WITH TIME ZONE"
+                ))
             connection.execute(text(
                 "CREATE UNIQUE INDEX IF NOT EXISTS ix_robots_serial_number ON robots (serial_number)"
             ))
@@ -229,6 +233,9 @@ def apply_compatibility_migrations(engine: Engine) -> None:
             connection.execute(text(
                 "CREATE INDEX IF NOT EXISTS ix_robots_identity_fingerprint_hash "
                 "ON robots (identity_fingerprint_hash)"
+            ))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_robots_archived_at ON robots (archived_at)"
             ))
 
     if "delivery_tasks" not in inspector.get_table_names():

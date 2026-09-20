@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ActionToast from "@/components/ActionToast";
 import PageHeader from "@/components/PageHeader";
 import { useLocale } from "@/context/LocaleContext";
-import { approveRobotEnrollment, getFleet, getRobotEnrollments, getRobotRegistry, revokeRobotCredential, rotateRobotCredential } from "@/lib/api";
+import { approveRobotEnrollment, archiveRobot, getFleet, getRobotEnrollments, getRobotRegistry, revokeRobotCredential, rotateRobotCredential } from "@/lib/api";
 import { formatDate, profileValidationMessage, robotRegistryText, robotStateLabel } from "@/lib/i18n";
 import type { FleetRobot, RobotEnrollment, RobotRegistryEntry } from "@/types";
 
-type Dialog = { kind: "approve"; enrollment: RobotEnrollment } | { kind: "revoke" | "rotate"; robot: RobotRegistryEntry };
+type Dialog = { kind: "approve"; enrollment: RobotEnrollment } | { kind: "archive" | "revoke" | "rotate"; robot: RobotRegistryEntry };
 
 export default function RobotRegistryPage() {
   const { locale } = useLocale();
@@ -22,13 +22,14 @@ export default function RobotRegistryPage() {
   const [pairingCode, setPairingCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [showArchived, setShowArchived] = useState(false);
   const [toast, setToast] = useState<{ kind: "success" | "error"; title: string; body: string }>();
   const dialogRef = useRef<HTMLElement>(null);
 
   const load = useCallback(async (initial = false) => {
     if (initial) setLoading(true);
     try {
-      const [nextEnrollments, nextRobots, nextFleet] = await Promise.all([getRobotEnrollments(), getRobotRegistry(), getFleet()]);
+      const [nextEnrollments, nextRobots, nextFleet] = await Promise.all([getRobotEnrollments(), getRobotRegistry(showArchived), getFleet()]);
       setEnrollments(nextEnrollments);
       setRobots(nextRobots);
       setFleet(nextFleet);
@@ -38,7 +39,7 @@ export default function RobotRegistryPage() {
     } finally {
       if (initial) setLoading(false);
     }
-  }, [copy.loadFailed]);
+  }, [copy.loadFailed, showArchived]);
 
   useEffect(() => {
     void load(true);
@@ -91,6 +92,9 @@ export default function RobotRegistryPage() {
       } else if (dialog.kind === "revoke") {
         await revokeRobotCredential(dialog.robot.id);
         setToast({ kind: "success", title: copy.revokedTitle, body: copy.revokedBody });
+      } else if (dialog.kind === "archive") {
+        await archiveRobot(dialog.robot.id);
+        setToast({ kind: "success", title: copy.archivedTitle, body: copy.archivedBody });
       } else {
         await rotateRobotCredential(dialog.robot.id);
         setToast({ kind: "success", title: copy.rotatedTitle, body: copy.rotatedBody });
@@ -101,7 +105,7 @@ export default function RobotRegistryPage() {
     } catch (reason) {
       setToast({
         kind: "error",
-        title: dialog.kind === "approve" ? copy.approveFailedTitle : dialog.kind === "rotate" ? copy.rotateFailedTitle : copy.revokeFailedTitle,
+        title: dialog.kind === "approve" ? copy.approveFailedTitle : dialog.kind === "rotate" ? copy.rotateFailedTitle : dialog.kind === "archive" ? copy.archiveFailedTitle : copy.revokeFailedTitle,
         body: reason instanceof Error ? reason.message : copy.loadFailed,
       });
     } finally {
@@ -142,12 +146,12 @@ export default function RobotRegistryPage() {
             )}
           </RegistrySection>
 
-          <RegistrySection title={copy.robotsTitle} help={copy.robotsHelp} count={copy.robotCount.replace("{count}", String(robots.length))}>
+          <RegistrySection title={copy.robotsTitle} help={copy.robotsHelp} count={copy.robotCount.replace("{count}", String(robots.length))} action={<label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-600"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} className="h-4 w-4 rounded border-slate-300 text-blue-600" />{copy.showArchived}</label>}>
             {robots.length === 0 ? <Empty title={copy.emptyRobots} help={copy.emptyRobotsHelp} /> : <ul className="grid gap-4 p-5 md:grid-cols-2 md:p-6">
               {robots.map((robot) => {
                 const operational = fleet.find((item) => item.id === robot.id);
-                return <li key={robot.id} className="rounded-2xl border border-slate-200 p-5">
-                <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-950">{robot.displayName}</h3><p className="mt-1 truncate font-mono text-xs text-slate-400">{robot.id}</p></div><StatusBadge value={robot.online ? copy.online : copy.offline} tone={robot.online ? "green" : "slate"} /></div>
+                return <li key={robot.id} className={`rounded-2xl border p-5 ${robot.archivedAt ? "border-slate-200 bg-slate-50/70 opacity-75" : "border-slate-200"}`}>
+                <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-950">{robot.displayName}</h3><p className="mt-1 truncate font-mono text-xs text-slate-400">{robot.id}</p></div><StatusBadge value={robot.archivedAt ? copy.archived : robot.online ? copy.online : copy.offline} tone={robot.online && !robot.archivedAt ? "green" : "slate"} /></div>
                 <dl className="mt-5 grid grid-cols-2 gap-3">
                   <Detail label={copy.enrollment} value={enrollmentLabel(robot.enrollmentStatus, copy)} />
                   <Detail label={copy.readiness} value={readinessLabel(robot.readinessStatus, copy)} />
@@ -168,6 +172,7 @@ export default function RobotRegistryPage() {
                 </dl>}
                 <ProfileValidation robot={robot} copy={copy} locale={locale} />
                 {robot.credentialVersion && !robot.credentialRevoked && <div className="mt-5 flex flex-wrap gap-2"><button type="button" disabled={!robot.online || robot.credentialRotationPending} onClick={() => setDialog({ kind: "rotate", robot })} className="min-h-10 rounded-xl border border-blue-200 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40">{copy.rotate}</button><button type="button" onClick={() => setDialog({ kind: "revoke", robot })} className="min-h-10 rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50">{copy.revoke}</button></div>}
+                {robot.credentialRevoked && !robot.archivedAt && <div className="mt-5"><button type="button" onClick={() => setDialog({ kind: "archive", robot })} className="min-h-10 rounded-xl border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-700">{copy.archive}</button></div>}
               </li>;
               })}
             </ul>}
@@ -178,14 +183,14 @@ export default function RobotRegistryPage() {
 
       {dialog && <div role="presentation" className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/45 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDialog(undefined); }}>
         <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="robot-dialog-title" className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
-          <h2 id="robot-dialog-title" className="text-xl font-bold text-slate-950">{dialog.kind === "approve" ? copy.approve : dialog.kind === "rotate" ? copy.rotateTitle : copy.revokeTitle}</h2>
+          <h2 id="robot-dialog-title" className="text-xl font-bold text-slate-950">{dialog.kind === "approve" ? copy.approve : dialog.kind === "rotate" ? copy.rotateTitle : dialog.kind === "archive" ? copy.archiveTitle : copy.revokeTitle}</h2>
           {dialog.kind === "approve" ? <>
             <p className="mt-2 text-sm text-slate-600">{dialog.enrollment.displayName} · {dialog.enrollment.serialNumber}</p>
             <label className="mt-5 block text-sm font-bold text-slate-800" htmlFor="pairing-code">{copy.code}</label>
             <input id="pairing-code" autoFocus inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" maxLength={8} value={pairingCode} onChange={(event) => setPairingCode(event.target.value.replace(/\D/g, ""))} className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 font-mono text-lg tracking-[0.25em] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
             <p className="mt-2 text-xs text-slate-500">{copy.codeHelp}</p>
-          </> : <p className="mt-3 text-sm leading-6 text-slate-600">{dialog.kind === "rotate" ? copy.rotateBody : copy.revokeBody}</p>}
-          <div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={() => setDialog(undefined)} className="min-h-11 rounded-xl border border-slate-200 px-5 text-sm font-bold text-slate-700">{copy.cancel}</button><button type="button" disabled={busy || (dialog.kind === "approve" && pairingCode.length !== 8)} onClick={() => void submitDialog()} className={`min-h-11 rounded-xl px-5 text-sm font-bold text-white disabled:opacity-40 ${dialog.kind === "revoke" ? "bg-rose-600" : "bg-blue-600"}`}>{busy ? (dialog.kind === "approve" ? copy.approving : dialog.kind === "rotate" ? copy.rotating : copy.revoking) : (dialog.kind === "approve" ? copy.confirmApprove : dialog.kind === "rotate" ? copy.confirmRotate : copy.confirmRevoke)}</button></div>
+          </> : <p className="mt-3 text-sm leading-6 text-slate-600">{dialog.kind === "rotate" ? copy.rotateBody : dialog.kind === "archive" ? copy.archiveBody : copy.revokeBody}</p>}
+          <div className="mt-6 flex justify-end gap-3"><button type="button" disabled={busy} onClick={() => setDialog(undefined)} className="min-h-11 rounded-xl border border-slate-200 px-5 text-sm font-bold text-slate-700">{copy.cancel}</button><button type="button" disabled={busy || (dialog.kind === "approve" && pairingCode.length !== 8)} onClick={() => void submitDialog()} className={`min-h-11 rounded-xl px-5 text-sm font-bold text-white disabled:opacity-40 ${dialog.kind === "revoke" ? "bg-rose-600" : dialog.kind === "archive" ? "bg-slate-900" : "bg-blue-600"}`}>{busy ? (dialog.kind === "approve" ? copy.approving : dialog.kind === "rotate" ? copy.rotating : dialog.kind === "archive" ? copy.archiving : copy.revoking) : (dialog.kind === "approve" ? copy.confirmApprove : dialog.kind === "rotate" ? copy.confirmRotate : dialog.kind === "archive" ? copy.confirmArchive : copy.confirmRevoke)}</button></div>
         </section>
       </div>}
     </>
@@ -221,8 +226,8 @@ function ValidationBadge({ status }: { status: "PASS" | "WARN" | "FAIL" }) {
   return <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${tone}`}>{status}</span>;
 }
 
-function RegistrySection({ title, help, count, children }: { title: string; help: string; count: string; children: React.ReactNode }) {
-  return <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"><header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-5 md:px-6"><div><h2 className="text-lg font-bold text-slate-950">{title}</h2><p className="mt-1 text-sm text-slate-500">{help}</p></div><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">{count}</span></header>{children}</section>;
+function RegistrySection({ title, help, count, action, children }: { title: string; help: string; count: string; action?: React.ReactNode; children: React.ReactNode }) {
+  return <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"><header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-5 md:px-6"><div><h2 className="text-lg font-bold text-slate-950">{title}</h2><p className="mt-1 text-sm text-slate-500">{help}</p></div><div className="flex flex-wrap items-center gap-3">{action}<span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">{count}</span></div></header>{children}</section>;
 }
 
 function Empty({ title, help }: { title: string; help: string }) { return <div className="px-6 py-12 text-center"><div className="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-100 text-xl">◇</div><h3 className="mt-3 font-bold text-slate-900">{title}</h3><p className="mt-1 text-sm text-slate-500">{help}</p></div>; }

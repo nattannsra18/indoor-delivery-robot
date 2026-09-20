@@ -52,7 +52,7 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className={`${open ? "flex" : "hidden"} items-center justify-between px-5 pb-4 lg:hidden`}><LanguageSwitcher /><button onClick={() => void logout()} className="min-h-10 rounded border border-slate-700 px-3 text-sm">{t("logout")}</button></div>
+      <div className={`${open ? "flex" : "hidden"} items-center justify-between px-5 pb-4 lg:hidden`}><LanguageSwitcher /><button onClick={() => void logout()} className="min-h-10 rounded-lg border border-rose-500/60 bg-rose-600 px-4 text-sm font-semibold text-white hover:bg-rose-500">{t("logout")}</button></div>
 
       <div className="hidden shrink-0 px-5 py-5 lg:block">
         <div className="space-y-4 border-t border-slate-800 pt-5">
@@ -60,7 +60,7 @@ export default function Sidebar() {
             <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-800 text-sm font-bold">{user?.username.slice(0, 1).toUpperCase()}</span>
             <div className="min-w-0"><p className="truncate text-sm font-semibold">{user?.username}</p><p className="text-xs text-slate-400">{user?.role === "ADMIN" ? (locale === "th" ? "ผู้ดูแลระบบ" : "Administrator") : (locale === "th" ? "ผู้ใช้งาน" : "User")}</p></div>
           </div>
-          <div className="flex items-center justify-between gap-2"><LanguageSwitcher /><button onClick={() => void logout()} className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-white/5">↪ {t("logout")}</button></div>
+          <div className="flex items-center justify-between gap-2"><LanguageSwitcher /><button onClick={() => void logout()} className="rounded-lg border border-rose-500/60 bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-rose-950/30 hover:bg-rose-500">{t("logout")}</button></div>
         </div>
       </div>
     </aside>

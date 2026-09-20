@@ -126,8 +126,26 @@ def claim_enrollment(
 
 
 @router.get("/robots", response_model=list[RobotRegistryEntry])
-def list_registry(_: UserORM = Depends(require_admin), db: Session = Depends(get_db)):
-    return RobotRegistryService(db).list_registry()
+def list_registry(
+    include_archived: bool = False,
+    _: UserORM = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return RobotRegistryService(db).list_registry(include_archived=include_archived)
+
+
+@router.post("/robots/{robot_id}/archive", response_model=RobotRegistryEntry)
+def archive_robot(
+    robot_id: str,
+    user: UserORM = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = RobotRegistryService(db).archive(robot_id)
+    AuditService(db).log(
+        TrustedActor.user(user), "robot.archived", "robot", robot_id
+    )
+    db.commit()
+    return result
 
 
 @router.post("/robots/{robot_id}/revoke", response_model=RobotRegistryEntry)

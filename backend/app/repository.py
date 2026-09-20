@@ -87,7 +87,11 @@ class DeliveryRepository:
 
     # Robot
     def list_robots(self) -> list[RobotORM]:
-        return list(self.db.scalars(select(RobotORM).order_by(RobotORM.id)).all())
+        return list(self.db.scalars(
+            select(RobotORM)
+            .where(RobotORM.archived_at.is_(None))
+            .order_by(RobotORM.id)
+        ).all())
 
     def get_robot(self, robot_id: str = "robot01") -> RobotORM | None:
         return self.db.get(RobotORM, robot_id)
@@ -122,7 +126,7 @@ class DeliveryRepository:
             (RobotORM.online.is_(True), 4),
             else_=5,
         )
-        stmt = select(RobotORM).order_by(
+        stmt = select(RobotORM).where(RobotORM.archived_at.is_(None)).order_by(
             rank,
             case((RobotORM.id == "robot01", 0), else_=1),
             RobotORM.id,

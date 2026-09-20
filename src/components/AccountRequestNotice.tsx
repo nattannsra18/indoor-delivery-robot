@@ -65,7 +65,7 @@ export default function AccountRequestNotice() {
       </div>
       <div className="flex shrink-0 items-center gap-2 pl-14 sm:pl-0">
         <Link href="/users" className="inline-flex min-h-10 items-center rounded-xl bg-amber-700 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-800">
-          {copy.review} →
+          {copy.review}
         </Link>
         <button type="button" onClick={() => setDismissed(true)} aria-label={copy.dismiss} className="grid h-10 w-10 place-items-center rounded-xl text-xl text-amber-700 hover:bg-amber-100">
           ×

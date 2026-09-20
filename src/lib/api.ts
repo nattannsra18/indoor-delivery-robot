@@ -384,6 +384,7 @@ type ApiRobotRegistryEntry = {
     message: string;
     observed: string | null;
   }>;
+  archived_at: string | null;
 };
 
 function toRobotEnrollment(item: ApiRobotEnrollment): RobotEnrollment {
@@ -434,6 +435,7 @@ function toRobotRegistryEntry(item: ApiRobotRegistryEntry): RobotRegistryEntry {
       message: result.message,
       observed: result.observed ?? undefined,
     })),
+    archivedAt: item.archived_at ?? undefined,
   };
 }
 
@@ -448,8 +450,9 @@ export async function approveRobotEnrollment(enrollmentId: string, pairingCode: 
   }));
 }
 
-export async function getRobotRegistry(): Promise<RobotRegistryEntry[]> {
-  return (await request<ApiRobotRegistryEntry[]>("/api/robot-registry/robots")).map(toRobotRegistryEntry);
+export async function getRobotRegistry(includeArchived = false): Promise<RobotRegistryEntry[]> {
+  const query = includeArchived ? "?include_archived=true" : "";
+  return (await request<ApiRobotRegistryEntry[]>(`/api/robot-registry/robots${query}`)).map(toRobotRegistryEntry);
 }
 
 export async function getFleet(): Promise<FleetRobot[]> {
@@ -508,6 +511,10 @@ export async function getRobotDiagnostics(robotId: string): Promise<RobotDiagnos
 
 export async function revokeRobotCredential(robotId: string): Promise<RobotRegistryEntry> {
   return toRobotRegistryEntry(await request<ApiRobotRegistryEntry>(`/api/robot-registry/robots/${robotId}/revoke`, { method: "POST" }));
+}
+
+export async function archiveRobot(robotId: string): Promise<RobotRegistryEntry> {
+  return toRobotRegistryEntry(await request<ApiRobotRegistryEntry>(`/api/robot-registry/robots/${robotId}/archive`, { method: "POST" }));
 }
 
 export async function rotateRobotCredential(robotId: string): Promise<RobotRegistryEntry> {

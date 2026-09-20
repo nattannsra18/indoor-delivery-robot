@@ -268,7 +268,7 @@ export default function CreateDeliveryPage() {
             <Metric label={flow.estimatedCompletion} value={formatDuration(completion, locale)} top />
           </div>
           {submitError && <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">{submitError}</p>}
-          <button ref={continueRef} type="button" disabled={!routeReady || previewing} onClick={() => { setSubmitError(""); setStep("details"); }} className="mt-5 min-h-12 w-full rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">{flow.continue} →</button>
+          <button ref={continueRef} type="button" disabled={!routeReady || previewing} onClick={() => { setSubmitError(""); setStep("details"); }} className="mt-5 min-h-12 w-full rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300">{flow.continue}</button>
         </section>
       </aside>
     </div>
@@ -358,8 +358,8 @@ function StationSelect({ green = false, label, value, stations, disabledId, plac
 
 function RouteState({ tone, title, detail }: { tone: "idle" | "loading" | "success" | "error"; title: string; detail: string }) {
   const colors = { idle: "border-slate-200 bg-slate-50 text-slate-700", loading: "border-blue-200 bg-blue-50 text-blue-800", success: "border-emerald-200 bg-emerald-50 text-emerald-800", error: "border-red-200 bg-red-50 text-red-800" };
-  const icon = tone === "success" ? "✓" : tone === "error" ? "!" : tone === "loading" ? "…" : "↗";
-  return <div className={`flex gap-3 rounded-xl border p-3 ${colors[tone]}`}><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white font-bold">{icon}</span><div><p className="font-semibold">{title}</p><p className="mt-0.5 text-sm opacity-80">{detail}</p></div></div>;
+  const icon = tone === "success" ? "✓" : tone === "error" ? "!" : tone === "loading" ? "…" : undefined;
+  return <div className={`flex gap-3 rounded-xl border p-3 ${colors[tone]}`}>{icon && <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white font-bold">{icon}</span>}<div><p className="font-semibold">{title}</p><p className="mt-0.5 text-sm opacity-80">{detail}</p></div></div>;
 }
 function RouteSummary({ pickup, destination }: { pickup?: Station; destination?: Station }) { return <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-4 text-sm font-semibold"><span className="truncate">{stationLabel(pickup)}</span><span className="text-blue-500">→</span><span className="truncate">{stationLabel(destination)}</span></div>; }
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="grid gap-2"><span className="text-sm font-semibold text-slate-700">{label}</span>{children}</label>; }

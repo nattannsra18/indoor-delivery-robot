@@ -31,7 +31,6 @@ test("delivery creation supports automatic and explicit fleet assignment", () =>
 test("admin dashboard shows a refreshable selectable fleet overview", () => {
   const dashboard = read("src/app/page.tsx");
   const fleet = read("src/components/FleetOverview.tsx");
-  const selector = read("src/components/GlobalRobotSelector.tsx");
   const shell = read("src/components/AppShell.tsx");
   const context = read("src/context/ApiDeliveryContext.tsx");
 
@@ -42,9 +41,7 @@ test("admin dashboard shows a refreshable selectable fleet overview", () => {
   assert.match(fleet, /selected\.activeMapId/);
   assert.match(fleet, /selected\.currentTaskId/);
   assert.match(fleet, /repeat\(auto-fit,minmax\(min\(100%,16rem\),1fr\)\)/);
-  assert.match(shell, /<GlobalRobotSelector \/>/);
-  assert.match(selector, /value=\{selectedRobotId\}/);
-  assert.match(selector, /selectRobot\(event\.target\.value\)/);
+  assert.doesNotMatch(shell, /GlobalRobotSelector/);
   assert.match(context, /api\.getOverview\(requestedRobotId\)/);
   assert.match(context, /api\.getMap\(/);
   assert.match(context, /api\.getRobotDiagnostics\(resolvedRobotId\)/);
@@ -71,4 +68,18 @@ test("dashboard telemetry cannot overwrite a different selected robot", () => {
   assert.match(context, /workflow\.robot_id !== activeRobotId/);
   assert.match(context, /nextDiagnostics\.robotId === activeRobotId/);
   assert.match(context, /update\.robot_id === activeRobotId/);
+});
+
+test("active navigation keeps the latest Nav2 plan until a stage change or clear event", () => {
+  const context = read("src/context/ApiDeliveryContext.tsx");
+  assert.match(context, /pending\.receivedAt <= 30_000/);
+  assert.doesNotMatch(context, /current\.receivedAt > 5000/);
+  assert.match(context, /navigation_path_clear/);
+});
+
+test("map view uses compact controls and leaves unknown occupancy transparent", () => {
+  const map = read("src/components/RobotMap.tsx");
+  assert.match(map, /MapControlButton/);
+  assert.match(map, /map\.data\[mapIndex\] < 0 \? 0 : 255/);
+  assert.doesNotMatch(map, /context\.fillRect\(0, 0, canvasSize\.width, canvasSize\.height\)/);
 });
