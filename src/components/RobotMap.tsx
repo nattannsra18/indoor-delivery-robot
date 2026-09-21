@@ -325,8 +325,8 @@ export default function RobotMap({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-      <div ref={containerRef} className="relative w-full overflow-hidden bg-white">
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm">
+      <div ref={containerRef} className="relative w-full overflow-hidden bg-slate-100">
         <canvas
           ref={canvasRef}
           tabIndex={interactive || onMapPointSelect || onMapPoseSelect ? 0 : undefined}
@@ -344,12 +344,18 @@ export default function RobotMap({
             zoomBy(event.deltaY < 0 ? 0.15 : -0.15);
           }}
         />
-        <div className="absolute right-4 top-4 z-10 flex overflow-hidden rounded-2xl border border-slate-200 bg-white/95 p-1 shadow-lg shadow-slate-900/10 backdrop-blur" aria-label={locale === "th" ? "เครื่องมือควบคุมแผนที่" : "Map view controls"}>
-          <MapControlButton onClick={() => zoomBy(0.2)} label={locale === "th" ? "ซูมเข้า" : "Zoom in"}><span className="text-lg leading-none">+</span></MapControlButton>
-          <MapControlButton onClick={() => zoomBy(-0.2)} label={locale === "th" ? "ซูมออก" : "Zoom out"}><span className="text-lg leading-none">−</span></MapControlButton>
-          <MapControlButton onClick={() => rotateBy(-15)} label={locale === "th" ? "หมุนทวนเข็มนาฬิกา 15 องศา" : "Rotate counterclockwise 15 degrees"}><RotateIcon /></MapControlButton>
-          <MapControlButton onClick={() => rotateBy(15)} label={locale === "th" ? "หมุนตามเข็มนาฬิกา 15 องศา" : "Rotate clockwise 15 degrees"}><span className="-scale-x-100"><RotateIcon /></span></MapControlButton>
-          <MapControlButton onClick={resetView} label={locale === "th" ? "รีเซ็ตมุมมอง" : "Reset view"}><ResetIcon /></MapControlButton>
+        <div className="absolute right-4 top-4 z-10 w-11 rounded-2xl border border-slate-300/90 bg-white/95 p-1.5 shadow-xl shadow-slate-900/15 backdrop-blur" aria-label={locale === "th" ? "เครื่องมือควบคุมแผนที่" : "Map view controls"}>
+          <div className="flex flex-col gap-0.5" aria-label={locale === "th" ? "ซูม" : "Zoom"}>
+            <MapControlButton onClick={() => zoomBy(0.2)} label={locale === "th" ? "ซูมเข้า" : "Zoom in"}><ZoomInIcon /></MapControlButton>
+            <MapControlButton onClick={() => zoomBy(-0.2)} label={locale === "th" ? "ซูมออก" : "Zoom out"}><ZoomOutIcon /></MapControlButton>
+          </div>
+          <div className="my-1.5 h-px bg-slate-200" />
+          <div className="flex flex-col gap-0.5" aria-label={locale === "th" ? "หมุนแผนที่" : "Rotate map"}>
+            <MapControlButton onClick={() => rotateBy(-15)} label={locale === "th" ? "หมุนทวนเข็มนาฬิกา 15 องศา" : "Rotate counterclockwise 15 degrees"}><RotateIcon /></MapControlButton>
+            <MapControlButton onClick={() => rotateBy(15)} label={locale === "th" ? "หมุนตามเข็มนาฬิกา 15 องศา" : "Rotate clockwise 15 degrees"}><span className="inline-flex -scale-x-100"><RotateIcon /></span></MapControlButton>
+          </div>
+          <div className="my-1.5 h-px bg-slate-200" />
+          <MapControlButton onClick={resetView} label={locale === "th" ? "จัดกึ่งกลางและรีเซ็ตมุมมอง" : "Fit and reset map view"}><ResetIcon /></MapControlButton>
         </div>
         <div className="pointer-events-none absolute bottom-4 left-4 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 font-mono text-[10px] font-semibold text-slate-600 shadow-sm backdrop-blur">
           {Math.round(view.zoom * 100)}% · {Math.round(view.rotation)}°
@@ -501,7 +507,9 @@ function drawOccupancyGrid(
   mapCanvas: HTMLCanvasElement,
   viewport: MapViewport
 ) {
-  context.imageSmoothingEnabled = true;
+  // Occupancy cells are semantic map data, not a photo. Nearest-neighbour
+  // scaling keeps wall boundaries readable at every zoom level.
+  context.imageSmoothingEnabled = false;
   context.drawImage(mapCanvas, viewport.x, viewport.y, viewport.width, viewport.height);
 }
 
@@ -651,7 +659,15 @@ function Legend({ color, label, line = false }: {
 }
 
 function MapControlButton({ onClick, label, children }: { onClick: () => void; label: string; children: React.ReactNode }) {
-  return <button type="button" onClick={onClick} aria-label={label} title={label} className="grid h-9 w-9 place-items-center rounded-xl text-slate-600 transition hover:bg-slate-100 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">{children}</button>;
+  return <button type="button" onClick={onClick} aria-label={label} title={label} className="grid h-8 w-8 place-items-center rounded-xl text-slate-600 transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 active:scale-95">{children}</button>;
+}
+
+function ZoomInIcon() {
+  return <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4M11 8v6M8 11h6" /></svg>;
+}
+
+function ZoomOutIcon() {
+  return <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4M8 11h6" /></svg>;
 }
 
 function RotateIcon() {

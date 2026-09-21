@@ -110,11 +110,6 @@ export default function DashboardPage() {
       </div>
     </div>
 
-    <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-      <div className="flex items-center justify-between gap-4"><div><h2 className="text-lg font-bold text-slate-950">{ui.recentActivity}</h2><p className="mt-1 text-sm text-slate-500">{copy.recentHelp}</p></div><Link href="/tasks" className="rounded-lg px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">{ui.viewAllTasks}</Link></div>
-      <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-3">{copy.task}</th><th className="px-3 py-3">{copy.pickup}</th><th className="px-3 py-3">{copy.destination}</th><th className="px-3 py-3">{copy.status}</th><th className="px-3 py-3">{copy.created}</th></tr></thead><tbody>{tasks.slice(0,6).map((task)=><tr key={task.id} className="border-b border-slate-100 last:border-0"><td className="px-3 py-4 font-semibold text-slate-950">{task.id}</td><td className="px-3 py-4 text-slate-600">{stationName(task.pickupStationId)}</td><td className="px-3 py-4 text-slate-600">{stationName(task.destinationStationId)}</td><td className="px-3 py-4"><StatusBadge status={task.status}/></td><td className="px-3 py-4 text-slate-500">{formatDate(task.createdAt,locale)}</td></tr>)}</tbody></table></div>
-    </section>
-
     <details className="group mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
       <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 md:px-6 [&::-webkit-details-marker]:hidden">
         <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-600">{ui.sensorHealth}</p><h2 className="mt-1 text-lg font-bold text-slate-950">{ui.diagnosticsDetails}</h2><p className="mt-1 text-sm text-slate-500">{sensorIssues.length === 0 ? ui.allHealthy : ui.diagnosticsNeedAttention}</p></div>
@@ -130,6 +125,11 @@ export default function DashboardPage() {
       </summary>
       <div className="grid gap-3 border-t border-slate-100 p-5 md:grid-cols-2 md:p-6 xl:grid-cols-3"><Integration name="Next.js → FastAPI" state={backendOnline ? robotCopy.connected : robotCopy.offline} active={backendOnline}/><Integration name="PostgreSQL" state={backendOnline ? ui.apiDatabaseReachable : robotCopy.unavailable} active={backendOnline}/><Integration name="ROS 2 Web Bridge" state={robotConnected ? robotCopy.connected : robotCopy.offline} active={robotConnected}/><Integration name={ui.poseTelemetry} state={localizationDiagnostic ? localizationDiagnostic.message : robotCopy.waiting} active={localizationDiagnostic?.level === "OK"}/><Integration name="Nav2" state={nav2Diagnostic?.message ?? (activeTask ? t("taskStatus")[activeTask.status] : ui.missionStandby)} active={nav2Diagnostic ? nav2Diagnostic.level === "OK" : robotConnected}/><Integration name={ui.diagnosticsStream} state={diagnosticsFresh ? ui.telemetryFresh : ui.telemetryStale} active={diagnosticsFresh}/></div>
     </details>
+
+    <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+      <div className="flex items-center justify-between gap-4"><div><h2 className="text-lg font-bold text-slate-950">{ui.recentActivity}</h2><p className="mt-1 text-sm text-slate-500">{copy.recentHelp}</p></div><Link href="/tasks" className="rounded-lg px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">{ui.viewAllTasks}</Link></div>
+      <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-3">{copy.task}</th><th className="px-3 py-3">{copy.pickup}</th><th className="px-3 py-3">{copy.destination}</th><th className="px-3 py-3">{copy.status}</th><th className="px-3 py-3">{copy.created}</th></tr></thead><tbody>{tasks.slice(0,6).map((task)=><tr key={task.id} className="border-b border-slate-100 last:border-0"><td className="px-3 py-4 font-semibold text-slate-950">{task.id}</td><td className="px-3 py-4 text-slate-600">{stationName(task.pickupStationId)}</td><td className="px-3 py-4 text-slate-600">{stationName(task.destinationStationId)}</td><td className="px-3 py-4"><StatusBadge status={task.status}/></td><td className="px-3 py-4 text-slate-500">{formatDate(task.createdAt,locale)}</td></tr>)}</tbody></table></div>
+    </section>
   </>;
 }
 

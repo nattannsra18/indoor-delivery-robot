@@ -70,7 +70,7 @@ test("detailed dashboard telemetry is progressively disclosed", () => {
   assert.match(page, /<DiagnosticsCards diagnostics=\{sensorDiagnostics\}/);
   assert.match(page, /const nav2Diagnostic = diagnostics\?\.statuses\.find\(isNav2Diagnostic\)/);
   assert.match(page, /state=\{nav2Diagnostic\?\.message/);
-  assert.ok(page.indexOf("recentActivity") < page.indexOf("diagnosticsDetails"));
+  assert.ok(page.indexOf("recentActivity") > page.indexOf("integrationHealth"));
 });
 
 test("station mutations use prominent accessible feedback", () => {

@@ -77,9 +77,12 @@ test("active navigation keeps the latest Nav2 plan until a stage change or clear
   assert.match(context, /navigation_path_clear/);
 });
 
-test("map view uses compact controls and leaves unknown occupancy transparent", () => {
+test("map view uses crisp occupancy cells, grouped controls, and a visible map background", () => {
   const map = read("src/components/RobotMap.tsx");
   assert.match(map, /MapControlButton/);
+  assert.match(map, /ZoomInIcon/);
+  assert.match(map, /context\.imageSmoothingEnabled = false/);
+  assert.match(map, /bg-slate-100/);
   assert.match(map, /map\.data\[mapIndex\] < 0 \? 0 : 255/);
   assert.doesNotMatch(map, /context\.fillRect\(0, 0, canvasSize\.width, canvasSize\.height\)/);
 });

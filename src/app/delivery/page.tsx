@@ -62,12 +62,22 @@ export default function CreateDeliveryPage() {
       return;
     }
     let cancelled = false;
-    setFleetLoading(true);
-    getFleet()
-      .then((items) => { if (!cancelled) setFleet(items); })
-      .catch(() => { if (!cancelled) setFleet([]); })
-      .finally(() => { if (!cancelled) setFleetLoading(false); });
-    return () => { cancelled = true; };
+    let initialLoad = true;
+    const refreshFleet = async () => {
+      if (initialLoad) setFleetLoading(true);
+      try {
+        const items = await getFleet();
+        if (!cancelled) setFleet(items);
+      } catch {
+        if (!cancelled) setFleet([]);
+      } finally {
+        if (!cancelled && initialLoad) setFleetLoading(false);
+        initialLoad = false;
+      }
+    };
+    void refreshFleet();
+    const interval = window.setInterval(() => void refreshFleet(), 5000);
+    return () => { cancelled = true; window.clearInterval(interval); };
   }, [user?.role]);
 
   const pickupStation = useMemo(() => stations.find((item) => item.id === pickup), [pickup, stations]);
