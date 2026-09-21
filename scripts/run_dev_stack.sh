@@ -6,6 +6,7 @@ readonly PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly BACKEND_DIR="${PROJECT_ROOT}/backend"
 readonly BACKEND_PYTHON="${BACKEND_DIR}/.venv/bin/python"
 readonly BACKEND_ENV_FILE="${BACKEND_DIR}/.env"
+readonly BACKEND_BIND_HOST="${AMR_BACKEND_BIND_HOST:-0.0.0.0}"
 readonly ROS_WORKSPACE="${AMR_ROS_WORKSPACE:-$(dirname "${PROJECT_ROOT}")/amr-navigation-vision-diagnostics}"
 readonly SESSION_NAME="${AMR_DEV_SESSION:-indoor-delivery-dev}"
 
@@ -37,7 +38,7 @@ find_service_window() {
 
 run_fastapi() {
   cd "${BACKEND_DIR}"
-  exec "${BACKEND_PYTHON}" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+  exec "${BACKEND_PYTHON}" -m uvicorn app.main:app --host "${BACKEND_BIND_HOST}" --port 8000
 }
 
 run_frontend() {

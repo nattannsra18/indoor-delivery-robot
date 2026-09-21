@@ -30,6 +30,11 @@ test("FastAPI and ROS Bridge inherit the same tmux token", () => {
   assert.match(source, /ROBOT_WS_AUTH_REQUIRED=true/);
 });
 
+test("FastAPI listens on the robot-reachable interface by default", () => {
+  assert.match(source, /AMR_BACKEND_BIND_HOST:-0\.0\.0\.0/);
+  assert.match(source, /--host "\$\{BACKEND_BIND_HOST\}"/);
+});
+
 test("ROS Bridge starts from the simulator robot profile", () => {
   assert.match(source, /--params-file/);
   assert.match(source, /turtlebot3_waffle_sim\.yaml/);

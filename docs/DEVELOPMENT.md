@@ -75,6 +75,10 @@ Useful commands:
 | FastAPI health | `http://localhost:8000/health` |
 | PostgreSQL | `localhost:5432` |
 
+The development launcher binds FastAPI to `0.0.0.0` so a physical Robot Agent
+can reach it over the configured private network. Set
+`AMR_BACKEND_BIND_HOST=127.0.0.1` when running a local-only simulation.
+
 ## Run services individually
 
 Frontend:

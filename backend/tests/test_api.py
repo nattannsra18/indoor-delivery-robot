@@ -1400,6 +1400,22 @@ def test_mapping_rejects_motion_outside_active_session():
     assert response.status_code == 409
 
 
+def test_failed_mapping_session_can_be_discarded():
+    with robot_websocket_connect() as websocket:
+        assert websocket.receive_json()["type"] == "connection_ack"
+        started = mapping_store.start("robot01")
+        assert started is not None
+        mapping_store.fail("robot01", "Unable to enter ROS mapping mode")
+
+        response = client.post("/api/mapping/discard")
+
+        assert response.status_code == 202
+        assert response.json()["phase"] == "RESTORING"
+        command = websocket.receive_json()
+        assert command["type"] == "mapping_command"
+        assert command["action"] == "DISCARD"
+
+
 def test_mapping_start_rejects_queued_delivery():
     with TestingSessionLocal() as db:
         db.add(DeliveryTaskORM(

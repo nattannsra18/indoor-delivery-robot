@@ -133,7 +133,18 @@ async def discard_mapping(
     _: UserORM = Depends(require_admin),
 ) -> MappingSession:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
-    session = _require_phase(robot_id, set(ACTIVE_PHASES) - {MappingPhase.STARTING, MappingPhase.SAVING, MappingPhase.RESTORING})
+    session = _require_phase(
+        robot_id,
+        (
+            set(ACTIVE_PHASES)
+            - {
+                MappingPhase.STARTING,
+                MappingPhase.SAVING,
+                MappingPhase.RESTORING,
+            }
+        )
+        | {MappingPhase.FAILED},
+    )
     _, command_id = mapping_store.request(robot_id, MappingPhase.RESTORING)
     await _deliver(robot_id, {"type": "mapping_command", "action": "DISCARD", "command_id": command_id, "robot_id": robot_id, "session_id": session.session_id})
     return mapping_store.get(robot_id)
