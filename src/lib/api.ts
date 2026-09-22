@@ -16,6 +16,8 @@ import type {
   OccupancyGridMap,
   Robot,
   RobotDiagnostics,
+  RobotOperation,
+  RobotOperationAction,
   RobotEnrollment,
   RobotRegistryEntry,
   Station,
@@ -93,6 +95,14 @@ type ApiFleetRobot = {
   yaw: number;
   enrollment_status: FleetRobot["enrollmentStatus"];
   readiness_status: FleetRobot["readinessStatus"];
+  readiness_detail?: string | null;
+  validation_results?: Array<{
+    check_id: string;
+    category: "INTERFACE" | "DATA" | "TF" | "LIFECYCLE" | "CAPABILITY";
+    status: "PASS" | "WARN" | "FAIL";
+    message: string;
+    observed: string | null;
+  }>;
   capabilities: string[];
   active_map_id: string | null;
   current_task_id: string | null;
@@ -469,6 +479,14 @@ export async function getFleet(): Promise<FleetRobot[]> {
     yaw: robot.yaw,
     enrollmentStatus: robot.enrollment_status,
     readinessStatus: robot.readiness_status,
+    readinessDetail: robot.readiness_detail ?? undefined,
+    validationResults: (robot.validation_results ?? []).map((result) => ({
+      checkId: result.check_id,
+      category: result.category,
+      status: result.status,
+      message: result.message,
+      observed: result.observed ?? undefined,
+    })),
     capabilities: robot.capabilities,
     activeMapId: robot.active_map_id ?? undefined,
     currentTaskId: robot.current_task_id ?? undefined,
@@ -543,6 +561,48 @@ export function activateEmergencyStop(robotId: string): Promise<EmergencyStop> {
 
 export function resetEmergencyStop(robotId: string): Promise<EmergencyStop> {
   return request<EmergencyStop>(`/api/robots/${robotId}/emergency-stop/reset`, { method: "POST" });
+}
+
+type ApiRobotOperation = {
+  command_id: string;
+  robot_id: string;
+  action: RobotOperationAction;
+  status: RobotOperation["status"];
+  detail: string | null;
+  failure_category: RobotOperation["failureCategory"] | null;
+  requested_at: string;
+  updated_at: string;
+};
+
+function toRobotOperation(value: ApiRobotOperation): RobotOperation {
+  return {
+    commandId: value.command_id,
+    robotId: value.robot_id,
+    action: value.action,
+    status: value.status,
+    detail: value.detail ?? undefined,
+    failureCategory: value.failure_category ?? undefined,
+    requestedAt: value.requested_at,
+    updatedAt: value.updated_at,
+  };
+}
+
+export async function getLatestRobotOperation(robotId: string): Promise<RobotOperation | undefined> {
+  const value = await request<ApiRobotOperation | null>(
+    `/api/robots/${encodeURIComponent(robotId)}/operations/latest`
+  );
+  return value ? toRobotOperation(value) : undefined;
+}
+
+export async function requestRobotOperation(
+  robotId: string,
+  action: RobotOperationAction,
+  confirm = false
+): Promise<RobotOperation> {
+  return toRobotOperation(await request<ApiRobotOperation>(
+    `/api/robots/${encodeURIComponent(robotId)}/operations`,
+    { method: "POST", body: JSON.stringify({ action, confirm }) }
+  ));
 }
 
 export async function getOverview(robotId?: string) {

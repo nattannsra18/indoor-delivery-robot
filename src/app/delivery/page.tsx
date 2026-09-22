@@ -3,6 +3,7 @@
 import { ReactNode, RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import PageHeader from "@/components/PageHeader";
+import RobotReadinessNotice from "@/components/RobotReadinessNotice";
 import RobotMap, { StationSelectionMode } from "@/components/RobotMap";
 import { PriorityBadge } from "@/components/TaskMetadata";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
@@ -11,8 +12,7 @@ import { useLocale } from "@/context/LocaleContext";
 import { deliveryFlowText, deliveryText } from "@/lib/i18n";
 import { routePreviewIsFresh } from "@/lib/routePreview";
 import { allowedPriority } from "@/lib/taskCreation";
-import { getFleet } from "@/lib/api";
-import { FleetRobot, Station, TaskPriority, TaskRoutePreview } from "@/types";
+import { Station, TaskPriority, TaskRoutePreview } from "@/types";
 
 const NOTE_MAX_LENGTH = 500;
 const inputClass = "w-full min-h-11 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
@@ -26,7 +26,7 @@ export default function CreateDeliveryPage() {
   const router = useRouter();
   const { user } = useAuth();
   const {
-    stations, createTask, previewTaskRoute, robot, backendOnline,
+    stations, createTask, previewTaskRoute, robot, backendOnline, fleet, selectedRobotId,
     loading, occupancyMap, mapMetadata, emergencyStop, globalQueuedCount,
     robotAvailableSeconds
   } = useDeliveryApi();
@@ -35,10 +35,7 @@ export default function CreateDeliveryPage() {
   const [recipient, setRecipient] = useState("");
   const [note, setNote] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("NORMAL");
-  const [robotId, setRobotId] = useState("");
   const [supervisedMode, setSupervisedMode] = useState(false);
-  const [fleet, setFleet] = useState<FleetRobot[]>([]);
-  const [fleetLoading, setFleetLoading] = useState(false);
   const [selectionMode, setSelectionMode] = useState<StationSelectionMode>("pickup");
   const [selectedStation, setSelectedStation] = useState<Station>();
   const [step, setStep] = useState<ModalStep>(null);
@@ -55,57 +52,26 @@ export default function CreateDeliveryPage() {
     if (user?.role !== "ADMIN") setPriority("NORMAL");
   }, [user?.role]);
 
-  useEffect(() => {
-    if (user?.role !== "ADMIN") {
-      setFleet([]);
-      setRobotId("");
-      return;
-    }
-    let cancelled = false;
-    let initialLoad = true;
-    const refreshFleet = async () => {
-      if (initialLoad) setFleetLoading(true);
-      try {
-        const items = await getFleet();
-        if (!cancelled) setFleet(items);
-      } catch {
-        if (!cancelled) setFleet([]);
-      } finally {
-        if (!cancelled && initialLoad) setFleetLoading(false);
-        initialLoad = false;
-      }
-    };
-    void refreshFleet();
-    const interval = window.setInterval(() => void refreshFleet(), 5000);
-    return () => { cancelled = true; window.clearInterval(interval); };
-  }, [user?.role]);
-
   const pickupStation = useMemo(() => stations.find((item) => item.id === pickup), [pickup, stations]);
   const destinationStation = useMemo(() => stations.find((item) => item.id === destination), [destination, stations]);
-  const rankedFleet = useMemo(() => [...fleet].sort((left, right) => {
-    const leftEligible = (left.acceptsDeliveries || left.allowsSupervisedNavigation) && (!pickupStation || left.activeMapId === pickupStation.mapId);
-    const rightEligible = (right.acceptsDeliveries || right.allowsSupervisedNavigation) && (!pickupStation || right.activeMapId === pickupStation.mapId);
-    if (leftEligible !== rightEligible) return leftEligible ? -1 : 1;
-    if (left.availableNow !== right.availableNow) return left.availableNow ? -1 : 1;
-    if (left.queuedCount !== right.queuedCount) return left.queuedCount - right.queuedCount;
-    if (pickupStation) {
-      const leftDistance = Math.hypot(left.x - pickupStation.x, left.y - pickupStation.y);
-      const rightDistance = Math.hypot(right.x - pickupStation.x, right.y - pickupStation.y);
-      if (leftDistance !== rightDistance) return leftDistance - rightDistance;
-    }
-    return left.id.localeCompare(right.id);
-  }), [fleet, pickupStation]);
   const selectedFleetRobot = useMemo(
-    () => fleet.find((item) => item.id === robotId),
-    [fleet, robotId],
+    () => fleet.find((item) => item.id === selectedRobotId),
+    [fleet, selectedRobotId],
   );
+  const selectedDeliveryRobotId = selectedFleetRobot?.id || selectedRobotId || robot.id;
   const requiresSupervisedMode = Boolean(
     selectedFleetRobot?.readinessStatus === "DEGRADED"
       && selectedFleetRobot.allowsSupervisedNavigation,
   );
   const supervisedAuthorized = requiresSupervisedMode && supervisedMode;
+  const selectedRobotBlocked = Boolean(
+    selectedFleetRobot
+      && !selectedFleetRobot.acceptsDeliveries
+      && !selectedFleetRobot.allowsSupervisedNavigation,
+  );
   const canPlan = Boolean(
     pickup && destination && pickup !== destination && backendOnline
+      && selectedDeliveryRobotId && !selectedRobotBlocked
       && occupancyMap && !emergencyStop?.latched
       && (!requiresSupervisedMode || supervisedMode),
   );
@@ -121,7 +87,7 @@ export default function CreateDeliveryPage() {
         const result = await previewTaskRoute({
           pickupStationId: pickup, destinationStationId: destination,
           priority: allowedPriority(user?.role, priority),
-          robotId: user?.role === "ADMIN" && robotId ? robotId : undefined,
+          robotId: selectedDeliveryRobotId || undefined,
           supervisedMode: user?.role === "ADMIN" && supervisedAuthorized,
         });
         if (!cancelled) setPreview(result);
@@ -132,7 +98,7 @@ export default function CreateDeliveryPage() {
       }
     }, 250);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [canPlan, copy.routeUnavailable, destination, occupancyMap?.revision, pickup, previewAttempt, previewTaskRoute, priority, robotId, supervisedAuthorized, user?.role]);
+  }, [canPlan, copy.routeUnavailable, destination, occupancyMap?.revision, pickup, previewAttempt, previewTaskRoute, priority, selectedDeliveryRobotId, supervisedAuthorized, user?.role]);
 
   const primaryBusy = !backendOnline || !robot.online || robot.state !== "IDLE";
   const busy = preview ? preview.queuePosition > 0 : primaryBusy;
@@ -221,44 +187,22 @@ export default function CreateDeliveryPage() {
           <p className="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-600">{flow.deliveriesAhead.replace("{count}", String(ahead))}</p>
         </section>
 
-        {user?.role === "ADMIN" && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <label className="block text-sm font-semibold text-slate-700" htmlFor="robot-assignment">{flow.robotAssignment}</label>
-          <select id="robot-assignment" value={robotId} disabled={fleetLoading} onChange={(event) => { setRobotId(event.target.value); setSupervisedMode(false); setPreview(undefined); }} className={`${inputClass} mt-2`}>
-            <option value="">{fleetLoading ? flow.fleetLoading : flow.automaticAssignment}</option>
-            {rankedFleet.map((item) => {
-              const mapUnknown = !item.activeMapId;
-              const mapMismatch = Boolean(!mapUnknown && pickupStation && item.activeMapId !== pickupStation.mapId);
-              const unavailable = (!item.acceptsDeliveries && !item.allowsSupervisedNavigation) || mapMismatch;
-              const pickupDistance = pickupStation
-                ? Math.hypot(item.x - pickupStation.x, item.y - pickupStation.y)
-                : undefined;
-              const suffix = mapUnknown
-                ? flow.activeMapUnknown
-                : mapMismatch
-                ? flow.differentMap
-                : item.allowsSupervisedNavigation && !item.acceptsDeliveries
-                  ? flow.supervisedOnly
-                : !item.acceptsDeliveries
-                  ? flow.robotUnavailable
-                  : [
-                      pickupDistance === undefined
-                        ? undefined
-                        : flow.distanceToPickup.replace("{distance}", pickupDistance.toFixed(1)),
-                      flow.queueForRobot.replace("{count}", String(item.queuedCount)),
-                    ].filter(Boolean).join(" · ");
-              return <option key={item.id} value={item.id} disabled={unavailable}>{item.name} · {suffix}</option>;
-            })}
-          </select>
-          <p className="mt-2 text-xs leading-5 text-slate-500">{flow.assignmentHelp}</p>
-          {requiresSupervisedMode && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{flow.selectedRobot}</p>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+            <p className="font-bold text-slate-900">{selectedFleetRobot?.name ?? robot.name}</p>
+            {selectedFleetRobot && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${selectedRobotBlocked ? "bg-red-100 text-red-700" : requiresSupervisedMode ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-700"}`}>{selectedFleetRobot.readinessStatus}</span>}
+          </div>
+          <p className="mt-2 text-xs leading-5 text-slate-500">{flow.selectedRobotLockedHelp}</p>
+          {(selectedRobotBlocked || requiresSupervisedMode) && <div className="mt-3"><RobotReadinessNotice robot={selectedFleetRobot} /></div>}
+          {user?.role === "ADMIN" && requiresSupervisedMode && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
             <label className="flex cursor-pointer items-start gap-3 font-semibold">
               <input type="checkbox" checked={supervisedMode} onChange={(event) => { setSupervisedMode(event.target.checked); setPreview(undefined); }} className="mt-1 h-4 w-4" />
               <span>{flow.supervisedConfirm}</span>
             </label>
             <p className="mt-2 text-xs leading-5 text-amber-800">{flow.supervisedHelp}</p>
           </div>}
-          {preview && <div className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-xs text-blue-800"><span className="font-semibold">{flow.selectedRobot}:</span> {fleet.find((item) => item.id === preview.robotId)?.name ?? preview.robotId}</div>}
-        </section>}
+        </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="font-semibold text-slate-900">{flow.selectedStations}</h2>
@@ -271,7 +215,8 @@ export default function CreateDeliveryPage() {
             {!previewing && preview && <RouteState tone="success" title={flow.routeAvailable} detail={`${preview.totalDistanceMeters.toFixed(1)} m · ${formatDuration(travel, locale)}`} />}
             {!previewing && previewError && <><RouteState tone="error" title={flow.routeUnavailable} detail={previewError} /><button type="button" onClick={() => setPreviewAttempt((value) => value + 1)} className="mt-2 text-sm font-semibold text-blue-700 underline">{flow.tryAgain}</button></>}
             {!previewing && !preview && !previewError && requiresSupervisedMode && !supervisedMode && <RouteState tone="idle" title={flow.supervisedRequired} detail={flow.supervisedHelp} />}
-            {!previewing && !preview && !previewError && (!requiresSupervisedMode || supervisedMode) && <RouteState tone="idle" title={flow.selectTwoStations} detail={flow.routeWillAppear} />}
+            {!previewing && !preview && !previewError && selectedRobotBlocked && <RobotReadinessNotice robot={selectedFleetRobot} compact />}
+            {!previewing && !preview && !previewError && !selectedRobotBlocked && (!requiresSupervisedMode || supervisedMode) && <RouteState tone="idle" title={flow.selectTwoStations} detail={flow.routeWillAppear} />}
           </div>
           <div className="mt-5 rounded-xl bg-blue-50 p-4 text-sm text-blue-950">
             <Metric label={flow.estimatedStart} value={formatDuration(start, locale)} />
@@ -312,7 +257,7 @@ export default function CreateDeliveryPage() {
         <ReviewRow label={copy.pickup} value={stationLabel(pickupStation)} /><ReviewRow label={copy.destination} value={stationLabel(destinationStation)} />
         <ReviewRow label={flow.routeDistance} value={preview ? `${preview.totalDistanceMeters.toFixed(1)} m` : flow.unavailable} /><ReviewRow label={flow.travelTime} value={formatDuration(travel, locale)} />
         <ReviewRow label={flow.estimatedStart} value={formatDuration(start, locale)} /><ReviewRow label={flow.estimatedCompletion} value={formatDuration(completion, locale)} />
-        <ReviewRow label={flow.selectedRobot} value={fleet.find((item) => item.id === preview?.robotId)?.name ?? preview?.robotId ?? flow.automaticAssignment} />
+        <ReviewRow label={flow.selectedRobot} value={selectedFleetRobot?.name ?? preview?.robotId ?? robot.name} />
         {preview?.supervisedMode && <ReviewRow label={flow.supervisedReview} value={flow.supervisedOnly} />}
         <div className="my-1 border-t border-slate-200" /><ReviewRow label={copy.recipient} value={recipient.trim() || copy.notSpecified} /><ReviewRow label={copy.deliveryNote} value={note.trim() || copy.noNote} /><ReviewRow label={copy.priority} value={priority === "HIGH" ? copy.highPriority : copy.normalPriority} />
       </dl>

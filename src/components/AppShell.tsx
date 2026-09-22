@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import { ApiDeliveryProvider, useDeliveryApi } from "@/context/ApiDeliveryContext";
@@ -50,9 +50,19 @@ function ShellContent({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-[#f4f7fb] lg:flex">
       <Sidebar />
-      <main className="min-w-0 flex-1 p-4 md:p-6 lg:p-8">
-        <div className="mx-auto w-full max-w-[1600px]">
-        {user?.role === "ADMIN" && <AlertCenter />}
+      <div className="min-w-0 flex-1">
+        <header className="hidden h-16 items-center justify-end gap-4 border-b border-slate-200 bg-white px-6 lg:flex">
+          <CurrentDate />
+          {user?.role === "ADMIN" && <div className="[&>div]:mb-0"><AlertCenter /></div>}
+          <div className="h-7 w-px bg-slate-200" />
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-800 text-sm font-bold text-white">{user?.username.slice(0, 1).toUpperCase()}</span>
+            <div><p className="text-sm font-semibold text-slate-900">{user?.username}</p><p className="text-xs text-slate-500">{user?.role === "ADMIN" ? "Administrator" : "User"}</p></div>
+          </div>
+        </header>
+        <main className="min-w-0 p-4 md:p-5 lg:p-6">
+          <div className="mx-auto w-full max-w-[1880px]">
+        {user?.role === "ADMIN" && <div className="mb-4 lg:hidden"><AlertCenter /></div>}
         {user?.role === "ADMIN" && <AccountRequestNotice />}
         {!loading && !backendOnline && (
           <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-800 sm:flex-row sm:items-center sm:justify-between">
@@ -74,6 +84,18 @@ function ShellContent({ children }: { children: ReactNode }) {
         {children}
         </div>
       </main>
+      </div>
     </div>
   );
+}
+
+function CurrentDate() {
+  const [label, setLabel] = useState("");
+  useEffect(() => {
+    const update = () => setLabel(new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date()));
+    update();
+    const timer = window.setInterval(update, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return <span className="text-xs font-semibold text-slate-600">{label}</span>;
 }

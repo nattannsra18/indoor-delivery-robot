@@ -282,6 +282,8 @@ class FleetRobot(BaseModel):
     yaw: float
     enrollment_status: RobotEnrollmentStatus
     readiness_status: RobotReadinessStatus
+    readiness_detail: Optional[str] = None
+    validation_results: list[RobotProfileValidationResult] = Field(default_factory=list)
     capabilities: list[str] = Field(default_factory=list)
     active_map_id: Optional[str] = None
     current_task_id: Optional[str] = None
@@ -500,6 +502,50 @@ class RobotCommandAcknowledgement(BaseModel):
     lifecycle: Literal["accepted", "rejected", "started", "succeeded", "failed"]
     timestamp: datetime
     detail: Optional[str] = Field(default=None, max_length=500)
+
+
+class RobotOperationAction(str, Enum):
+    RECOVER_NAVIGATION = "navigation.recover"
+    RESET_MOTOR_STALL = "motor.reset_stall"
+    RESTART_NAVIGATION = "navigation.restart_if_broken"
+    START_ROBOT_STACK = "system.start_navigation"
+    STOP_ROBOT_STACK = "system.stop_navigation"
+    SHUTDOWN_ODROID = "system.shutdown"
+
+
+class RobotOperationStatus(str, Enum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+
+class NavigationFailureCategory(str, Enum):
+    LOCALIZATION = "Localization"
+    START_BLOCKED = "Start blocked"
+    GOAL_BLOCKED = "Goal blocked"
+    NO_CONNECTED_PATH = "No connected path"
+
+
+class RobotOperationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: RobotOperationAction
+    confirm: bool = False
+
+
+class RobotOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: str
+    robot_id: str
+    action: RobotOperationAction
+    status: RobotOperationStatus
+    detail: Optional[str] = None
+    failure_category: Optional[NavigationFailureCategory] = None
+    requested_at: datetime
+    updated_at: datetime
 
 
 class EmergencyStop(BaseModel):

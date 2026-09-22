@@ -62,6 +62,7 @@ from ..route_preview import route_preview_coordinator
 from ..notification_delivery import publish_committed_notifications
 from ..domain_context import TrustedActor
 from ..diagnostics_store import diagnostics_store
+from ..robot_operation_store import robot_operation_store
 
 router = APIRouter(tags=["robot-websocket"])
 
@@ -1672,6 +1673,12 @@ async def robot_websocket(
                         "Command status belongs to another robot",
                     )
                     continue
+                operation = robot_operation_store.update(
+                    command_status.command_id,
+                    robot_id,
+                    command_status.lifecycle,
+                    command_status.detail,
+                )
                 await websocket.send_json(
                     {
                         "type": "command_status_received",
@@ -1681,6 +1688,14 @@ async def robot_websocket(
                         "server_time": current_utc_time(),
                     }
                 )
+                if operation is not None:
+                    await browser_connection_manager.broadcast_json(
+                        {
+                            "type": "robot_operation_changed",
+                            "operation": operation.model_dump(mode="json"),
+                        },
+                        admin_only=True,
+                    )
 
             elif message_type == "command_ack":
                 command_id = message.get(

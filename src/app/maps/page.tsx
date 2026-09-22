@@ -67,6 +67,12 @@ export default function MapsPage() {
     [catalog?.activeMapId, stations],
   );
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("view") === "localization") {
+      setView("localization");
+    }
+  }, []);
+
   const load = useCallback(async (showLoading = false) => {
     const requestId = ++catalogRequestRef.current;
     const robotId = selectedRobotIdRef.current || undefined;

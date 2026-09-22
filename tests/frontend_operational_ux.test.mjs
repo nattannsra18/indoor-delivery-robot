@@ -14,7 +14,7 @@ test("admin account approval is available only through the protected user route"
   assert.match(api, /\/api\/auth\/accounts\/\$\{userId\}\/approve/);
   assert.match(
     roles,
-    /ADMIN_ONLY_ROUTES = \["\/maps", "\/stations", "\/robots", "\/users", "\/audit"\]/
+    /ADMIN_ONLY_ROUTES = \["\/maps", "\/stations", "\/robots", "\/diagnostics", "\/users", "\/audit"\]/
   );
 });
 
@@ -64,13 +64,36 @@ test("tasks use a compact primary table and a details drawer", () => {
   assert.doesNotMatch(page, /min-w-\[1200px\]/);
 });
 
-test("detailed dashboard telemetry is progressively disclosed", () => {
-  const page = read("src/app/page.tsx");
-  assert.match(page, /<details className="group mt-6/);
-  assert.match(page, /<DiagnosticsCards diagnostics=\{sensorDiagnostics\}/);
-  assert.match(page, /const nav2Diagnostic = diagnostics\?\.statuses\.find\(isNav2Diagnostic\)/);
-  assert.match(page, /state=\{nav2Diagnostic\?\.message/);
-  assert.ok(page.indexOf("recentActivity") > page.indexOf("integrationHealth"));
+test("detailed telemetry lives on the diagnostics page instead of the dashboard", () => {
+  const dashboard = read("src/app/page.tsx");
+  const diagnostics = read("src/app/diagnostics/page.tsx");
+  assert.doesNotMatch(dashboard, /<DiagnosticsCards/);
+  assert.match(dashboard, /const nav2Diagnostic = diagnostics\?\.statuses\.find\(isNav2Diagnostic\)/);
+  assert.match(diagnostics, /<DiagnosticsCards diagnostics=\{diagnostics\}/);
+  assert.match(diagnostics, /nav2Diagnostic\?\.message/);
+  assert.match(diagnostics, /copy\.apiDatabaseReachable/);
+});
+
+test("delivery readiness failures name the exact check and offer a targeted recovery", () => {
+  const api = read("src/lib/api.ts");
+  const delivery = read("src/app/delivery/page.tsx");
+  const dashboardModal = read("src/components/DashboardDeliveryMap.tsx");
+  const diagnostics = read("src/app/diagnostics/page.tsx");
+  const notice = read("src/components/RobotReadinessNotice.tsx");
+  const catalog = read("src/lib/i18n.ts");
+
+  assert.match(api, /readiness_detail/);
+  assert.match(api, /validation_results/);
+  assert.match(delivery, /<RobotReadinessNotice robot=\{selectedFleetRobot\}/);
+  assert.match(dashboardModal, /<RobotReadinessNotice robot=\{selectedFleetRobot\}/);
+  assert.match(diagnostics, /<RobotReadinessNotice robot=\{selectedFleetRobot\}/);
+  assert.match(notice, /data-readiness-check=\{check\.checkId\}/);
+  assert.match(notice, /href="\/maps\?view=localization"/);
+  assert.match(notice, /href="\/diagnostics"/);
+  assert.match(catalog, /"data\.amcl_pose"/);
+  assert.match(catalog, /ตั้ง Initial Pose/);
+  assert.doesNotMatch(delivery, /โปรดตรวจ Localization และ Nav2/);
+  assert.doesNotMatch(dashboardModal, /Check Localization and Nav2 in Diagnostics/);
 });
 
 test("station mutations use prominent accessible feedback", () => {

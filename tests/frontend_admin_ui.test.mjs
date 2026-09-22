@@ -13,25 +13,72 @@ test("shared sidebar uses the supplied robot mark for both roles", () => {
 
 test("admin dashboard prioritizes operations, map, safety and live mission data", () => {
   const source = read("src/app/page.tsx");
+  const deliveryMap = read("src/components/DashboardDeliveryMap.tsx");
   assert.match(source, /operationsOverview/);
-  assert.match(source, /<RobotMap/);
+  assert.match(source, /<DashboardDeliveryMap/);
+  assert.match(deliveryMap, /<RobotMap/);
   assert.match(source, /<EmergencyStopControl/);
   assert.match(source, /<WorkflowControls/);
 });
 
-test("admin dashboard consolidates robot profile, navigation, diagnostics and integrations", () => {
+test("admin dashboard consolidates robot profile and navigation without duplicating diagnostics", () => {
   const source = read("src/app/page.tsx");
-  assert.match(source, /<DiagnosticsCards/);
   assert.match(source, /<NavigationMetrics/);
-  assert.match(source, /Integration name="ROS 2 Web Bridge"/);
   assert.match(source, /batterySource === "SIMULATED"/);
-  assert.match(source, /apiDatabaseReachable/);
   assert.match(source, /displayedTaskProgress/);
   assert.doesNotMatch(source, /href="\/robots"/);
+  assert.doesNotMatch(source, /<DiagnosticsCards/);
+  assert.doesNotMatch(source, /System Connections/);
+  assert.match(source, /<NavigationMetrics compact layout="rail"/);
   assert.ok(
-    source.indexOf("<WorkflowControls") < source.indexOf("{ui.currentMission}"),
-    "Mission Control should be rendered above Current Mission"
+    source.indexOf("<DashboardDeliveryMap") < source.indexOf("<MissionPanel")
+      && source.indexOf("<MissionPanel") < source.indexOf("function SelectedRobotPanel"),
+    "Live navigation should remain in the dashboard control rail instead of moving below the map"
   );
+  assert.ok(
+    source.lastIndexOf("<RecentActivity") > source.indexOf("<FleetOverview"),
+    "Recent delivery activity should remain the final dashboard card"
+  );
+});
+
+test("diagnostics page owns system connections and detailed ROS diagnostics", () => {
+  const source = read("src/app/diagnostics/page.tsx");
+  assert.match(source, /<DiagnosticsCards diagnostics=\{diagnostics\}/);
+  assert.match(source, /name="ROS 2 Web Bridge"/);
+  assert.match(source, /name="PostgreSQL"/);
+  assert.match(source, /name="Nav2"/);
+  assert.match(source, /copy\.integrationHealth/);
+});
+
+test("admin robot controls separate bounded recovery from destructive actions", () => {
+  const dashboard = read("src/app/page.tsx");
+  const deliveryMap = read("src/components/DashboardDeliveryMap.tsx");
+  const controls = read("src/components/RobotOperationsControl.tsx");
+  assert.match(dashboard, /<RobotOperationsControl/);
+  assert.match(dashboard, /<RobotOperationsControl mode="admin"/);
+  assert.match(dashboard, /<RobotSelectorCard/);
+  assert.match(deliveryMap, /viewportSize="dashboard"/);
+  assert.match(controls, /"navigation\.recover"/);
+  assert.match(controls, /"motor\.reset_stall"/);
+  assert.match(controls, /"navigation\.restart_if_broken"/);
+  assert.match(controls, /"system\.start_navigation"/);
+  assert.match(controls, /confirmAndRun\("system\.stop_navigation"/);
+  assert.match(controls, /confirmAndRun\("system\.shutdown"/);
+});
+
+test("dashboard map opens a route-validated delivery workflow from station markers", () => {
+  const source = read("src/components/DashboardDeliveryMap.tsx");
+  assert.match(source, /onStationSelect=\{openFromStation\}/);
+  assert.match(source, /previewTaskRoute\(\{/);
+  assert.match(source, /routePreviewIsFresh/);
+  assert.match(source, /supervisedMode/);
+  assert.match(source, /createTask\(\{/);
+  assert.match(source, /robotId: selectedDeliveryRobotId/);
+  assert.match(source, /selectedRobotLockedHelp/);
+  assert.doesNotMatch(source, /dashboard-robot-assignment/);
+  assert.doesNotMatch(source, /rankFleet/);
+  assert.match(source, /role="dialog"/);
+  assert.match(source, /event\.key === "Escape"/);
 });
 
 test("alert center is an accessible operational dialog with Escape support", () => {

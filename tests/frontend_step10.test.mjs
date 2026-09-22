@@ -30,6 +30,7 @@ test("ADMIN navigation exposes operational and system destinations", () => {
     "Map Management",
     "Station Management",
     "Robot Registry",
+    "Diagnostics",
     "Account Requests",
     "Notifications",
     "Audit Log"

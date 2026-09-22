@@ -31,6 +31,7 @@ type RobotMapProps = {
   onMapPointSelect?: (point: { x: number; y: number }) => void;
   onMapPoseSelect?: (pose: { x: number; y: number; yaw: number }) => void;
   mapAriaLabel?: string;
+  viewportSize?: "default" | "dashboard";
 };
 
 const PATH_STATUS_LABEL: Record<"en" | "th", Record<NavigationPathStatus, string>> = {
@@ -59,6 +60,7 @@ export default function RobotMap({
   onMapPointSelect,
   onMapPoseSelect,
   mapAriaLabel,
+  viewportSize = "default",
 }: RobotMapProps) {
   const { locale, format } = useLocale();
   const copy = operationalText[locale];
@@ -86,9 +88,11 @@ export default function RobotMap({
     if (!container) return;
     const updateCanvasSize = () => {
       const width = Math.max(300, Math.floor(container.clientWidth));
+      const minimumHeight = viewportSize === "dashboard" ? 760 : 360;
+      const maximumHeight = viewportSize === "dashboard" ? 840 : 580;
       const naturalHeight = occupancyMap
-        ? width * (occupancyMap.height / occupancyMap.width) : 420;
-      const height = Math.round(Math.min(580, Math.max(360, naturalHeight)));
+        ? width * (occupancyMap.height / occupancyMap.width) : minimumHeight;
+      const height = Math.round(Math.min(maximumHeight, Math.max(minimumHeight, naturalHeight)));
       setCanvasSize((current) =>
         current.width === width && current.height === height
           ? current : { width, height }
@@ -98,7 +102,7 @@ export default function RobotMap({
     const observer = new ResizeObserver(updateCanvasSize);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [occupancyMap]);
+  }, [occupancyMap, viewportSize]);
 
   useEffect(() => {
     occupancyCanvasRef.current = occupancyMap
@@ -308,7 +312,7 @@ export default function RobotMap({
 
   if (!occupancyMap) {
     return (
-      <div className="grid min-h-[360px] place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+      <div className={`grid place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center ${viewportSize === "dashboard" ? "min-h-[760px]" : "min-h-[360px]"}`}>
         <div>
           <p className="font-semibold text-slate-700">{showTechnicalDetails
             ? (locale === "th" ? "กำลังรอแผนที่ ROS" : "Waiting for ROS map")
@@ -344,18 +348,18 @@ export default function RobotMap({
             zoomBy(event.deltaY < 0 ? 0.15 : -0.15);
           }}
         />
-        <div className="absolute right-4 top-4 z-10 w-11 rounded-2xl border border-slate-300/90 bg-white/95 p-1.5 shadow-xl shadow-slate-900/15 backdrop-blur" aria-label={locale === "th" ? "เครื่องมือควบคุมแผนที่" : "Map view controls"}>
-          <div className="flex flex-col gap-0.5" aria-label={locale === "th" ? "ซูม" : "Zoom"}>
+        <div className="absolute right-4 top-4 z-10 w-12 rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-lg shadow-slate-900/15 backdrop-blur" aria-label={locale === "th" ? "เครื่องมือควบคุมแผนที่" : "Map view controls"}>
+          <div className="flex flex-col gap-1" aria-label={locale === "th" ? "ซูม" : "Zoom"}>
             <MapControlButton onClick={() => zoomBy(0.2)} label={locale === "th" ? "ซูมเข้า" : "Zoom in"}><ZoomInIcon /></MapControlButton>
             <MapControlButton onClick={() => zoomBy(-0.2)} label={locale === "th" ? "ซูมออก" : "Zoom out"}><ZoomOutIcon /></MapControlButton>
           </div>
           <div className="my-1.5 h-px bg-slate-200" />
-          <div className="flex flex-col gap-0.5" aria-label={locale === "th" ? "หมุนแผนที่" : "Rotate map"}>
+          <div className="flex flex-col gap-1" aria-label={locale === "th" ? "หมุนแผนที่" : "Rotate map"}>
             <MapControlButton onClick={() => rotateBy(-15)} label={locale === "th" ? "หมุนทวนเข็มนาฬิกา 15 องศา" : "Rotate counterclockwise 15 degrees"}><RotateIcon /></MapControlButton>
             <MapControlButton onClick={() => rotateBy(15)} label={locale === "th" ? "หมุนตามเข็มนาฬิกา 15 องศา" : "Rotate clockwise 15 degrees"}><span className="inline-flex -scale-x-100"><RotateIcon /></span></MapControlButton>
           </div>
           <div className="my-1.5 h-px bg-slate-200" />
-          <MapControlButton onClick={resetView} label={locale === "th" ? "จัดกึ่งกลางและรีเซ็ตมุมมอง" : "Fit and reset map view"}><ResetIcon /></MapControlButton>
+          <MapControlButton onClick={resetView} label={locale === "th" ? "จัดกึ่งกลางและรีเซ็ตมุมมอง" : "Fit and reset map view"}><FocusIcon /></MapControlButton>
         </div>
         <div className="pointer-events-none absolute bottom-4 left-4 rounded-full border border-slate-200 bg-white/95 px-3 py-1.5 font-mono text-[10px] font-semibold text-slate-600 shadow-sm backdrop-blur">
           {Math.round(view.zoom * 100)}% · {Math.round(view.rotation)}°
@@ -659,21 +663,21 @@ function Legend({ color, label, line = false }: {
 }
 
 function MapControlButton({ onClick, label, children }: { onClick: () => void; label: string; children: React.ReactNode }) {
-  return <button type="button" onClick={onClick} aria-label={label} title={label} className="grid h-8 w-8 place-items-center rounded-xl text-slate-600 transition hover:bg-blue-50 hover:text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 active:scale-95">{children}</button>;
+  return <button type="button" onClick={onClick} aria-label={label} title={label} className="grid h-9 w-9 place-items-center rounded-xl border border-transparent bg-slate-50 text-slate-700 transition hover:border-blue-100 hover:bg-blue-600 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 active:scale-95">{children}</button>;
 }
 
 function ZoomInIcon() {
-  return <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4M11 8v6M8 11h6" /></svg>;
+  return <svg aria-hidden="true" className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>;
 }
 
 function ZoomOutIcon() {
-  return <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4M8 11h6" /></svg>;
+  return <svg aria-hidden="true" className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round"><path d="M5 12h14" /></svg>;
 }
 
 function RotateIcon() {
   return <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12a8 8 0 1 0 2.35-5.65"/><path d="M4 4v5h5"/></svg>;
 }
 
-function ResetIcon() {
-  return <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11a8 8 0 1 1-2.34-5.66"/><path d="M20 4v7h-7"/></svg>;
+function FocusIcon() {
+  return <svg aria-hidden="true" className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4"/><circle cx="12" cy="12" r="3"/></svg>;
 }

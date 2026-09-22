@@ -22,6 +22,7 @@ from .models import (
     FleetRobot,
     Robot,
     RobotEnrollmentStatus,
+    RobotProfileValidationResult,
     RobotReadinessStatus,
     RobotState,
     RobotTelemetry,
@@ -239,6 +240,19 @@ class DeliveryService:
             if isinstance(decoded_capabilities, list)
             else []
         )
+        try:
+            raw_validation_results = json.loads(robot.readiness_checks_json or "[]")
+        except (TypeError, json.JSONDecodeError):
+            raw_validation_results = []
+        validation_results: list[RobotProfileValidationResult] = []
+        if isinstance(raw_validation_results, list):
+            for item in raw_validation_results:
+                try:
+                    validation_results.append(
+                        RobotProfileValidationResult.model_validate(item)
+                    )
+                except (TypeError, ValueError):
+                    continue
         is_legacy = (
             allow_legacy
             and robot.enrollment_status == RobotEnrollmentStatus.UNPAIRED
@@ -284,6 +298,8 @@ class DeliveryService:
             yaw=robot.yaw,
             enrollment_status=robot.enrollment_status,
             readiness_status=robot.readiness_status,
+            readiness_detail=robot.readiness_detail,
+            validation_results=validation_results,
             capabilities=capabilities,
             active_map_id=(
                 robot.active_map_id

@@ -4,17 +4,16 @@ import test from "node:test";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("delivery creation supports automatic and explicit fleet assignment", () => {
+test("delivery creation stays bound to the robot selected on the dashboard", () => {
   const page = read("src/app/delivery/page.tsx");
   const api = read("src/lib/api.ts");
   const types = read("src/types/index.ts");
 
-  assert.match(page, /getFleet\(\)/);
-  assert.match(page, /flow\.automaticAssignment/);
-  assert.match(page, /item\.activeMapId !== pickupStation\.mapId/);
-  assert.match(page, /Math\.hypot\(left\.x - pickupStation\.x/);
-  assert.match(page, /flow\.distanceToPickup/);
-  assert.match(page, /flow\.activeMapUnknown/);
+  assert.match(page, /selectedRobotId/);
+  assert.match(page, /robotId: selectedDeliveryRobotId/);
+  assert.match(page, /selectedRobotLockedHelp/);
+  assert.doesNotMatch(page, /id="robot-assignment"/);
+  assert.doesNotMatch(page, /rankedFleet/);
   assert.match(page, /robotId: preview\.robotId/);
   assert.match(page, /preview\.queuePosition/);
   assert.match(page, /preview\.estimatedStartSeconds/);

@@ -229,6 +229,8 @@ export interface FleetRobot {
   yaw: number;
   enrollmentStatus: RobotEnrollmentStatus;
   readinessStatus: RobotReadinessStatus;
+  readinessDetail?: string;
+  validationResults: RobotProfileValidationResult[];
   capabilities: string[];
   activeMapId?: string;
   currentTaskId?: string;
@@ -486,6 +488,25 @@ export interface EmergencyStop {
   failure_detail?: string;
   activated_at?: string;
   updated_at: string;
+}
+
+export type RobotOperationAction =
+  | "navigation.recover"
+  | "motor.reset_stall"
+  | "navigation.restart_if_broken"
+  | "system.start_navigation"
+  | "system.stop_navigation"
+  | "system.shutdown";
+
+export interface RobotOperation {
+  commandId: string;
+  robotId: string;
+  action: RobotOperationAction;
+  status: "PENDING" | "ACCEPTED" | "RUNNING" | "SUCCEEDED" | "FAILED";
+  detail?: string;
+  failureCategory?: "Localization" | "Start blocked" | "Goal blocked" | "No connected path";
+  requestedAt: string;
+  updatedAt: string;
 }
 
 export interface TaskHistoryEntry {

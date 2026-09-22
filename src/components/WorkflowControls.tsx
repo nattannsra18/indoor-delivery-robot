@@ -5,7 +5,7 @@ import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useAuth } from "@/context/AuthContext";
 import { useLocale } from "@/context/LocaleContext";
 
-export default function WorkflowControls() {
+export default function WorkflowControls({ compact = false }: { compact?: boolean }) {
   const { t } = useLocale();
   const { user } = useAuth();
   const {
@@ -25,14 +25,6 @@ export default function WorkflowControls() {
   const status = activeTask?.status;
 
   const action = status === "WAITING_FOR_LOADING" ? t("confirmLoaded") : status === "WAITING_FOR_UNLOADING" ? t("confirmReceived") : undefined;
-  const helper = status === "WAITING_FOR_LOADING" ? t("confirmLoadedHelp") : status === "WAITING_FOR_UNLOADING" ? t("confirmReceivedHelp") : undefined;
-
-  const navigationMessage =
-    status === "GOING_TO_PICKUP"
-      ? t("navigatingPickup")
-      : status === "DELIVERING"
-        ? t("deliveringDestination")
-        : undefined;
 
   async function run(
     actionFn: () => Promise<void>,
@@ -56,8 +48,8 @@ export default function WorkflowControls() {
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div>
+    <section className={compact ? "border-t border-slate-100 pt-4" : "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"}>
+      {!compact && <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">
           {t("workflowLive")}
         </p>
@@ -67,9 +59,9 @@ export default function WorkflowControls() {
         <p className="mt-1 max-w-2xl text-sm text-slate-500">
           {t("workflowDescription")}
         </p>
-      </div>
+      </div>}
 
-      <div className="mt-5 flex flex-wrap items-center gap-3">
+      <div className={`${compact ? "mt-0" : "mt-5"} flex flex-wrap items-center gap-3`}>
         {action && (
           <button
             type="button"
@@ -91,12 +83,6 @@ export default function WorkflowControls() {
           >
             {busy ? t("processing") : action}
           </button>
-        )}
-
-        {navigationMessage && (
-          <span className="rounded-xl bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
-            {navigationMessage}
-          </span>
         )}
 
         {!robot.online && (
@@ -143,12 +129,6 @@ export default function WorkflowControls() {
           {t("robotLabel")}: {robot.state}
         </span>
       </div>
-
-      {helper && (
-        <p className="mt-3 text-xs leading-5 text-slate-500">
-          {helper}
-        </p>
-      )}
 
       {message && (
         <p

@@ -8,8 +8,10 @@ import { operationalText } from "@/lib/i18n";
 
 type NavigationMetricsProps = {
   feedback?: NavigationFeedback;
-  taskId: string;
-  status: TaskStatus;
+  taskId?: string;
+  status?: TaskStatus;
+  compact?: boolean;
+  layout?: "wide" | "rail";
 };
 
 const NAVIGATING_STATUSES: TaskStatus[] = [
@@ -20,12 +22,14 @@ const NAVIGATING_STATUSES: TaskStatus[] = [
 export default function NavigationMetrics({
   feedback,
   taskId,
-  status
+  status,
+  compact = false,
+  layout = "wide"
 }: NavigationMetricsProps) {
   const { locale, format } = useLocale();
   const copy = operationalText[locale];
   const currentFeedback =
-    feedback?.taskId === taskId
+    taskId && feedback?.taskId === taskId
       ? feedback
       : undefined;
   const countdownEta = useSecondCountdown(
@@ -35,13 +39,23 @@ export default function NavigationMetrics({
     currentFeedback?.navigationTimeSeconds
   );
 
-  if (!NAVIGATING_STATUSES.includes(status)) {
-    return null;
+  if (!status || !NAVIGATING_STATUSES.includes(status)) {
+    return (
+      <section className={`rounded-xl border border-blue-100 bg-blue-50/60 ${compact ? "p-3" : "p-4"}`}>
+        <p className="text-sm font-semibold text-blue-950">{copy.liveNavigation}</p>
+        <NavigationMetricsGrid
+          compact={compact}
+          layout={layout}
+          copy={copy}
+          values={IDLE_VALUES}
+        />
+      </section>
+    );
   }
 
   if (!currentFeedback) {
     return (
-      <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+      <div className={`rounded-xl border border-blue-100 bg-blue-50 ${compact ? "p-3" : "p-4"}`}>
         <p className="text-sm font-semibold text-blue-900">
           {copy.liveNavigation}
         </p>
@@ -59,7 +73,7 @@ export default function NavigationMetrics({
   return (
     <section
       aria-live="polite"
-      className="rounded-xl border border-blue-100 bg-blue-50/60 p-4"
+      className={`rounded-xl border border-blue-100 bg-blue-50/60 ${compact ? "p-3" : "p-4"}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -77,65 +91,54 @@ export default function NavigationMetrics({
         </span>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <NavigationMetric
-          label={copy.distance}
-          value={
-            `${currentFeedback.distanceRemaining.toFixed(2)} m`
-          }
-        />
-
-        <NavigationMetric
-          label={copy.estimatedArrival}
-          value={formatDuration(
-            countdownEta
-          )}
-        />
-
-        <NavigationMetric
-          label={copy.navigationTime}
-          value={formatDuration(
-            elapsedNavigationTime
-          )}
-        />
-
-        <NavigationMetric
-          label={copy.recoveries}
-          value={String(
-            currentFeedback.numberOfRecoveries
-          )}
-        />
-
-        <NavigationMetric
-          label={copy.linearSpeed}
-          value={
-            currentFeedback.linearVelocity
-              === undefined
-              ? "—"
-              : (
-                  `${currentFeedback
-                    .linearVelocity
-                    .toFixed(2)} m/s`
-                )
-          }
-        />
-
-        <NavigationMetric
-          label={copy.angularVelocity}
-          value={
-            currentFeedback.angularVelocity
-              === undefined
-              ? "—"
-              : (
-                  `${currentFeedback
-                    .angularVelocity
-                    .toFixed(2)} rad/s`
-                )
-          }
-        />
-        
-      </div>
+      <NavigationMetricsGrid compact={compact} layout={layout} copy={copy} values={{
+        distance: `${currentFeedback.distanceRemaining.toFixed(2)} m`,
+        eta: formatDuration(countdownEta),
+        navigationTime: formatDuration(elapsedNavigationTime),
+        recoveries: String(currentFeedback.numberOfRecoveries),
+        linearSpeed: currentFeedback.linearVelocity === undefined ? "—" : `${currentFeedback.linearVelocity.toFixed(2)} m/s`,
+        angularVelocity: currentFeedback.angularVelocity === undefined ? "—" : `${currentFeedback.angularVelocity.toFixed(2)} rad/s`
+      }} />
     </section>
+  );
+}
+
+const IDLE_VALUES = {
+  distance: "0 m",
+  eta: "0s",
+  navigationTime: "0s",
+  recoveries: "0",
+  linearSpeed: "0 m/s",
+  angularVelocity: "0 rad/s"
+};
+
+function NavigationMetricsGrid({
+  compact,
+  layout,
+  copy,
+  values
+}: {
+  compact: boolean;
+  layout: "wide" | "rail";
+  copy: Record<string, string>;
+  values?: {
+    distance: string;
+    eta: string;
+    navigationTime: string;
+    recoveries: string;
+    linearSpeed: string;
+    angularVelocity: string;
+  };
+}) {
+  return (
+    <div className={`${compact ? `mt-3 overflow-hidden rounded-xl border border-blue-100 bg-blue-100 grid-cols-2 gap-px ${layout === "wide" ? "sm:grid-cols-3 xl:grid-cols-6" : ""}` : "mt-4 grid-cols-2 gap-3"} grid`}>
+      <NavigationMetric compact={compact} label={copy.distance} value={values?.distance} />
+      <NavigationMetric compact={compact} label={copy.estimatedArrival} value={values?.eta} />
+      <NavigationMetric compact={compact} label={copy.navigationTime} value={values?.navigationTime} />
+      <NavigationMetric compact={compact} label={copy.recoveries} value={values?.recoveries} />
+      <NavigationMetric compact={compact} label={copy.linearSpeed} value={values?.linearSpeed} />
+      <NavigationMetric compact={compact} label={copy.angularVelocity} value={values?.angularVelocity} />
+    </div>
   );
 }
 
@@ -179,19 +182,19 @@ function useSecondCountUp(value: number | undefined) {
 
 function NavigationMetric({
   label,
-  value
+  value,
+  compact = false
 }: {
   label: string;
-  value: string;
+  value?: string;
+  compact?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-blue-100 bg-white p-3">
+    <div className={compact ? "min-w-0 bg-white p-2.5" : "rounded-lg border border-blue-100 bg-white p-3"}>
       <p className="text-xs text-slate-500">
         {label}
       </p>
-      <p className="mt-1 text-lg font-bold text-slate-900">
-        {value}
-      </p>
+      {value && <p className={`mt-1 font-bold text-slate-900 ${compact ? "text-base" : "text-lg"}`}>{value}</p>}
     </div>
   );
 }

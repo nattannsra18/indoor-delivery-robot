@@ -528,11 +528,25 @@ def test_selected_robot_must_be_ready_navigation_capable_and_on_map():
             online=True,
             enrollment_status=RobotEnrollmentStatus.PAIRED,
             readiness_status=RobotReadinessStatus.NOT_READY,
+            readiness_detail="Localization requires an initial pose",
+            readiness_checks_json=json.dumps([{
+                "check_id": "data.amcl_pose",
+                "category": "DATA",
+                "status": "FAIL",
+                "message": "No AMCL pose received",
+                "observed": "never",
+            }]),
             capabilities_json=json.dumps(["navigation"]),
         ))
         db.commit()
 
         service = DeliveryService(db)
+        fleet_robot = next(
+            item for item in service.list_fleet() if item.id == "not-ready"
+        )
+        assert fleet_robot.readiness_detail == "Localization requires an initial pose"
+        assert fleet_robot.validation_results[0].check_id == "data.amcl_pose"
+        assert fleet_robot.validation_results[0].observed == "never"
         with pytest.raises(HTTPException) as rejected:
             service.create_task(payload(), robot_id="not-ready")
 
