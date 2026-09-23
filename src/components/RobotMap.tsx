@@ -32,6 +32,8 @@ type RobotMapProps = {
   onMapPoseSelect?: (pose: { x: number; y: number; yaw: number }) => void;
   mapAriaLabel?: string;
   viewportSize?: "default" | "dashboard";
+  minimumMapRevisionExclusive?: number;
+  waitingForMapDetail?: string;
 };
 
 const PATH_STATUS_LABEL: Record<"en" | "th", Record<NavigationPathStatus, string>> = {
@@ -61,6 +63,8 @@ export default function RobotMap({
   onMapPoseSelect,
   mapAriaLabel,
   viewportSize = "default",
+  minimumMapRevisionExclusive,
+  waitingForMapDetail,
 }: RobotMapProps) {
   const { locale, format } = useLocale();
   const copy = operationalText[locale];
@@ -77,9 +81,13 @@ export default function RobotMap({
   });
   const [view, setView] = useState({ zoom: 1, rotation: 0, x: 0, y: 0 });
   const {
-    occupancyMap, navigationPath, navigationPathStatus, robot: liveRobot,
+    occupancyMap: receivedOccupancyMap, navigationPath, navigationPathStatus, robot: liveRobot,
     stations: contextStations, activeTask, stationName
   } = useDeliveryApi();
+  const occupancyMap = receivedOccupancyMap && (
+    minimumMapRevisionExclusive === undefined
+    || receivedOccupancyMap.revision > minimumMapRevisionExclusive
+  ) ? receivedOccupancyMap : undefined;
   const stations = stationsOverride ?? contextStations;
   const robot = useSmoothRobotPose(liveRobot, smoothMotion);
 
@@ -318,7 +326,7 @@ export default function RobotMap({
             ? (locale === "th" ? "กำลังรอแผนที่ ROS" : "Waiting for ROS map")
             : (locale === "th" ? "กำลังรอแผนที่" : "Waiting for map")}</p>
           <p className="mt-2 text-sm text-slate-500">
-            {locale === "th" ? "ยังเลือกสถานีจากรายการได้ขณะไม่มีแผนที่ปัจจุบัน" : "Station dropdowns remain available while the live map is missing."}
+            {waitingForMapDetail ?? (locale === "th" ? "ยังเลือกสถานีจากรายการได้ขณะไม่มีแผนที่ปัจจุบัน" : "Station dropdowns remain available while the live map is missing.")}
           </p>
           <p className="mt-2 text-xs font-semibold text-amber-700">
             {(showTechnicalDetails ? PATH_STATUS_LABEL : USER_PATH_STATUS_LABEL)[locale].unavailable}

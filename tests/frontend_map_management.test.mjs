@@ -49,3 +49,13 @@ test("map switch feedback clears stale robot-scoped map state", () => {
   assert.match(contextSource, /setOccupancyMap\(undefined\)/);
   assert.doesNotMatch(globals, /\[role="dialog"\][^{]*\{[^}]*max-width/);
 });
+
+test("web mapping hides the prior map until the new SLAM revision arrives", () => {
+  const pageSource = read("src/app/maps/page.tsx");
+  const robotMapSource = read("src/components/RobotMap.tsx");
+
+  assert.match(pageSource, /setMappingStartRevision\(occupancyMap\?\.revision \?\? 0\)/);
+  assert.match(pageSource, /minimumMapRevisionExclusive=\{minimumMapRevisionExclusive\}/);
+  assert.match(robotMapSource, /receivedOccupancyMap\.revision > minimumMapRevisionExclusive/);
+  assert.match(robotMapSource, /waitingForMapDetail/);
+});
