@@ -193,7 +193,7 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
     && !emergencyStop?.latched;
 
   return <>
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:col-span-2 xl:col-span-1">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-600">{ui.liveOperations}</p>

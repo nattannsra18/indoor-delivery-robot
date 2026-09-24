@@ -71,7 +71,7 @@ export default function DashboardPage() {
       <OverviewCard icon="mission" label={operations.workload} value={activeTask?.id ?? ui.noMission} detail={counts.queued > 0 ? operations.queued.replace("{count}", String(counts.queued)) : operations.queueEmpty} tone={activeTask ? "blue" : "violet"} />
     </section>
 
-    <section className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,21rem)_minmax(18rem,21rem)]">
+    <section className="mt-4 grid items-start gap-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,21rem)_minmax(18rem,21rem)]">
       <DashboardDeliveryMap poseLive={livePose} />
       <aside className="min-w-0 space-y-4" aria-label={operations.selectedRobot}>
         <SelectedRobotPanel robot={robot} robotConnected={robotConnected} activeTask={activeTask} activeMapId={selectedFleetRobot?.activeMapId} localizationDiagnostic={localizationDiagnostic} nav2Diagnostic={nav2Diagnostic} locale={locale} copy={copy} ui={ui} operations={operations} taskStatusLabel={activeTask ? t("taskStatus")[activeTask.status] : undefined} />

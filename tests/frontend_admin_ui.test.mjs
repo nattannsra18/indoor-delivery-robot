@@ -14,11 +14,17 @@ test("shared sidebar uses the supplied robot mark for both roles", () => {
 test("admin dashboard prioritizes operations, map, safety and live mission data", () => {
   const source = read("src/app/page.tsx");
   const deliveryMap = read("src/components/DashboardDeliveryMap.tsx");
+  const robotMap = read("src/components/RobotMap.tsx");
   assert.match(source, /operationsOverview/);
   assert.match(source, /<DashboardDeliveryMap/);
   assert.match(deliveryMap, /<RobotMap/);
   assert.match(source, /<EmergencyStopControl/);
   assert.match(source, /<WorkflowControls/);
+  assert.match(source, /lg:grid-cols-2/);
+  assert.match(deliveryMap, /lg:col-span-2 xl:col-span-1/);
+  assert.match(robotMap, /window\.innerHeight \* 0\.58/);
+  assert.match(robotMap, /min-h-\[clamp\(28rem,58dvh,47\.5rem\)\]/);
+  assert.match(robotMap, /window\.addEventListener\("resize", updateCanvasSize\)/);
 });
 
 test("admin dashboard consolidates robot profile and navigation without duplicating diagnostics", () => {

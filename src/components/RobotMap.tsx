@@ -96,8 +96,18 @@ export default function RobotMap({
     if (!container) return;
     const updateCanvasSize = () => {
       const width = Math.max(300, Math.floor(container.clientWidth));
-      const minimumHeight = viewportSize === "dashboard" ? 760 : 360;
-      const maximumHeight = viewportSize === "dashboard" ? 840 : 580;
+      const dashboardMinimumHeight = Math.min(
+        760,
+        Math.max(448, Math.round(window.innerHeight * 0.58))
+      );
+      const minimumHeight = viewportSize === "dashboard"
+        ? dashboardMinimumHeight : 360;
+      const maximumHeight = viewportSize === "dashboard"
+        ? Math.max(
+          dashboardMinimumHeight,
+          Math.min(840, Math.round(window.innerHeight * 0.72))
+        )
+        : 580;
       const naturalHeight = occupancyMap
         ? width * (occupancyMap.height / occupancyMap.width) : minimumHeight;
       const height = Math.round(Math.min(maximumHeight, Math.max(minimumHeight, naturalHeight)));
@@ -109,7 +119,11 @@ export default function RobotMap({
     updateCanvasSize();
     const observer = new ResizeObserver(updateCanvasSize);
     observer.observe(container);
-    return () => observer.disconnect();
+    window.addEventListener("resize", updateCanvasSize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateCanvasSize);
+    };
   }, [occupancyMap, viewportSize]);
 
   useEffect(() => {
@@ -320,7 +334,7 @@ export default function RobotMap({
 
   if (!occupancyMap) {
     return (
-      <div className={`grid place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center ${viewportSize === "dashboard" ? "min-h-[760px]" : "min-h-[360px]"}`}>
+      <div className={`grid place-items-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center ${viewportSize === "dashboard" ? "min-h-[clamp(28rem,58dvh,47.5rem)]" : "min-h-[360px]"}`}>
         <div>
           <p className="font-semibold text-slate-700">{showTechnicalDetails
             ? (locale === "th" ? "กำลังรอแผนที่ ROS" : "Waiting for ROS map")
