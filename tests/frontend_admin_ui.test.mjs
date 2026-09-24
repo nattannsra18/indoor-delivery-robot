@@ -11,6 +11,18 @@ test("shared sidebar uses the supplied robot mark for both roles", () => {
   assert.match(source, /user\?\.role === "ADMIN"/);
 });
 
+test("desktop sidebar collapses accessibly and remembers the preference", () => {
+  const sidebar = read("src/components/Sidebar.tsx");
+  const catalog = read("src/lib/i18n.ts");
+  assert.match(sidebar, /idr-sidebar-collapsed/);
+  assert.match(sidebar, /localStorage\.setItem\(COLLAPSED_KEY/);
+  assert.match(sidebar, /collapsed \? "lg:w-20" : "lg:w-64"/);
+  assert.match(sidebar, /aria-pressed=\{collapsed\}/);
+  assert.match(sidebar, /title=\{collapsed \? label : undefined\}/);
+  assert.match(catalog, /collapseNavigation:"Collapse navigation"/);
+  assert.match(catalog, /expandNavigation:"ขยายเมนูนำทาง"/);
+});
+
 test("admin dashboard prioritizes operations, map, safety and live mission data", () => {
   const source = read("src/app/page.tsx");
   const deliveryMap = read("src/components/DashboardDeliveryMap.tsx");
