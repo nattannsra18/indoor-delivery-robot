@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import DashboardDeliveryMap from "@/components/DashboardDeliveryMap";
 import EmergencyStopControl from "@/components/EmergencyStopControl";
 import FleetOverview from "@/components/FleetOverview";
+import LiveCamera from "@/components/LiveCamera";
 import NavigationMetrics from "@/components/NavigationMetrics";
 import RobotOperationsControl from "@/components/RobotOperationsControl";
 import StatusBadge from "@/components/StatusBadge";
@@ -79,6 +80,7 @@ export default function DashboardPage() {
         <RobotOperationsControl compact defaultExpanded={blockingIssues.length > 0} />
       </aside>
       <aside className="min-w-0 space-y-4" aria-label={ui.controlAndSafety}>
+        <LiveCamera key={`${robot.id}:${robotConnected}`} enabled={robotConnected} robotId={robot.id} />
         <MissionPanel activeTask={activeTask} missionProgress={missionProgress} navigationFeedback={navigationFeedback} stationName={stationName} ui={ui} operations={operations} readyForDelivery={readyForDelivery} />
         <RobotOperationsControl mode="admin" collapsible />
       </aside>
