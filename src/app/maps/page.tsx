@@ -270,11 +270,17 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [toast, setToast] = useState<{ kind: "success" | "error"; title: string; body: string; mapId?: string }>();
   const [mappingStartRevision, setMappingStartRevision] = useState<number>();
+  const [firstMapWaitSeconds, setFirstMapWaitSeconds] = useState(0);
   const phase = session?.phase ?? "IDLE";
   const active = phase === "MAPPING";
   const minimumMapRevisionExclusive = ["STARTING", "MAPPING"].includes(phase)
-    ? mappingStartRevision
+    ? mappingStartRevision ?? Number.MAX_SAFE_INTEGER
     : undefined;
+  const waitingForFirstSessionMap = active && (
+    mappingStartRevision === undefined
+    || !occupancyMap
+    || occupancyMap.revision <= mappingStartRevision
+  );
   useEffect(() => {
     if (phase === "IDLE" || phase === "FAILED") {
       baselineSessionId.current = undefined;
@@ -287,6 +293,18 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
     // session.mapRevision on every poll would always filter out the newest map.
     setMappingStartRevision((current) => current ?? session.mapRevision ?? occupancyMap?.revision ?? 0);
   }, [occupancyMap?.revision, phase, session?.mapRevision, session?.sessionId]);
+  useEffect(() => {
+    if (!waitingForFirstSessionMap) {
+      setFirstMapWaitSeconds(0);
+      return;
+    }
+    const startedAt = Date.now();
+    setFirstMapWaitSeconds(0);
+    const timer = window.setInterval(() => {
+      setFirstMapWaitSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [session?.sessionId, waitingForFirstSessionMap]);
   const run = async (operation: () => Promise<MappingSession>) => {
     onBusy(true); onError("");
     try { onSession(await operation()); }
@@ -389,7 +407,7 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
   return <div className="mt-6">
     {toast && <MappingToast toast={toast} copy={copy} onClose={() => setToast(undefined)} onOpenLibrary={() => { setToast(undefined); onOpenLibrary(); }} />}
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.75fr)]">
-      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"><header className="border-b border-slate-100 px-5 py-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-bold text-slate-950">{copy.mapData}</h2><p className="mt-1 text-sm text-slate-500">{copy.mapDataHelp}</p></div>{phase !== "IDLE" && <span className={`rounded-full px-3 py-1 text-xs font-bold ${phase === "FAILED" ? "bg-rose-100 text-rose-700" : active ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>{phase}</span>}</div></header><div className="p-3 md:p-4"><RobotMap showStations={false} showStationButtons={false} smoothMotion={active} minimumMapRevisionExclusive={minimumMapRevisionExclusive} waitingForMapDetail={copy.waitingForNewMap} /></div></section>
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"><header className="border-b border-slate-100 px-5 py-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-bold text-slate-950">{copy.mapData}</h2><p className="mt-1 text-sm text-slate-500">{copy.mapDataHelp}</p></div>{phase !== "IDLE" && <span className={`rounded-full px-3 py-1 text-xs font-bold ${phase === "FAILED" ? "bg-rose-100 text-rose-700" : active ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"}`}>{phase}</span>}</div></header><div className="p-3 md:p-4"><RobotMap showStations={false} showStationButtons={false} smoothMotion={active} minimumMapRevisionExclusive={minimumMapRevisionExclusive} waitingForMapDetail={copy.waitingForNewMap.replace("{seconds}", String(firstMapWaitSeconds))} /></div></section>
       <aside className="space-y-4"><section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><h2 className="text-lg font-black text-slate-950">{phase === "REVIEW" ? copy.review : phase === "FAILED" ? copy.failed : copy.title}</h2><p className="mt-2 text-sm leading-6 text-slate-500">{phase === "REVIEW" ? copy.reviewHelp : phase === "MAPPING" ? copy.liveHelp : phase === "FAILED" ? copy.retryHint : copy.description}</p>
         {session?.detail && !(phase === "IDLE" && session.savedMapId) && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">{session.detail}</p>}
         {session?.startedAt && <p className="mt-3 text-xs text-slate-400">{copy.elapsed}: {formatDate(session.startedAt, locale)}</p>}
