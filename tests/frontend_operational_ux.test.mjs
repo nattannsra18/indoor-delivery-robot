@@ -86,6 +86,8 @@ test("delivery readiness failures name the exact check and offer a targeted reco
   assert.match(api, /validation_results/);
   assert.match(delivery, /<RobotReadinessNotice robot=\{selectedFleetRobot\}/);
   assert.match(dashboardModal, /<RobotReadinessNotice robot=\{selectedFleetRobot\}/);
+  assert.equal((delivery.match(/<RobotReadinessNotice/g) ?? []).length, 1);
+  assert.equal((dashboardModal.match(/<RobotReadinessNotice/g) ?? []).length, 1);
   assert.match(diagnostics, /<RobotReadinessNotice robot=\{selectedFleetRobot\}/);
   assert.match(notice, /data-readiness-check=\{check\.checkId\}/);
   assert.match(notice, /href="\/maps\?view=localization"/);

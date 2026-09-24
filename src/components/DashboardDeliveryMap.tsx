@@ -15,7 +15,7 @@ import type { Station, TaskPriority, TaskRoutePreview } from "@/types";
 const NOTE_MAX_LENGTH = 500;
 const inputClass = "min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100";
 
-export default function DashboardDeliveryMap() {
+export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: boolean }) {
   const { locale } = useLocale();
   const copy = deliveryText[locale];
   const flow = deliveryFlowText[locale];
@@ -203,7 +203,7 @@ export default function DashboardDeliveryMap() {
         </div>
         <div className="flex gap-2">
           <Connection label={occupancyMap ? dashboard.mapAvailable : dashboard.waitingMap} active={Boolean(occupancyMap)} />
-          <Connection label={robot.online ? (locale === "th" ? "ตำแหน่งสด" : "Live Pose") : (locale === "th" ? "รอตำแหน่ง" : "Pose Waiting")} active={robot.online} />
+          <Connection label={poseLive ? (locale === "th" ? "ตำแหน่งสด" : "Live Pose") : (locale === "th" ? "รอตำแหน่ง" : "Pose Waiting")} active={poseLive} />
         </div>
       </div>
       <div className="p-3">
@@ -289,7 +289,7 @@ export default function DashboardDeliveryMap() {
             {!previewing && preview && <RouteState tone="success" title={flow.routeAvailable} detail={`${preview.totalDistanceMeters.toFixed(1)} m · ${formatDuration(preview.travelTimeSeconds, locale)}`} />}
             {!previewing && previewError && <><RouteState tone="error" title={flow.routeUnavailable} detail={previewError} /><button type="button" onClick={() => setPreviewAttempt((value) => value + 1)} className="mt-2 text-sm font-semibold text-blue-700 underline">{flow.tryAgain}</button></>}
             {!previewing && !preview && !previewError && requiresSupervisedMode && !supervisedMode && <RouteState tone="idle" title={flow.supervisedRequired} detail={flow.supervisedHelp} />}
-            {!previewing && !preview && !previewError && selectedRobotBlocked && <RobotReadinessNotice robot={selectedFleetRobot} compact />}
+            {!previewing && !preview && !previewError && selectedRobotBlocked && <RouteState tone="idle" title={flow.selectedRobotNotReady} detail={flow.robotUnavailable} />}
             {!previewing && !preview && !previewError && !selectedRobotBlocked && (!requiresSupervisedMode || supervisedMode) && <RouteState tone="idle" title={flow.selectTwoStations} detail={flow.routeWillAppear} />}
           </div>
           {submitError && <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">{submitError}</p>}

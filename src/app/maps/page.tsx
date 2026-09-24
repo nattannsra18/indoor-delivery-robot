@@ -266,14 +266,27 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
   const driveStartedAt = useRef(0);
   const activeDriveKey = useRef<string | undefined>(undefined);
   const announcedSavedMap = useRef<string | undefined>(undefined);
+  const baselineSessionId = useRef<string | undefined>(undefined);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [toast, setToast] = useState<{ kind: "success" | "error"; title: string; body: string; mapId?: string }>();
   const [mappingStartRevision, setMappingStartRevision] = useState<number>();
   const phase = session?.phase ?? "IDLE";
   const active = phase === "MAPPING";
   const minimumMapRevisionExclusive = ["STARTING", "MAPPING"].includes(phase)
-    ? (mappingStartRevision ?? session?.mapRevision)
+    ? mappingStartRevision
     : undefined;
+  useEffect(() => {
+    if (phase === "IDLE" || phase === "FAILED") {
+      baselineSessionId.current = undefined;
+      setMappingStartRevision(undefined);
+      return;
+    }
+    if (!session?.sessionId || baselineSessionId.current === session.sessionId) return;
+    baselineSessionId.current = session.sessionId;
+    // Capture one immutable baseline for this session. Following
+    // session.mapRevision on every poll would always filter out the newest map.
+    setMappingStartRevision((current) => current ?? session.mapRevision ?? occupancyMap?.revision ?? 0);
+  }, [occupancyMap?.revision, phase, session?.mapRevision, session?.sessionId]);
   const run = async (operation: () => Promise<MappingSession>) => {
     onBusy(true); onError("");
     try { onSession(await operation()); }

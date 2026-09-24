@@ -215,7 +215,7 @@ export default function CreateDeliveryPage() {
             {!previewing && preview && <RouteState tone="success" title={flow.routeAvailable} detail={`${preview.totalDistanceMeters.toFixed(1)} m · ${formatDuration(travel, locale)}`} />}
             {!previewing && previewError && <><RouteState tone="error" title={flow.routeUnavailable} detail={previewError} /><button type="button" onClick={() => setPreviewAttempt((value) => value + 1)} className="mt-2 text-sm font-semibold text-blue-700 underline">{flow.tryAgain}</button></>}
             {!previewing && !preview && !previewError && requiresSupervisedMode && !supervisedMode && <RouteState tone="idle" title={flow.supervisedRequired} detail={flow.supervisedHelp} />}
-            {!previewing && !preview && !previewError && selectedRobotBlocked && <RobotReadinessNotice robot={selectedFleetRobot} compact />}
+            {!previewing && !preview && !previewError && selectedRobotBlocked && <RouteState tone="idle" title={flow.selectedRobotNotReady} detail={flow.robotUnavailable} />}
             {!previewing && !preview && !previewError && !selectedRobotBlocked && (!requiresSupervisedMode || supervisedMode) && <RouteState tone="idle" title={flow.selectTwoStations} detail={flow.routeWillAppear} />}
           </div>
           <div className="mt-5 rounded-xl bg-blue-50 p-4 text-sm text-blue-950">

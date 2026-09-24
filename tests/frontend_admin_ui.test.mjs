@@ -30,6 +30,7 @@ test("admin dashboard consolidates robot profile and navigation without duplicat
   assert.doesNotMatch(source, /<DiagnosticsCards/);
   assert.doesNotMatch(source, /System Connections/);
   assert.match(source, /<NavigationMetrics compact layout="rail"/);
+  assert.match(source, /taskId=\{activeTask\?\.id\} status=\{activeTask\?\.status\}/);
   assert.ok(
     source.indexOf("<DashboardDeliveryMap") < source.indexOf("<MissionPanel")
       && source.indexOf("<MissionPanel") < source.indexOf("function SelectedRobotPanel"),
@@ -39,6 +40,13 @@ test("admin dashboard consolidates robot profile and navigation without duplicat
     source.lastIndexOf("<RecentActivity") > source.indexOf("<FleetOverview"),
     "Recent delivery activity should remain the final dashboard card"
   );
+  assert.ok(
+    source.indexOf("<CompactDiagnostics") < source.indexOf("<ActiveIssues")
+      && source.indexOf("<ActiveIssues") < source.indexOf("<RobotOperationsControl compact"),
+    "Sensor health, active issues and navigation recovery should remain in that order"
+  );
+  assert.doesNotMatch(source, /ROBOT_HEARTBEAT_FRESH_MS/);
+  assert.match(source, /label="Robot Agent" state=\{robotConnected \? "active" : "inactive"\}/);
 });
 
 test("diagnostics page owns system connections and detailed ROS diagnostics", () => {
@@ -60,6 +68,8 @@ test("admin robot controls separate bounded recovery from destructive actions", 
   assert.match(deliveryMap, /viewportSize="dashboard"/);
   assert.match(controls, /"navigation\.recover"/);
   assert.match(controls, /"motor\.reset_stall"/);
+  assert.match(controls, /flex flex-wrap gap-2/);
+  assert.match(controls, /shrink-0 whitespace-nowrap/);
   assert.match(controls, /"navigation\.restart_if_broken"/);
   assert.match(controls, /"system\.start_navigation"/);
   assert.match(controls, /confirmAndRun\("system\.stop_navigation"/);

@@ -77,7 +77,7 @@ export default function LocalizationWorkspace() {
   }, [confirmGlobal]);
 
   const awaitCommand = async (commandId?: string) => {
-    if (!commandId) return;
+    if (!commandId) return undefined;
     for (let attempt = 0; attempt < 30; attempt += 1) {
       await wait(350);
       const next = await getLocalizationStatus(targetRobotId);
@@ -85,10 +85,22 @@ export default function LocalizationWorkspace() {
       setStatus(next);
       if (!next.pendingCommandId && next.lastCommandId === commandId) {
         if (!next.lastCommandSucceeded) throw new Error(next.detail || copy.commandFailed);
-        return;
+        return next;
       }
     }
     throw new Error(copy.commandFailed);
+  };
+
+  const awaitLocalizationReady = async (initial?: LocalizationStatus) => {
+    if (initial?.health === "LOCALIZED" && initial.amclState === "ACTIVE" && initial.tfAvailable) return initial;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await wait(500);
+      const next = await getLocalizationStatus(targetRobotId);
+      if (targetRobotIdRef.current !== targetRobotId) return undefined;
+      setStatus(next);
+      if (next.health === "LOCALIZED" && next.amclState === "ACTIVE" && next.tfAvailable) return next;
+    }
+    throw new Error(copy.posePending);
   };
 
   const setInitialPose = async () => {
@@ -97,7 +109,9 @@ export default function LocalizationWorkspace() {
     try {
       const pending = await setLocalizationInitialPose({ robotId: targetRobotId, pose: { frameId: "map", ...draft }, positionUncertainty, yawUncertainty: yawUncertaintyDegrees * Math.PI / 180 });
       setStatus(pending);
-      await awaitCommand(pending.pendingCommandId);
+      const acknowledged = await awaitCommand(pending.pendingCommandId);
+      setToast({ kind: "success", title: copy.poseSuccess, body: copy.verifying });
+      await awaitLocalizationReady(acknowledged);
       setToast({ kind: "success", title: copy.poseSuccess, body: copy.ready });
     } catch (reason) {
       setToast({ kind: "error", title: copy.commandFailed, body: reason instanceof Error ? reason.message : copy.commandFailed });

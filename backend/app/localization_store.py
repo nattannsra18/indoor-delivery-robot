@@ -52,9 +52,12 @@ class LocalizationStore:
             current = self._statuses.get(robot_id)
             if current is not None and current.pending_command_id is not None:
                 return None
-            command_id = (
-                f"localization-{action.value.lower()}:{robot_id}:{uuid4().hex}"
-            )
+            # Command IDs are scoped by the per-robot store already.  Keeping the
+            # robot UUID in this value made GLOBAL_LOCALIZATION IDs 102 characters
+            # long, while the wire model deliberately caps IDs at 100 characters.
+            # The Agent would then report an ID that FastAPI could not validate and
+            # the WebSocket connection entered a reconnect loop.
+            command_id = f"localization-{action.value.lower()}:{uuid4().hex}"
             base = current or LocalizationStatus(
                 robot_id=robot_id,
                 health=LocalizationHealth.UNKNOWN,
@@ -165,7 +168,9 @@ class LocalizationStore:
                 automatic_scan_active=False,
                 automatic_scan_progress=0.0,
                 detail="Robot Agent is offline",
-                last_command_id=command_id or (current.last_command_id if current else None),
+                last_command_id=self._bounded_command_id(
+                    command_id or (current.last_command_id if current else None)
+                ),
                 last_command_action=action,
                 last_command_succeeded=False if command_id else (
                     current.last_command_succeeded if current else None
@@ -205,6 +210,11 @@ class LocalizationStore:
             if "global_localization" in command_id
             else LocalizationCommandAction.SET_INITIAL_POSE
         )
+
+    @staticmethod
+    def _bounded_command_id(command_id: str | None) -> str | None:
+        """Keep cleanup resilient to IDs written by older Agent versions."""
+        return command_id[:100] if command_id else None
 
 
 localization_store = LocalizationStore()
