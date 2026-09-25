@@ -99,6 +99,7 @@ async def stop_mapping(
     robot_id = robot_id or DeliveryService(db).primary_robot().id
     session = _require_phase(robot_id, {MappingPhase.MAPPING})
     _, command_id = mapping_store.request(robot_id, MappingPhase.STOPPING)
+    db.rollback()
     await _deliver(robot_id, {"type": "mapping_command", "action": "STOP", "command_id": command_id, "robot_id": robot_id, "session_id": session.session_id})
     return mapping_store.get(robot_id)
 
@@ -146,6 +147,7 @@ async def discard_mapping(
         | {MappingPhase.FAILED},
     )
     _, command_id = mapping_store.request(robot_id, MappingPhase.RESTORING)
+    db.rollback()
     await _deliver(robot_id, {"type": "mapping_command", "action": "DISCARD", "command_id": command_id, "robot_id": robot_id, "session_id": session.session_id})
     return mapping_store.get(robot_id)
 
@@ -159,6 +161,7 @@ async def mapping_teleop(
 ) -> dict[str, bool]:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
     session = _require_phase(robot_id, {MappingPhase.MAPPING})
+    db.rollback()
     await _deliver(robot_id, {
         "type": "mapping_teleop", "robot_id": robot_id, "session_id": session.session_id,
         "linear_x": payload.linear_x, "angular_z": payload.angular_z,

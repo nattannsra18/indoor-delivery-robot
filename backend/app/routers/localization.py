@@ -160,6 +160,7 @@ async def localization_recovery_teleop(
             status_code=409,
             detail="Global relocalization recovery is not active",
         )
+    db.rollback()
     delivered = await robot_connection_manager.send_json(robot_id, {
         "type": "localization_teleop",
         "robot_id": robot_id,
@@ -185,6 +186,7 @@ async def _localization_scan_command(
                 status_code=409,
                 detail="Global relocalization recovery is not active",
             )
+    db.rollback()
     delivered = await robot_connection_manager.send_json(robot_id, {
         "type": "localization_scan",
         "robot_id": robot_id,

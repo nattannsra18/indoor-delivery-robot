@@ -62,3 +62,14 @@ test("web mapping hides the prior map until the new SLAM revision arrives", () =
   assert.match(robotMapSource, /receivedOccupancyMap\.revision > minimumMapRevisionExclusive/);
   assert.match(robotMapSource, /waitingForMapDetail/);
 });
+
+test("manual drive waits for each command before scheduling the next one", () => {
+  const mapping = read("src/app/maps/page.tsx");
+  const localization = read("src/components/LocalizationWorkspace.tsx");
+
+  for (const source of [mapping, localization]) {
+    assert.match(source, /await drive(?:MappingRobot|LocalizationRecovery)/);
+    assert.match(source, /window\.setTimeout\(\(\) => void send\(\), 180\)/);
+    assert.doesNotMatch(source, /window\.setInterval\([^\n]*drive(?:MappingRobot|LocalizationRecovery)/);
+  }
+});

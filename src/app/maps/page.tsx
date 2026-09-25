@@ -269,6 +269,8 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
   const [driveSpeed, setDriveSpeed] = useState(0.16);
   const driveTimer = useRef<number | undefined>(undefined);
   const driveStopTimer = useRef<number | undefined>(undefined);
+  const driveGeneration = useRef(0);
+  const driving = useRef(false);
   const driveStartedAt = useRef(0);
   const activeDriveKey = useRef<string | undefined>(undefined);
   const announcedSavedMap = useRef<string | undefined>(undefined);
@@ -318,7 +320,9 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
     finally { onBusy(false); }
   };
   const clearDriveTimers = useCallback(() => {
-    if (driveTimer.current !== undefined) window.clearInterval(driveTimer.current);
+    driveGeneration.current += 1;
+    driving.current = false;
+    if (driveTimer.current !== undefined) window.clearTimeout(driveTimer.current);
     if (driveStopTimer.current !== undefined) window.clearTimeout(driveStopTimer.current);
     driveTimer.current = undefined;
     driveStopTimer.current = undefined;
@@ -328,8 +332,10 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
     if (active) void driveMappingRobot(0, 0, robotId || undefined).catch(() => undefined);
   }, [active, clearDriveTimers, robotId]);
   const releaseDrive = useCallback(() => {
-    if (driveTimer.current === undefined) return;
-    window.clearInterval(driveTimer.current);
+    if (!driving.current) return;
+    driving.current = false;
+    driveGeneration.current += 1;
+    if (driveTimer.current !== undefined) window.clearTimeout(driveTimer.current);
     driveTimer.current = undefined;
     const remaining = Math.max(0, 300 - (performance.now() - driveStartedAt.current));
     driveStopTimer.current = window.setTimeout(() => {
@@ -340,9 +346,24 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
   const startDrive = useCallback((linear: number, angular: number) => {
     if (!active) return;
     clearDriveTimers();
+    driving.current = true;
+    const generation = driveGeneration.current;
     driveStartedAt.current = performance.now();
-    void driveMappingRobot(linear, angular, robotId || undefined).catch((reason) => onError(reason instanceof Error ? reason.message : copy.commandFailed));
-    driveTimer.current = window.setInterval(() => void driveMappingRobot(linear, angular, robotId || undefined).catch(stopDrive), 180);
+    const send = async () => {
+      try {
+        await driveMappingRobot(linear, angular, robotId || undefined);
+      } catch (reason) {
+        if (driveGeneration.current === generation) {
+          onError(reason instanceof Error ? reason.message : copy.commandFailed);
+          stopDrive();
+        }
+        return;
+      }
+      if (driving.current && driveGeneration.current === generation) {
+        driveTimer.current = window.setTimeout(() => void send(), 180);
+      }
+    };
+    void send();
   }, [active, clearDriveTimers, copy.commandFailed, onError, robotId, stopDrive]);
   useEffect(() => stopDrive, [stopDrive]);
   useEffect(() => {
