@@ -135,7 +135,10 @@ async def dashboard_websocket(
         )
 
     # Dashboard sockets are long-lived.  All initial reads are complete, so
-    # release SQLite's implicit read transaction before waiting for frames.
+    # release this request-scoped transaction before waiting for frames.
+    # Revalidation below uses a short-lived session so every open browser tab
+    # consumes zero database connections while idle.
+    database_bind = db.get_bind()
     db.rollback()
 
     try:
@@ -145,12 +148,8 @@ async def dashboard_websocket(
             # A cookie may have been revoked after this socket connected.
             # Re-check before replying so logout/session expiry does not keep
             # an authenticated dashboard transport alive indefinitely.
-            try:
-                still_authenticated = websocket_session(websocket, db)
-            finally:
-                # Session revalidation is a short read transaction. Never
-                # retain it while awaiting the next WebSocket frame.
-                db.rollback()
+            with Session(bind=database_bind) as auth_db:
+                still_authenticated = websocket_session(websocket, auth_db)
             if still_authenticated is None:
                 browser_connection_manager.disconnect(websocket)
                 await websocket.close(code=1008, reason="Authentication required")
@@ -181,11 +180,9 @@ async def dashboard_websocket(
 
     except WebSocketDisconnect:
         browser_connection_manager.disconnect(websocket)
-        db.rollback()
 
     except Exception:
         browser_connection_manager.disconnect(websocket)
-        db.rollback()
 
         try:
             await websocket.close(code=1011)
