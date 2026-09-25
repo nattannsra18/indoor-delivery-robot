@@ -422,7 +422,7 @@ export const dashboardOperationsText = {
     cameraUnavailable: "Camera stream unavailable",
     retryCamera: "Retry stream",
     cameraResolution: "640 × 480 · low latency",
-    cameraTransport: "MJPEG",
+    cameraTransport: "Outbound WSS · MJPEG",
     cameraAlt: "Live forward camera view from the robot",
   },
   th: {
@@ -486,7 +486,7 @@ export const dashboardOperationsText = {
     cameraUnavailable: "ไม่สามารถรับภาพจากกล้องได้",
     retryCamera: "ลองเชื่อมต่ออีกครั้ง",
     cameraResolution: "640 × 480 · หน่วงต่ำ",
-    cameraTransport: "MJPEG",
+    cameraTransport: "WSS ขาออก · MJPEG",
     cameraAlt: "ภาพสดจากกล้องด้านหน้าของหุ่นยนต์",
   },
 } as const;

@@ -24,6 +24,7 @@ from ..robot_registry import RobotRegistryService, bearer_value
 from ..service import DeliveryService
 from ..websocket_manager import robot_connection_manager
 from ..rate_limit import robot_enrollment_limiter
+from ..camera_stream import camera_stream_broker
 
 router = APIRouter(prefix="/api/robot-registry", tags=["robot-registry"])
 
@@ -163,6 +164,10 @@ async def revoke_robot(
     disconnected = await robot_connection_manager.close(
         robot_id,
         reason="Robot credential revoked by administrator",
+    )
+    await camera_stream_broker.close(
+        robot_id,
+        reason="Robot camera credential revoked by administrator",
     )
     if disconnected:
         DeliveryService(db).record_robot_connection(robot_id, False)

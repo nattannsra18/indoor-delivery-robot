@@ -23,13 +23,13 @@ test("web mapping keeps the selected robot camera beside remote controls", () =>
 test("camera proxy validates the web session and streams without caching", () => {
   const route = read("src/app/api/camera/stream/route.ts");
   assert.match(route, /\/api\/auth\/me/);
-  assert.match(route, /CAMERA_STREAM_URL/);
-  assert.match(route, /CAMERA_ROBOT_ID/);
-  assert.match(route, /fetch\(streamUrl/);
+  assert.match(route, /\/api\/robots\/\$\{encodeURIComponent\(requestedRobotId\)\}\/camera\/stream/);
+  assert.match(route, /headers: \{ cookie \}/);
   assert.match(route, /new Response\(stream\.body/);
   assert.match(route, /multipart\/x-mixed-replace/);
   assert.match(route, /X-Accel-Buffering/);
   assert.doesNotMatch(route, /rclpy|roslib|base64/i);
+  assert.doesNotMatch(route, /CAMERA_STREAM_URL|CAMERA_ROBOT_ID|100\.67\./);
 });
 
 test("camera renders one continuous MJPEG stream without snapshot polling", () => {

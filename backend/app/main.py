@@ -24,6 +24,7 @@ from .routers import (
     tasks,
     notifications,
     audit,
+    camera,
 )
 from .seed import seed_database
 from .auth import bootstrap_admin
@@ -88,6 +89,7 @@ app.include_router(robots.router)
 app.include_router(tasks.router)
 app.include_router(notifications.router)
 app.include_router(audit.router)
+app.include_router(camera.router)
 app.include_router(maps.router)
 app.include_router(mapping.router)
 app.include_router(localization.router)

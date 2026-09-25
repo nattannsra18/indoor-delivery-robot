@@ -21,16 +21,12 @@ export async function GET(request: Request) {
     });
     if (!session.ok) return new Response("Authentication required", { status: 401 });
 
-    const streamUrl = process.env.CAMERA_STREAM_URL?.trim();
-    if (!streamUrl) return new Response("Camera stream is not configured", { status: 503 });
-
-    const configuredRobotId = process.env.CAMERA_ROBOT_ID?.trim();
     const requestedRobotId = new URL(request.url).searchParams.get("robotId");
-    if (!configuredRobotId || requestedRobotId !== configuredRobotId) {
-      return new Response("Camera is not configured for this robot", { status: 404 });
-    }
+    if (!requestedRobotId) return new Response("Robot ID is required", { status: 400 });
 
-    const stream = await fetch(streamUrl, {
+    const stream = await fetch(
+      `${backendUrl}/api/robots/${encodeURIComponent(requestedRobotId)}/camera/stream`, {
+      headers: { cookie },
       cache: "no-store",
       signal: request.signal,
     });
