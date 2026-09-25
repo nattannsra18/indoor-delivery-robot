@@ -75,6 +75,7 @@ def test_production_compose_exposes_only_the_tls_proxy():
     assert '"5432:5432"' not in compose
     assert '"8000:8000"' not in compose
     assert "internal: true" in compose
+    assert "TRUSTED_HOSTS: ${TRUSTED_HOSTS:?Set TRUSTED_HOSTS},backend" in compose
     assert "@camera path /api/camera/*" in caddy
     assert "@backend path /api/* /ws/* /health" in caddy
     assert "Strict-Transport-Security" in caddy
