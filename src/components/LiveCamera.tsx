@@ -1,44 +1,22 @@
 "use client";
-/* eslint-disable @next/next/no-img-element -- each request must display the camera's latest uncached frame. */
+/* eslint-disable @next/next/no-img-element -- the camera is an authenticated MJPEG stream. */
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useLocale } from "@/context/LocaleContext";
 import { dashboardOperationsText } from "@/lib/i18n";
-
-const FRAME_DELAY_MS = 250;
-const RETRY_DELAY_MS = 1_000;
 
 export default function LiveCamera({ enabled, robotId }: { enabled: boolean; robotId: string }) {
   const { locale } = useLocale();
   const copy = dashboardOperationsText[locale];
-  const frameSequence = useRef(0);
-  const frameUrl = (sequence: number) => `/api/camera/stream?robotId=${encodeURIComponent(robotId)}&frame=${sequence}`;
-  const [sources, setSources] = useState<[string, string]>([frameUrl(0), ""]);
-  const [visibleSlot, setVisibleSlot] = useState(0);
+  const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
-  const nextFrameTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => () => {
-    if (nextFrameTimer.current) clearTimeout(nextFrameTimer.current);
-  }, []);
-
-  function requestNextFrame(loadedSlot: number, delay = FRAME_DELAY_MS) {
-    setLoaded(true);
-    setFailed(false);
-    setVisibleSlot(loadedSlot);
-    nextFrameTimer.current = setTimeout(() => {
-      const nextSlot = 1 - loadedSlot;
-      const nextUrl = frameUrl(++frameSequence.current);
-      setSources((current) => current.map((source, slot) => slot === nextSlot ? nextUrl : source) as [string, string]);
-    }, delay);
-  }
+  const streamUrl = `/api/camera/stream?robotId=${encodeURIComponent(robotId)}&attempt=${attempt}`;
 
   function retry() {
     setLoaded(false);
     setFailed(false);
-    setVisibleSlot(0);
-    setSources([frameUrl(++frameSequence.current), ""]);
+    setAttempt((current) => current + 1);
   }
 
   return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -52,15 +30,14 @@ export default function LiveCamera({ enabled, robotId }: { enabled: boolean; rob
       </span>
     </div>
     <div className="relative aspect-[4/3] overflow-hidden bg-slate-950">
-      {enabled && !failed && sources.map((source, slot) => source && <img
-        key={slot}
-        src={source}
-        alt={slot === visibleSlot ? copy.cameraAlt : ""}
-        aria-hidden={slot !== visibleSlot}
-        className={`absolute inset-0 h-full w-full object-cover ${loaded && slot === visibleSlot ? "opacity-100" : "opacity-0"}`}
-        onLoad={() => requestNextFrame(slot)}
-        onError={() => loaded ? requestNextFrame(visibleSlot, RETRY_DELAY_MS) : setFailed(true)}
-      />)}
+      {enabled && !failed && <img
+        key={attempt}
+        src={streamUrl}
+        alt={copy.cameraAlt}
+        className={`absolute inset-0 h-full w-full object-cover ${loaded ? "opacity-100" : "opacity-0"}`}
+        onLoad={() => { setLoaded(true); setFailed(false); }}
+        onError={() => setFailed(true)}
+      />}
       {(!enabled || !loaded) && <div className="absolute inset-0 grid place-items-center p-5 text-center">
         <div>
           <span aria-hidden="true" className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-white/10 text-white">

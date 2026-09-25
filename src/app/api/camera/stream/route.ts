@@ -3,18 +3,6 @@ const DEFAULT_BACKEND_URL = "http://localhost:8000";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-function snapshotUrl(streamUrl: string) {
-  const url = new URL(streamUrl);
-  url.pathname = url.pathname.replace(/\/stream\/?$/, "/snapshot");
-  return url.toString();
-}
-
-async function fetchSnapshot(url: string, signal: AbortSignal) {
-  const response = await fetch(url, { cache: "no-store", signal });
-  if (!response.ok) throw new Error("Camera snapshot is unavailable");
-  return new Uint8Array(await response.arrayBuffer());
-}
-
 export async function GET(request: Request) {
   const cookie = request.headers.get("cookie");
   if (!cookie) return new Response("Authentication required", { status: 401 });
@@ -42,12 +30,16 @@ export async function GET(request: Request) {
       return new Response("Camera is not configured for this robot", { status: 404 });
     }
 
-    const frame = await fetchSnapshot(snapshotUrl(streamUrl), request.signal);
+    const stream = await fetch(streamUrl, {
+      cache: "no-store",
+      signal: request.signal,
+    });
+    if (!stream.ok || !stream.body) throw new Error("Camera stream is unavailable");
 
-    return new Response(frame, {
+    return new Response(stream.body, {
       status: 200,
       headers: {
-        "Content-Type": "image/jpeg",
+        "Content-Type": stream.headers.get("content-type") ?? "multipart/x-mixed-replace; boundary=boundarydonotcross",
         "Cache-Control": "private, no-store, no-cache, must-revalidate",
         "Pragma": "no-cache",
         "X-Accel-Buffering": "no",

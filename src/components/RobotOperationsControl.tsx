@@ -11,7 +11,7 @@ const TERMINAL = new Set(["SUCCEEDED", "FAILED"]);
 
 type RobotOperationsControlProps = {
   compact?: boolean;
-  mode?: "recovery" | "mapping" | "admin";
+  mode?: "recovery" | "admin";
   collapsible?: boolean;
   defaultExpanded?: boolean;
 };
@@ -50,13 +50,6 @@ export default function RobotOperationsControl({ compact = false, mode = "recove
     setConfirmation({ action, message });
   }
 
-  if (mode === "mapping") return <ControlCard collapsible={false} defaultExpanded eyebrow={copy.mappingDriveRecovery} title={copy.mappingDriveRecovery} description={copy.mappingDriveRecoveryHelp}>
-    <button type="button" disabled={!robot.online || busy} onClick={() => void run("motor.reset_stall")} className="w-full rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-900 shadow-sm hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400">
-      {busy && operation?.action === "motor.reset_stall" ? copy.resettingMappingDrive : copy.recoverMappingDrive}
-    </button>
-    {(operation || error) && <OperationResult operation={operation} error={error} fallback={copy.robotOperationFailed} />}
-  </ControlCard>;
-
   if (mode === "admin") return <ControlCard collapsible={collapsible ?? false} defaultExpanded={defaultExpanded} eyebrow="Admin" title={copy.advancedRobotControls} description={copy.advancedRobotControlsHelp}>
     <div className="grid gap-2">
       <button type="button" disabled={!robot.online || busy} onClick={() => void run("system.start_navigation")} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300">
@@ -71,15 +64,11 @@ export default function RobotOperationsControl({ compact = false, mode = "recove
   </ControlCard>;
 
   return <ControlCard compact={compact} collapsible={collapsible ?? compact} defaultExpanded={defaultExpanded} eyebrow={copy.navigationRecovery} title={copy.robotOperations} description={copy.recoverNavigationHelp}>
-    <div className={compact ? "flex flex-wrap gap-2" : ""}>
+    <div>
       <button type="button" disabled={!robot.online || busy} onClick={() => void run("navigation.recover")} className={`${compact ? "min-h-9 grow shrink-0 whitespace-nowrap px-3 text-[11px]" : "mt-5 px-3 py-2.5 text-xs sm:text-sm"} ${compact ? "" : "w-full"} rounded-xl bg-blue-600 font-bold text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300`}>
         {busy && operation?.action === "navigation.recover" ? copy.recoveringNavigation : copy.recoverNavigation}
       </button>
-      <button type="button" disabled={!robot.online || busy} onClick={() => void run("motor.reset_stall")} className={`${compact ? "min-h-9 grow shrink-0 whitespace-nowrap px-3 text-[11px]" : "mt-3 px-3 py-2.5 text-xs sm:text-sm"} ${compact ? "" : "w-full"} rounded-xl border border-slate-300 bg-white font-bold text-slate-700 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400`}>
-        {busy && operation?.action === "motor.reset_stall" ? copy.resettingMotorStall : copy.resetMotorStall}
-      </button>
     </div>
-    {!compact && <p className="mt-2 text-xs leading-5 text-slate-500">{copy.resetMotorStallHelp}</p>}
     {(operation || error) && <OperationResult operation={operation} error={error} fallback={copy.robotOperationFailed} />}
   </ControlCard>;
 }
