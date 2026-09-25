@@ -85,9 +85,7 @@ test("admin robot controls separate bounded recovery from destructive actions", 
   assert.match(dashboard, /<RobotSelectorCard/);
   assert.match(deliveryMap, /viewportSize="dashboard"/);
   assert.match(controls, /"navigation\.recover"/);
-  assert.match(controls, /"motor\.reset_stall"/);
-  assert.match(controls, /flex flex-wrap gap-2/);
-  assert.match(controls, /shrink-0 whitespace-nowrap/);
+  assert.doesNotMatch(controls, /"motor\.reset_stall"/);
   assert.match(controls, /"navigation\.restart_if_broken"/);
   assert.match(controls, /"system\.start_navigation"/);
   assert.match(controls, /confirmAndRun\("system\.stop_navigation"/);

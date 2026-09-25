@@ -506,7 +506,6 @@ class RobotCommandAcknowledgement(BaseModel):
 
 class RobotOperationAction(str, Enum):
     RECOVER_NAVIGATION = "navigation.recover"
-    RESET_MOTOR_STALL = "motor.reset_stall"
     RESTART_NAVIGATION = "navigation.restart_if_broken"
     START_ROBOT_STACK = "system.start_navigation"
     STOP_ROBOT_STACK = "system.stop_navigation"

@@ -492,7 +492,6 @@ export interface EmergencyStop {
 
 export type RobotOperationAction =
   | "navigation.recover"
-  | "motor.reset_stall"
   | "navigation.restart_if_broken"
   | "system.start_navigation"
   | "system.stop_navigation"
