@@ -96,8 +96,6 @@ services:
       HOSTNAME: 0.0.0.0
       PORT: 3000
       BACKEND_INTERNAL_URL: http://backend:8000
-      CAMERA_STREAM_URL: ${CAMERA_STREAM_URL:-}
-      CAMERA_ROBOT_ID: ${CAMERA_ROBOT_ID:-}
     healthcheck:
       test:
         - CMD
