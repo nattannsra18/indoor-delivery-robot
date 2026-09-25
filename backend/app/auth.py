@@ -145,7 +145,10 @@ def revoke_session(db: Session, token: str | None) -> str | None:
     return None
 
 
-def require_user(request: Request, db: Session = Depends(get_db)) -> UserORM:
+def require_user(
+    request: Request,
+    db: Session = Depends(get_db, scope="function"),
+) -> UserORM:
     user = resolve_session(db, request.cookies.get(SESSION_COOKIE_NAME))
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")

@@ -5,5 +5,7 @@ from .database import get_db
 from .service import DeliveryService
 
 
-def get_service(db: Session = Depends(get_db)) -> DeliveryService:
+def get_service(
+    db: Session = Depends(get_db, scope="function"),
+) -> DeliveryService:
     return DeliveryService(db)

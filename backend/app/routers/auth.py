@@ -157,7 +157,7 @@ def _send_approval_email(recipient: str, username: str) -> None:
 
 
 @router.post("/login", response_model=UserIdentity)
-def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db, scope="function")):
     identifier = payload.login_identifier
     key = f"{request.client.host if request.client else 'unknown'}:{identifier.casefold()}"
     user = verify_credentials(db, identifier, payload.password)
@@ -186,7 +186,7 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
 
 
 @router.post("/signup", response_model=SignupResult, status_code=status.HTTP_201_CREATED)
-def signup(payload: SignupRequest, db: Session = Depends(get_db)):
+def signup(payload: SignupRequest, db: Session = Depends(get_db, scope="function")):
     duplicate = db.scalar(
         select(UserORM.id).where(
             or_(
@@ -232,7 +232,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
 
 @router.get("/pending-accounts", response_model=list[PendingAccount])
 def pending_accounts(
-    _: UserORM = Depends(require_admin), db: Session = Depends(get_db)
+    _: UserORM = Depends(require_admin), db: Session = Depends(get_db, scope="function")
 ):
     return list(
         db.scalars(
@@ -248,7 +248,7 @@ def approve_account(
     user_id: str,
     background_tasks: BackgroundTasks,
     admin: UserORM = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     user = db.get(UserORM, user_id)
     if user is None or user.role != UserRole.USER:
@@ -279,7 +279,7 @@ def approve_account(
 def forgot_password(
     payload: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     configured = _smtp_configured()
     normalized = payload.email.strip().casefold()
@@ -301,7 +301,7 @@ def forgot_password(
 
 
 @router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
-def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db, scope="function")):
     reset = db.scalar(
         select(PasswordResetTokenORM).where(
             PasswordResetTokenORM.token_hash == token_digest(payload.token),
@@ -367,7 +367,7 @@ def google_start():
 
 
 @router.get("/google/callback")
-def google_callback(request: Request, code: str = "", state: str = "", db: Session = Depends(get_db)):
+def google_callback(request: Request, code: str = "", state: str = "", db: Session = Depends(get_db, scope="function")):
     settings = _google_settings()
     expected_state = request.cookies.get(GOOGLE_STATE_COOKIE)
     if settings is None or not code or not state or not expected_state or not secrets.compare_digest(state, expected_state):
@@ -419,7 +419,7 @@ def google_callback(request: Request, code: str = "", state: str = "", db: Sessi
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+def logout(request: Request, response: Response, db: Session = Depends(get_db, scope="function")):
     resolved = resolve_session_record(db, request.cookies.get(SESSION_COOKIE_NAME))
     revoked_session_id = None
     if resolved is not None:

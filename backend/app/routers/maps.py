@@ -37,7 +37,7 @@ router = APIRouter(
 @router.get("/metadata", response_model=MapMetadata)
 def get_map_metadata(
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ) -> MapMetadata | MapMetadataORM:
     resolved_robot_id = robot_id
     if resolved_robot_id is None:
@@ -90,7 +90,7 @@ def get_map_metadata(
 @router.put("/metadata", response_model=MapMetadata)
 def update_map_metadata(
     payload: MapMetadataUpdate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     user: UserORM = Depends(require_admin),
 ) -> MapMetadataORM:
     metadata = db.get(MapMetadataORM, "active")
@@ -110,7 +110,7 @@ def update_map_metadata(
 @router.get("", response_model=MapSnapshot)
 def get_map(
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ) -> MapSnapshot:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
     snapshot = map_store.get(robot_id)
@@ -127,7 +127,7 @@ def get_map(
 @router.get("/catalog", response_model=RobotMapCatalog)
 def get_map_catalog(
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     _: UserORM = Depends(require_admin),
 ) -> RobotMapCatalog:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
@@ -146,7 +146,7 @@ def get_map_catalog(
 @router.post("/catalog/refresh", status_code=status.HTTP_202_ACCEPTED)
 async def refresh_map_catalog(
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     _: UserORM = Depends(require_admin),
 ) -> dict[str, bool | str]:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
@@ -259,7 +259,7 @@ async def update_catalog_map_metadata(
     map_id: str,
     payload: RobotMapDetailsUpdate,
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     user: UserORM = Depends(require_admin),
 ) -> MapCatalogOperation:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
@@ -283,7 +283,7 @@ async def rename_catalog_map(
     map_id: str,
     payload: RobotMapRenameRequest,
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     user: UserORM = Depends(require_admin),
 ) -> MapCatalogOperation:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
@@ -311,7 +311,7 @@ async def rename_catalog_map(
 async def delete_catalog_map(
     map_id: str,
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     user: UserORM = Depends(require_admin),
 ) -> MapCatalogOperation:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
@@ -356,7 +356,7 @@ def get_catalog_operation(
 async def activate_map(
     map_id: str,
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     user: UserORM = Depends(require_admin),
 ) -> MapSwitchOperation:
     robot_id = robot_id or DeliveryService(db).primary_robot().id

@@ -11,7 +11,7 @@ const TERMINAL = new Set(["SUCCEEDED", "FAILED"]);
 
 type RobotOperationsControlProps = {
   compact?: boolean;
-  mode?: "recovery" | "admin";
+  mode?: "recovery" | "mapping" | "admin";
   collapsible?: boolean;
   defaultExpanded?: boolean;
 };
@@ -49,6 +49,13 @@ export default function RobotOperationsControl({ compact = false, mode = "recove
   function confirmAndRun(action: RobotOperationAction, message: string) {
     setConfirmation({ action, message });
   }
+
+  if (mode === "mapping") return <ControlCard collapsible={false} defaultExpanded eyebrow={copy.mappingDriveRecovery} title={copy.mappingDriveRecovery} description={copy.mappingDriveRecoveryHelp}>
+    <button type="button" disabled={!robot.online || busy} onClick={() => void run("motor.reset_stall")} className="w-full rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-900 shadow-sm hover:bg-amber-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400">
+      {busy && operation?.action === "motor.reset_stall" ? copy.resettingMappingDrive : copy.recoverMappingDrive}
+    </button>
+    {(operation || error) && <OperationResult operation={operation} error={error} fallback={copy.robotOperationFailed} />}
+  </ControlCard>;
 
   if (mode === "admin") return <ControlCard collapsible={collapsible ?? false} defaultExpanded={defaultExpanded} eyebrow="Admin" title={copy.advancedRobotControls} description={copy.advancedRobotControlsHelp}>
     <div className="grid gap-2">

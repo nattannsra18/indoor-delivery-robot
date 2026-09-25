@@ -55,7 +55,7 @@ async def _deliver(robot_id: str, payload: dict) -> None:
 @router.get("/status", response_model=MappingSession)
 def get_mapping_status(
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     _: UserORM = Depends(require_admin),
 ) -> MappingSession:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
@@ -65,7 +65,7 @@ def get_mapping_status(
 @router.post("/start", response_model=MappingSession, status_code=status.HTTP_202_ACCEPTED)
 async def start_mapping(
     payload: MappingStartRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     user: UserORM = Depends(require_admin),
 ) -> MappingSession:
     robot_id = payload.robot_id or DeliveryService(db).primary_robot().id
@@ -93,7 +93,7 @@ def _require_phase(robot_id: str, allowed: set[MappingPhase]) -> MappingSession:
 @router.post("/stop", response_model=MappingSession, status_code=status.HTTP_202_ACCEPTED)
 async def stop_mapping(
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     _: UserORM = Depends(require_admin),
 ) -> MappingSession:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
@@ -107,7 +107,7 @@ async def stop_mapping(
 async def save_mapping(
     payload: MappingSaveRequest,
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     user: UserORM = Depends(require_admin),
 ) -> MappingSession:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
@@ -129,7 +129,7 @@ async def save_mapping(
 @router.post("/discard", response_model=MappingSession, status_code=status.HTTP_202_ACCEPTED)
 async def discard_mapping(
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     _: UserORM = Depends(require_admin),
 ) -> MappingSession:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
@@ -154,7 +154,7 @@ async def discard_mapping(
 async def mapping_teleop(
     payload: MappingTeleopRequest,
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     _: UserORM = Depends(require_admin),
 ) -> dict[str, bool]:
     robot_id = robot_id or DeliveryService(db).primary_robot().id

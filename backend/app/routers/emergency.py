@@ -35,7 +35,7 @@ async def broadcast_alert(db: Session, key: str, event: str) -> None:
 
 
 @router.get("/{robot_id}/emergency-stop", response_model=EmergencyStop)
-def get_state(robot_id: str, db: Session = Depends(get_db), _: UserORM = Depends(require_user)):
+def get_state(robot_id: str, db: Session = Depends(get_db, scope="function"), _: UserORM = Depends(require_user)):
     state = EmergencyStop.model_validate(EmergencyStopService(db).get(robot_id))
     # The default NORMAL state is created lazily; GET must persist it instead
     # of leaving an INSERT open until the request-scoped session is closed.
@@ -44,7 +44,7 @@ def get_state(robot_id: str, db: Session = Depends(get_db), _: UserORM = Depends
 
 
 @router.post("/{robot_id}/emergency-stop", response_model=EmergencyStop)
-async def activate(robot_id: str, db: Session = Depends(get_db), user: UserORM = Depends(require_admin)):
+async def activate(robot_id: str, db: Session = Depends(get_db, scope="function"), user: UserORM = Depends(require_admin)):
     service = EmergencyStopService(db)
     state, command, created = service.activate(robot_id, user.id)
     publish_committed_notifications(db, service.pending_notification_ids)
@@ -62,7 +62,7 @@ async def activate(robot_id: str, db: Session = Depends(get_db), user: UserORM =
 
 
 @router.post("/{robot_id}/emergency-stop/reset", response_model=EmergencyStop)
-async def reset(robot_id: str, db: Session = Depends(get_db), user: UserORM = Depends(require_admin)):
+async def reset(robot_id: str, db: Session = Depends(get_db, scope="function"), user: UserORM = Depends(require_admin)):
     service = EmergencyStopService(db)
     state, command = service.request_reset(robot_id, user.id)
     publish_committed_notifications(db, service.pending_notification_ids)

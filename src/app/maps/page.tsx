@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "@/components/PageHeader";
+import LiveCamera from "@/components/LiveCamera";
 import RobotMap from "@/components/RobotMap";
+import RobotOperationsControl from "@/components/RobotOperationsControl";
 import LocalizationWorkspace from "@/components/LocalizationWorkspace";
 import { useDeliveryApi } from "@/context/ApiDeliveryContext";
 import { useLocale } from "@/context/LocaleContext";
@@ -254,7 +256,7 @@ export default function MapsPage() {
 }
 
 function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy, onError, onSession, onSaved, onOpenLibrary }: { robotId: string; session?: MappingSession; busy: boolean; error: string; copy: (typeof webMappingText)[keyof typeof webMappingText]; locale: keyof typeof webMappingText; onBusy: (value: boolean) => void; onError: (value: string) => void; onSession: (value: MappingSession) => void; onSaved: () => void; onOpenLibrary: () => void }) {
-  const { occupancyMap } = useDeliveryApi();
+  const { occupancyMap, robot } = useDeliveryApi();
   const [mapId, setMapId] = useState("");
   const [name, setName] = useState("");
   const [building, setBuilding] = useState("");
@@ -416,7 +418,10 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
         {phase === "REVIEW" && <form className="mt-5 space-y-3" onSubmit={(event) => { event.preventDefault(); if (valid && !busy) void run(async () => { const result = await saveMapping({ mapId, name: name.trim(), building: building.trim() || undefined, floor: floor.trim() || undefined, areaDescription: area.trim() || undefined }, robotId || undefined); onSaved(); return result; }); }}><label className="block text-sm font-semibold text-slate-700">{copy.mapId}<input value={mapId} maxLength={120} onChange={(event) => setMapId(event.target.value)} className={field} /><span className="mt-1 block text-xs font-normal text-slate-400">{copy.mapIdHelp}</span></label><label className="block text-sm font-semibold text-slate-700">{copy.mapName}<input value={name} maxLength={160} onChange={(event) => setName(event.target.value)} className={field} /></label><div className="grid grid-cols-2 gap-3"><label className="block text-sm font-semibold text-slate-700">{copy.building}<input value={building} maxLength={120} onChange={(event) => setBuilding(event.target.value)} className={field} /></label><label className="block text-sm font-semibold text-slate-700">{copy.floor}<input value={floor} maxLength={80} onChange={(event) => setFloor(event.target.value)} className={field} /></label></div><label className="block text-sm font-semibold text-slate-700">{copy.area}<textarea value={area} maxLength={240} rows={3} onChange={(event) => setArea(event.target.value)} className={`${field} py-3`} /></label><button type="submit" disabled={!valid || busy} className="min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{busy ? copy.saving : copy.save}</button><button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button></form>}
         {["STARTING", "STOPPING", "SAVING", "RESTORING"].includes(phase) && <div className="mt-5 flex items-center gap-3 rounded-2xl bg-blue-50 p-4 text-sm font-semibold text-blue-800"><span className="size-5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />{phase === "SAVING" ? copy.saving : phase === "RESTORING" ? copy.restoring : copy.preparing}</div>}
         {phase === "FAILED" && <button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="mt-4 min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button>}
-      </section></aside>
+      </section>
+        {phase === "MAPPING" && <RobotOperationsControl mode="mapping" />}
+        <LiveCamera key={`${robot.id}:${robot.online}`} enabled={robot.online} robotId={robotId || robot.id} />
+      </aside>
     </div>
     {confirmDiscard && <ConfirmDialog title={copy.confirmDiscard} body={copy.confirmDiscardBody} cancel={copy.cancel} confirm={copy.confirm} onCancel={() => setConfirmDiscard(false)} onConfirm={() => { setConfirmDiscard(false); void run(() => discardMapping(robotId || undefined)); }} />}
   </div>;
