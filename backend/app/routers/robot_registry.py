@@ -60,7 +60,7 @@ def create_enrollment(
     payload: RobotEnrollmentRequest,
     request: Request,
     authorization: str | None = Header(default=None),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     _rate_limit_enrollment(request, "create")
     _require_bootstrap(authorization)
@@ -81,7 +81,7 @@ def create_enrollment(
 
 @router.get("/enrollments", response_model=list[RobotEnrollmentSummary])
 def list_enrollments(
-    _: UserORM = Depends(require_admin), db: Session = Depends(get_db)
+    _: UserORM = Depends(require_admin), db: Session = Depends(get_db, scope="function")
 ):
     return RobotRegistryService(db).list_enrollments()
 
@@ -91,7 +91,7 @@ def approve_enrollment(
     enrollment_id: str,
     payload: RobotEnrollmentApproval,
     user: UserORM = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     result = RobotRegistryService(db).approve(enrollment_id, payload.pairing_code, user.id)
     AuditService(db).log(
@@ -109,7 +109,7 @@ def claim_enrollment(
     enrollment_id: str,
     payload: RobotEnrollmentClaim,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     _rate_limit_enrollment(request, "claim")
     result = RobotRegistryService(db).claim(
@@ -129,7 +129,7 @@ def claim_enrollment(
 def list_registry(
     include_archived: bool = False,
     _: UserORM = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     return RobotRegistryService(db).list_registry(include_archived=include_archived)
 
@@ -138,7 +138,7 @@ def list_registry(
 def archive_robot(
     robot_id: str,
     user: UserORM = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     result = RobotRegistryService(db).archive(robot_id)
     AuditService(db).log(
@@ -152,7 +152,7 @@ def archive_robot(
 async def revoke_robot(
     robot_id: str,
     user: UserORM = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     registry = RobotRegistryService(db)
     registry.revoke(robot_id)
@@ -173,7 +173,7 @@ async def revoke_robot(
 async def rotate_robot_credential(
     robot_id: str,
     user: UserORM = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
 ):
     if not robot_connection_manager.is_connected(robot_id):
         raise HTTPException(

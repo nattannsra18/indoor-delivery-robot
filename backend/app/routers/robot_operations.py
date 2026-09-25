@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/robots", tags=["robot-operations"])
 @router.get("/{robot_id}/operations/latest", response_model=RobotOperation | None)
 def latest_operation(
     robot_id: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     _: UserORM = Depends(require_admin),
 ) -> RobotOperation | None:
     DeliveryService(db).get_robot(robot_id)
@@ -38,7 +38,7 @@ def latest_operation(
 async def request_operation(
     robot_id: str,
     payload: RobotOperationRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     user: UserORM = Depends(require_admin),
 ) -> RobotOperation:
     service = DeliveryService(db)

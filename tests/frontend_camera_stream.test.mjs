@@ -13,6 +13,12 @@ test("dashboard renders the camera beside the live map", () => {
   assert.match(camera, /cameraResolution/);
 });
 
+test("web mapping keeps the selected robot camera beside remote controls", () => {
+  const maps = read("src/app/maps/page.tsx");
+  assert.match(maps, /<LiveCamera[^>]*enabled=\{robot\.online\}[^>]*robotId=\{robotId \|\| robot\.id\}/);
+  assert.match(maps, /<RobotOperationsControl mode="mapping"/);
+});
+
 test("camera proxy validates the web session and streams without caching", () => {
   const route = read("src/app/api/camera/stream/route.ts");
   assert.match(route, /\/api\/auth\/me/);

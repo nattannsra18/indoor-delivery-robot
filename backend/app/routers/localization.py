@@ -94,7 +94,7 @@ async def _send_command(
 @router.get("/status", response_model=LocalizationStatus)
 def get_localization_status(
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     _: UserORM = Depends(require_admin),
 ) -> LocalizationStatus:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
@@ -108,7 +108,7 @@ def get_localization_status(
 )
 async def set_initial_pose(
     payload: LocalizationInitialPoseRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     user: UserORM = Depends(require_admin),
 ) -> LocalizationStatus:
     robot_id = payload.robot_id or DeliveryService(db).primary_robot().id
@@ -132,7 +132,7 @@ async def set_initial_pose(
 )
 async def global_localization(
     payload: LocalizationCommandRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     user: UserORM = Depends(require_admin),
 ) -> LocalizationStatus:
     robot_id = payload.robot_id or DeliveryService(db).primary_robot().id
@@ -149,7 +149,7 @@ async def global_localization(
 async def localization_recovery_teleop(
     payload: LocalizationTeleopRequest,
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     _: UserORM = Depends(require_admin),
 ) -> dict[str, bool]:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
@@ -205,7 +205,7 @@ async def _localization_scan_command(
 @router.post("/recovery/scan/start", status_code=status.HTTP_202_ACCEPTED)
 async def start_localization_scan(
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     user: UserORM = Depends(require_admin),
 ) -> dict[str, bool]:
     robot_id = robot_id or DeliveryService(db).primary_robot().id
@@ -215,7 +215,7 @@ async def start_localization_scan(
 @router.post("/recovery/scan/stop", status_code=status.HTTP_202_ACCEPTED)
 async def stop_localization_scan(
     robot_id: str | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db, scope="function"),
     user: UserORM = Depends(require_admin),
 ) -> dict[str, bool]:
     robot_id = robot_id or DeliveryService(db).primary_robot().id

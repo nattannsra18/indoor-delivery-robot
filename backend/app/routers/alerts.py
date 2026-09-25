@@ -12,7 +12,9 @@ from sqlalchemy.orm import Session
 router = APIRouter(prefix="/api/alerts", tags=["alerts"], dependencies=[Depends(require_admin)])
 
 
-def service(db: Session = Depends(get_db)) -> AlertService:
+def service(
+    db: Session = Depends(get_db, scope="function"),
+) -> AlertService:
     return AlertService(db)
 
 

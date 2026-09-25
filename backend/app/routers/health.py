@@ -9,7 +9,9 @@ router = APIRouter(tags=["system"])
 
 
 @router.get("/health")
-def health(db: Session = Depends(get_db)) -> dict[str, str]:
+def health(
+    db: Session = Depends(get_db, scope="function"),
+) -> dict[str, str]:
     try:
         db.execute(text("SELECT 1"))
     except SQLAlchemyError as exc:
