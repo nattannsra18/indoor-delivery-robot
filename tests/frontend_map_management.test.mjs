@@ -56,8 +56,9 @@ test("web mapping hides the prior map until the new SLAM revision arrives", () =
 
   assert.match(pageSource, /setMappingStartRevision\(occupancyMap\?\.revision \?\? 0\)/);
   assert.match(pageSource, /const minimumMapRevisionExclusive = \["STARTING", "MAPPING"\]\.includes\(phase\)[\s\S]*\? mappingStartRevision/);
-  assert.doesNotMatch(pageSource, /mappingStartRevision \?\? session\?\.mapRevision/);
-  assert.match(pageSource, /baselineSessionId\.current === session\.sessionId/);
+  assert.match(pageSource, /current \?\? occupancyMap\?\.revision/);
+  assert.doesNotMatch(pageSource, /current \?\? session\.mapRevision/);
+  assert.match(pageSource, /baselineSessionId\.current !== session\.sessionId/);
   assert.match(pageSource, /minimumMapRevisionExclusive=\{minimumMapRevisionExclusive\}/);
   assert.match(robotMapSource, /receivedOccupancyMap\.revision > minimumMapRevisionExclusive/);
   assert.match(robotMapSource, /waitingForMapDetail/);
