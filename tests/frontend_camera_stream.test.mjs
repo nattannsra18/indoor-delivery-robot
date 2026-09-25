@@ -20,7 +20,7 @@ test("web mapping keeps the selected robot camera beside remote controls", () =>
   assert.doesNotMatch(maps, /<RobotOperationsControl mode="mapping"/);
 });
 
-test("camera uses direct authenticated WSS with one decoded frame in flight", () => {
+test("camera pipelines direct authenticated WSS without stale buffering", () => {
   const camera = read("src/components/LiveCamera.tsx");
   assert.match(camera, /WS_BASE_URL/);
   assert.match(camera, /\/ws\/browser\/robots\//);
@@ -31,4 +31,11 @@ test("camera uses direct authenticated WSS with one decoded frame in flight", ()
   assert.doesNotMatch(camera, /<img/);
   assert.doesNotMatch(camera, /base64/i);
   assert.doesNotMatch(camera, /setInterval/);
+
+  const handler = camera.slice(
+    camera.indexOf("socket.onmessage"),
+    camera.indexOf("socket.onerror"),
+  );
+  assert.ok(handler.indexOf("requestNextFrame();") < handler.indexOf("createImageBitmap"));
+  assert.match(handler, /elapsedMs >= 2_000/);
 });

@@ -71,6 +71,7 @@ export default function LiveCamera({ enabled, robotId }: { enabled: boolean; rob
       sequence = Number(view.getBigUint64(5));
       const capturedAtNs = view.getBigUint64(21);
       const jpeg = event.data.slice(FRAME_HEADER_BYTES);
+      requestNextFrame();
       try {
         const bitmap = await createImageBitmap(new Blob([jpeg], { type: "image/jpeg" }));
         if (!active) {
@@ -88,7 +89,7 @@ export default function LiveCamera({ enabled, robotId }: { enabled: boolean; rob
         renderedFrames += 1;
         const now = performance.now();
         const elapsedMs = now - metricStartedAt;
-        if (elapsedMs >= 500) {
+        if (elapsedMs >= 2_000) {
           setMetrics({
             fps: Math.round((renderedFrames * 1000 / elapsedMs) * 10) / 10,
             latencyMs: capturedAtNs > BigInt(0)
@@ -98,7 +99,6 @@ export default function LiveCamera({ enabled, robotId }: { enabled: boolean; rob
           metricStartedAt = now;
           renderedFrames = 0;
         }
-        requestNextFrame();
       } catch {
         setFailed(true);
         socket.close(4003, "Camera frame could not be decoded");
