@@ -16,12 +16,7 @@
 		-Server
 	}
 
-	# The authenticated camera stream proxy is implemented by Next.js.
-	# Keep it ahead of the general FastAPI API matcher so it is not shadowed.
 	route {
-		@camera path /api/camera/*
-		reverse_proxy @camera frontend:3000
-
 		@backend path /api/* /ws/* /health
 		reverse_proxy @backend backend:8000
 		reverse_proxy frontend:3000

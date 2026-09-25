@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+import struct
 import time
 
 from fastapi import WebSocket
@@ -12,6 +13,11 @@ from anyio import ClosedResourceError
 
 MAX_CAMERA_FRAME_BYTES = 1_000_000
 CAMERA_BOUNDARY = b"frame"
+ROBOT_CAMERA_MAGIC = b"IDRC"
+BROWSER_CAMERA_MAGIC = b"IDRB"
+CAMERA_PROTOCOL_VERSION = 1
+ROBOT_CAMERA_HEADER = struct.Struct("!4sBQQQ")
+BROWSER_CAMERA_HEADER = struct.Struct("!4sBQQQQ")
 
 
 @dataclass
@@ -19,6 +25,43 @@ class CameraFrame:
     data: bytes
     sequence: int
     received_at: float
+    source_sequence: int
+    captured_at_ns: int
+    sent_at_ns: int
+    received_at_ns: int
+
+
+def unpack_robot_camera_frame(payload: bytes) -> tuple[bytes, int, int, int]:
+    """Return JPEG and source timing, accepting legacy raw-JPEG agents."""
+
+    if payload.startswith(b"\xff\xd8"):
+        return payload, 0, 0, 0
+    if len(payload) < ROBOT_CAMERA_HEADER.size + 4:
+        raise ValueError("Camera frame envelope is incomplete")
+    magic, version, sequence, captured_at_ns, sent_at_ns = (
+        ROBOT_CAMERA_HEADER.unpack_from(payload)
+    )
+    if magic != ROBOT_CAMERA_MAGIC or version != CAMERA_PROTOCOL_VERSION:
+        raise ValueError("Camera frame envelope is unsupported")
+    return (
+        payload[ROBOT_CAMERA_HEADER.size:],
+        sequence,
+        captured_at_ns,
+        sent_at_ns,
+    )
+
+
+def pack_browser_camera_frame(frame: CameraFrame) -> bytes:
+    """Encode one latest frame and timing for the browser pull channel."""
+
+    return BROWSER_CAMERA_HEADER.pack(
+        BROWSER_CAMERA_MAGIC,
+        CAMERA_PROTOCOL_VERSION,
+        frame.sequence,
+        frame.source_sequence,
+        frame.captured_at_ns,
+        frame.received_at_ns,
+    ) + frame.data
 
 
 @dataclass
@@ -70,6 +113,9 @@ class CameraStreamBroker:
         websocket: WebSocket,
         data: bytes,
     ) -> CameraFrame:
+        data, source_sequence, captured_at_ns, sent_at_ns = (
+            unpack_robot_camera_frame(data)
+        )
         if len(data) > MAX_CAMERA_FRAME_BYTES:
             raise ValueError("Camera frame exceeds the size limit")
         if not data.startswith(b"\xff\xd8") or not data.endswith(b"\xff\xd9"):
@@ -79,7 +125,15 @@ class CameraStreamBroker:
         if state.publisher is not websocket:
             raise RuntimeError("Camera publisher is no longer active")
         state.sequence += 1
-        state.frame = CameraFrame(data, state.sequence, time.monotonic())
+        state.frame = CameraFrame(
+            data=data,
+            sequence=state.sequence,
+            received_at=time.monotonic(),
+            source_sequence=source_sequence,
+            captured_at_ns=captured_at_ns,
+            sent_at_ns=sent_at_ns,
+            received_at_ns=time.time_ns(),
+        )
         async with state.condition:
             state.condition.notify_all()
         return state.frame

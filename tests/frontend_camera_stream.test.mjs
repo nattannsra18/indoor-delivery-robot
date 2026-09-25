@@ -9,8 +9,8 @@ test("dashboard renders the camera beside the live map", () => {
   const camera = read("src/components/LiveCamera.tsx");
   assert.match(dashboard, /<LiveCamera[^>]*enabled=\{robotConnected\} robotId=\{robot\.id\}/);
   assert.match(camera, /aspect-\[4\/3\]/);
-  assert.match(camera, /\/api\/camera\/stream/);
-  assert.match(camera, /cameraResolution/);
+  assert.match(camera, /<canvas/);
+  assert.match(camera, /cameraMetrics/);
 });
 
 test("web mapping keeps the selected robot camera beside remote controls", () => {
@@ -20,23 +20,15 @@ test("web mapping keeps the selected robot camera beside remote controls", () =>
   assert.doesNotMatch(maps, /<RobotOperationsControl mode="mapping"/);
 });
 
-test("camera proxy validates the web session and streams without caching", () => {
-  const route = read("src/app/api/camera/stream/route.ts");
-  assert.match(route, /\/api\/auth\/me/);
-  assert.match(route, /\/api\/robots\/\$\{encodeURIComponent\(requestedRobotId\)\}\/camera\/stream/);
-  assert.match(route, /headers: \{ cookie \}/);
-  assert.match(route, /new Response\(stream\.body/);
-  assert.match(route, /multipart\/x-mixed-replace/);
-  assert.match(route, /X-Accel-Buffering/);
-  assert.doesNotMatch(route, /rclpy|roslib|base64/i);
-  assert.doesNotMatch(route, /CAMERA_STREAM_URL|CAMERA_ROBOT_ID|100\.67\./);
-});
-
-test("camera renders one continuous MJPEG stream without snapshot polling", () => {
+test("camera uses direct authenticated WSS with one decoded frame in flight", () => {
   const camera = read("src/components/LiveCamera.tsx");
-  assert.match(camera, /const streamUrl = `\/api\/camera\/stream/);
-  assert.match(camera, /onLoad=\{\(\) => \{ setLoaded\(true\)/);
-  assert.match(camera, /absolute inset-0/);
+  assert.match(camera, /WS_BASE_URL/);
+  assert.match(camera, /\/ws\/browser\/robots\//);
+  assert.match(camera, /type: "next_frame"/);
+  assert.match(camera, /createImageBitmap/);
+  assert.match(camera, /requestNextFrame\(\);/);
+  assert.match(camera, /getBigUint64/);
+  assert.doesNotMatch(camera, /<img/);
+  assert.doesNotMatch(camera, /base64/i);
   assert.doesNotMatch(camera, /setInterval/);
-  assert.doesNotMatch(camera, /FRAME_DELAY_MS|RETRY_DELAY_MS|setTimeout/);
 });

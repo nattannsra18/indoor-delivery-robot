@@ -14,12 +14,13 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from ..auth import require_user
+from ..auth import require_user, websocket_user
 from ..camera_stream import (
     CAMERA_BOUNDARY,
     MAX_CAMERA_FRAME_BYTES,
     camera_stream_broker,
     multipart_frame,
+    pack_browser_camera_frame,
 )
 from ..database import get_db
 from ..db_models import UserORM
@@ -62,7 +63,7 @@ async def robot_camera_websocket(
     await websocket.send_json({
         "type": "camera_ready",
         "robot_id": robot_id,
-        "transport": "jpeg-over-wss",
+        "transport": "latest-jpeg-ack-v1",
         "max_frame_bytes": MAX_CAMERA_FRAME_BYTES,
     })
     try:
@@ -75,7 +76,16 @@ async def robot_camera_websocket(
                 await websocket.close(code=1003, reason="Binary JPEG frames required")
                 break
             try:
-                await camera_stream_broker.publish(robot_id, websocket, data)
+                frame = await camera_stream_broker.publish(
+                    robot_id,
+                    websocket,
+                    data,
+                )
+                if frame.source_sequence > 0:
+                    await websocket.send_json({
+                        "type": "camera_frame_ack",
+                        "source_sequence": frame.source_sequence,
+                    })
             except ValueError as error:
                 await websocket.close(code=1009, reason=str(error))
                 break
@@ -83,6 +93,57 @@ async def robot_camera_websocket(
         pass
     finally:
         await camera_stream_broker.disconnect(robot_id, websocket)
+
+
+@router.websocket("/ws/browser/robots/{robot_id}/camera")
+async def browser_camera_websocket(
+    websocket: WebSocket,
+    robot_id: str,
+    db: Session = Depends(get_db),
+) -> None:
+    if websocket_user(websocket, db) is None:
+        db.rollback()
+        await websocket.close(code=1008, reason="Authentication required")
+        return
+    try:
+        DeliveryService(db).get_robot(robot_id)
+    except HTTPException:
+        db.rollback()
+        await websocket.close(code=1008, reason="Robot does not exist")
+        return
+    db.rollback()
+
+    await websocket.accept()
+    try:
+        while True:
+            request = await websocket.receive_json()
+            if request.get("type") != "next_frame":
+                await websocket.close(
+                    code=1003,
+                    reason="A next_frame request is required",
+                )
+                return
+            after_sequence = request.get("after_sequence")
+            if (
+                isinstance(after_sequence, bool)
+                or not isinstance(after_sequence, int)
+                or after_sequence < 0
+            ):
+                await websocket.close(
+                    code=1008,
+                    reason="after_sequence must be a non-negative integer",
+                )
+                return
+            frame = await camera_stream_broker.wait_for_frame(
+                robot_id,
+                after_sequence,
+            )
+            if frame is None:
+                await websocket.send_json({"type": "camera_unavailable"})
+                continue
+            await websocket.send_bytes(pack_browser_camera_frame(frame))
+    except WebSocketDisconnect:
+        pass
 
 
 @router.get("/api/robots/{robot_id}/camera/stream")
@@ -131,5 +192,5 @@ def camera_status(
     return {
         "robot_id": robot_id,
         "connected": camera_stream_broker.is_connected(robot_id),
-        "transport": "jpeg-over-wss",
+        "transport": "latest-jpeg-pull-over-wss",
     }

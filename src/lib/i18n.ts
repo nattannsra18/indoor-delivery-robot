@@ -422,7 +422,9 @@ export const dashboardOperationsText = {
     cameraUnavailable: "Camera stream unavailable",
     retryCamera: "Retry stream",
     cameraResolution: "640 × 480 · low latency",
-    cameraTransport: "Outbound WSS · MJPEG",
+    cameraTransport: "Latest frame · WSS",
+    cameraMeasuring: "Measuring live performance…",
+    cameraMetrics: "{fps} FPS · {latency} ms capture-to-screen",
     cameraAlt: "Live forward camera view from the robot",
   },
   th: {
@@ -486,7 +488,9 @@ export const dashboardOperationsText = {
     cameraUnavailable: "ไม่สามารถรับภาพจากกล้องได้",
     retryCamera: "ลองเชื่อมต่ออีกครั้ง",
     cameraResolution: "640 × 480 · หน่วงต่ำ",
-    cameraTransport: "WSS ขาออก · MJPEG",
+    cameraTransport: "เฟรมล่าสุด · WSS",
+    cameraMeasuring: "กำลังวัดประสิทธิภาพภาพสด…",
+    cameraMetrics: "{fps} FPS · {latency} ms จากกล้องถึงหน้าจอ",
     cameraAlt: "ภาพสดจากกล้องด้านหน้าของหุ่นยนต์",
   },
 } as const;
