@@ -111,7 +111,10 @@ export default function MapsPage() {
 
   useEffect(() => {
     let cancelled = false;
+    let refreshing = false;
     const refresh = async () => {
+      if (cancelled || refreshing) return;
+      refreshing = true;
       try {
         const next = await getMappingStatus(selectedRobotId || undefined);
         if (cancelled) return;
@@ -119,6 +122,8 @@ export default function MapsPage() {
         if (next.phase !== "IDLE") setView("mapping");
       } catch (reason) {
         if (!cancelled) setMappingError(reason instanceof Error ? reason.message : mappingCopy.unavailable);
+      } finally {
+        refreshing = false;
       }
     };
     void refresh();

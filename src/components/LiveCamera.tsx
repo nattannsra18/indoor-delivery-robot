@@ -5,6 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { useLocale } from "@/context/LocaleContext";
 import { dashboardOperationsText } from "@/lib/i18n";
 
+const FRAME_DELAY_MS = 250;
+const RETRY_DELAY_MS = 1_000;
+
 export default function LiveCamera({ enabled, robotId }: { enabled: boolean; robotId: string }) {
   const { locale } = useLocale();
   const copy = dashboardOperationsText[locale];
@@ -20,7 +23,7 @@ export default function LiveCamera({ enabled, robotId }: { enabled: boolean; rob
     if (nextFrameTimer.current) clearTimeout(nextFrameTimer.current);
   }, []);
 
-  function requestNextFrame(loadedSlot: number, delay = 30) {
+  function requestNextFrame(loadedSlot: number, delay = FRAME_DELAY_MS) {
     setLoaded(true);
     setFailed(false);
     setVisibleSlot(loadedSlot);
@@ -56,7 +59,7 @@ export default function LiveCamera({ enabled, robotId }: { enabled: boolean; rob
         aria-hidden={slot !== visibleSlot}
         className={`absolute inset-0 h-full w-full object-cover ${loaded && slot === visibleSlot ? "opacity-100" : "opacity-0"}`}
         onLoad={() => requestNextFrame(slot)}
-        onError={() => loaded ? requestNextFrame(visibleSlot, 250) : setFailed(true)}
+        onError={() => loaded ? requestNextFrame(visibleSlot, RETRY_DELAY_MS) : setFailed(true)}
       />)}
       {(!enabled || !loaded) && <div className="absolute inset-0 grid place-items-center p-5 text-center">
         <div>

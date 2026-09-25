@@ -33,6 +33,8 @@ test("camera proxy validates the web session and streams without caching", () =>
 
 test("camera double-buffers frames and requests the next one only after load", () => {
   const camera = read("src/components/LiveCamera.tsx");
+  assert.match(camera, /const FRAME_DELAY_MS = 250/);
+  assert.match(camera, /const RETRY_DELAY_MS = 1_000/);
   assert.match(camera, /const \[sources, setSources\]/);
   assert.match(camera, /const nextSlot = 1 - loadedSlot/);
   assert.match(camera, /onLoad=\{\(\) => requestNextFrame\(slot\)\}/);
