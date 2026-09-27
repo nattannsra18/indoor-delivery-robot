@@ -44,3 +44,12 @@ test("ADMIN and USER consume the backend canonical queue estimate", () => {
   assert.doesNotMatch(tasksSource, /buildQueueEstimates/);
   assert.match(tasksSource, /taskEstimateById\.get\(selectedTask\.id\)/);
 });
+
+test("ADMIN queue board can change priority and move queued work", () => {
+  const page = readFileSync(new URL("../src/app/tasks/page.tsx", import.meta.url), "utf8");
+  const api = readFileSync(new URL("../src/lib/api.ts", import.meta.url), "utf8");
+  assert.match(page, /copy\.queueBoard/);
+  assert.match(page, /direction: "UP"/);
+  assert.match(page, /direction: "DOWN"/);
+  assert.match(api, /encodeURIComponent\(taskId\).*\/queue/);
+});

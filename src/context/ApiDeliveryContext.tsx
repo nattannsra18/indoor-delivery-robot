@@ -580,6 +580,8 @@ export function ApiDeliveryProvider({
           } else if (message.type === "map_updated") {
             const update = message as { robot_id?: unknown };
             if (update.robot_id === activeRobotId) void refreshMap();
+          } else if (message.type === "robot_readiness_changed") {
+            void refreshAll();
           } else if (message.type === "map_catalog_changed") {
             const update = message as {
               catalog?: { robot_id?: unknown };

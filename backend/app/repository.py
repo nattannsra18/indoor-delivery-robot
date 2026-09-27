@@ -19,6 +19,7 @@ def queued_task_ordering():
             (DeliveryTaskORM.priority == TaskPriority.HIGH, 0),
             else_=1,
         ),
+        DeliveryTaskORM.queue_order.asc(),
         DeliveryTaskORM.created_at.asc(),
         DeliveryTaskORM.id.asc(),
     )
@@ -237,6 +238,7 @@ class DeliveryRepository:
         robot_id: str,
         *,
         include_unassigned: bool = False,
+        for_update: bool = False,
     ) -> list[DeliveryTaskORM]:
         assignment_filter = DeliveryTaskORM.robot_id == robot_id
         if include_unassigned:
@@ -252,7 +254,18 @@ class DeliveryRepository:
             )
             .order_by(*queued_task_ordering())
         )
+        if for_update:
+            stmt = stmt.with_for_update(of=DeliveryTaskORM)
         return list(self.db.scalars(stmt).all())
+
+    def next_queue_order(self, robot_id: str) -> int:
+        current = self.db.scalar(
+            select(func.max(DeliveryTaskORM.queue_order)).where(
+                DeliveryTaskORM.robot_id == robot_id,
+                DeliveryTaskORM.status == TaskStatus.QUEUED,
+            )
+        )
+        return int(current or 0) + 1
 
     def next_queued_task_for_update(
         self,

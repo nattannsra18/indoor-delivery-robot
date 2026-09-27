@@ -10,6 +10,7 @@ import { useLocale } from "@/context/LocaleContext";
 import { adminUiText, dashboardText, deliveryFlowText, deliveryText } from "@/lib/i18n";
 import { routePreviewIsFresh } from "@/lib/routePreview";
 import { allowedPriority } from "@/lib/taskCreation";
+import { DEFAULT_NAVIGATION_SPEED, NAVIGATION_SPEED_OPTIONS } from "@/lib/navigationSpeed";
 import type { Station, TaskPriority, TaskRoutePreview } from "@/types";
 
 const NOTE_MAX_LENGTH = 500;
@@ -38,6 +39,7 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
   const [pickup, setPickup] = useState("");
   const [destination, setDestination] = useState("");
   const [supervisedMode, setSupervisedMode] = useState(false);
+  const [maxLinearSpeed, setMaxLinearSpeed] = useState(DEFAULT_NAVIGATION_SPEED);
   const [recipient, setRecipient] = useState("");
   const [note, setNote] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("NORMAL");
@@ -97,6 +99,7 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
           priority: allowedPriority(user?.role, priority),
           robotId: selectedDeliveryRobotId || undefined,
           supervisedMode: user?.role === "ADMIN" && supervisedAuthorized,
+          maxLinearSpeed,
         });
         if (!cancelled) setPreview(result);
       } catch (error) {
@@ -118,6 +121,7 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
     canPlan,
     copy.routeUnavailable,
     destination,
+    maxLinearSpeed,
     occupancyMap?.revision,
     pickup,
     previewAttempt,
@@ -151,6 +155,12 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
     setSubmitError("");
   }
 
+  function createAnotherDelivery() {
+    setPickup(""); setDestination(""); setRecipient(""); setNote("");
+    setPriority("NORMAL"); setSupervisedMode(false); setPreview(undefined);
+    setPreviewError(""); setSubmitError(""); setCreatedTaskId("");
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!preview || !routePreviewIsFresh(preview.expiresAt)) {
@@ -171,6 +181,7 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
         previewId: preview.previewId,
         robotId: preview.robotId,
         supervisedMode: preview.supervisedMode,
+        maxLinearSpeed: preview.maxLinearSpeed,
       });
       setCreatedTaskId(task.id);
     } catch (error) {
@@ -232,8 +243,9 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
           <h3 className="mt-4 text-xl font-bold text-slate-950">{flow.requestCreated}</h3>
           <p className="mt-2 text-sm text-slate-500">{flow.taskId}</p>
           <p className="mt-1 text-2xl font-bold text-blue-700">{createdTaskId}</p>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
             <button type="button" onClick={closeDialog} className="min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-slate-700 hover:bg-slate-50">{flow.backToDashboard}</button>
+            <button type="button" onClick={createAnotherDelivery} className="min-h-11 rounded-xl border border-blue-200 px-4 font-semibold text-blue-700 hover:bg-blue-50">{copy.createDelivery}</button>
             <Link href="/tasks" className="grid min-h-11 place-items-center rounded-xl bg-blue-600 px-4 font-semibold text-white hover:bg-blue-700">{flow.viewMyDelivery}</Link>
           </div>
         </div>
@@ -280,6 +292,7 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
             <div className="grid gap-4 border-t border-slate-200 p-4 sm:grid-cols-2">
               <Field label={copy.recipientName}><input value={recipient} onChange={(event) => setRecipient(event.target.value)} maxLength={100} placeholder={copy.recipientPlaceholder} className={inputClass} /></Field>
               <Field label={copy.priority}><select value={priority} onChange={(event) => { setPriority(event.target.value as TaskPriority); setPreview(undefined); }} className={inputClass}><option value="NORMAL">{copy.normalPriority}</option><option value="HIGH">{copy.highPriority}</option></select></Field>
+              <Field label={flow.speedLimit}><select value={maxLinearSpeed} onChange={(event) => { setMaxLinearSpeed(Number(event.target.value)); setPreview(undefined); }} className={inputClass}>{NAVIGATION_SPEED_OPTIONS.map((option) => <option key={option.value} value={option.value}>{flow[`speed_${option.key}`]} · {option.value.toFixed(2)} m/s</option>)}</select></Field>
               <Field label={copy.deliveryNote} wide><textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={NOTE_MAX_LENGTH} rows={3} placeholder={copy.notePlaceholder} className={inputClass} /><span className="text-right text-xs text-slate-400">{note.length}/{NOTE_MAX_LENGTH}</span></Field>
             </div>
           </details>

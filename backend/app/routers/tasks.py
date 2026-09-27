@@ -26,13 +26,14 @@ from ..models import (
     TaskHistoryEntry,
     TaskEstimate,
     TaskPriority,
+    TaskQueueUpdate,
     TaskRoutePreview,
     TaskRoutePreviewRequest,
     TaskStatus,
     utc_now,
 )
 from ..service import DeliveryService
-from ..auth import require_user
+from ..auth import require_admin, require_user
 from ..db_models import DeliveryTaskORM, UserORM
 from ..models import UserRole
 from ..queue_estimate_service import QueueEstimateService
@@ -40,7 +41,6 @@ from ..map_store import map_store
 from ..mapping_store import mapping_store
 from ..route_preview import (
     PREVIEW_LOADING_SECONDS,
-    PREVIEW_NOMINAL_SPEED_METERS_PER_SECOND,
     PREVIEW_UNLOADING_SECONDS,
     PREVIEW_VALIDITY_SECONDS,
     RoutePreviewUnavailableError,
@@ -150,6 +150,21 @@ def get_task(
     return task
 
 
+@router.patch("/{task_id}/queue", response_model=DeliveryTask)
+def update_task_queue(
+    task_id: str,
+    payload: TaskQueueUpdate,
+    service: DeliveryService = Depends(get_service),
+    user: UserORM = Depends(require_admin),
+):
+    return service.update_queued_task(
+        task_id,
+        priority=payload.priority,
+        direction=payload.direction,
+        actor=TrustedActor.user(user),
+    )
+
+
 @router.get(
     "/{task_id}/history",
     response_model=list[TaskHistoryEntry],
@@ -214,11 +229,12 @@ async def preview_task_route(
             "y": float(y),
             "yaw": float(yaw),
         }
+    start_x, start_y, start_yaw = service.projected_queue_start_pose(robot.id)
     try:
         result = await route_preview_coordinator.request(
             robot.id,
             {
-                "start": pose(robot.x, robot.y, robot.yaw),
+                "start": pose(start_x, start_y, start_yaw),
                 "pickup": pose(pickup.x, pickup.y, pickup.yaw),
                 "destination": pose(
                     destination.x,
@@ -267,11 +283,12 @@ async def preview_task_route(
 
     pickup_distance = path_distance(result.pickup_path)
     delivery_distance = path_distance(result.delivery_path)
-    pickup_eta = pickup_distance / PREVIEW_NOMINAL_SPEED_METERS_PER_SECOND
+    preview_speed = payload.max_linear_speed
+    pickup_eta = pickup_distance / preview_speed
     destination_eta = (
         pickup_eta
         + PREVIEW_LOADING_SECONDS
-        + delivery_distance / PREVIEW_NOMINAL_SPEED_METERS_PER_SECOND
+        + delivery_distance / preview_speed
     )
     generated_at = utc_now()
     queue_position, estimated_start_seconds = service.robot_queue_projection(robot.id)
@@ -283,6 +300,7 @@ async def preview_task_route(
         priority=payload.priority,
         map_revision=snapshot.revision,
         supervised_mode=payload.supervised_mode,
+        max_linear_speed=payload.max_linear_speed,
         pickup_distance_meters=pickup_distance,
         delivery_distance_meters=delivery_distance,
     )
@@ -290,6 +308,7 @@ async def preview_task_route(
         preview_id=preview_id,
         robot_id=robot.id,
         supervised_mode=payload.supervised_mode,
+        max_linear_speed=payload.max_linear_speed,
         status="AVAILABLE",
         frame_id=result.frame_id,
         map_revision=snapshot.revision,
@@ -300,7 +319,7 @@ async def preview_task_route(
         total_distance_meters=pickup_distance + delivery_distance,
         travel_time_seconds=(
             pickup_distance + delivery_distance
-        ) / PREVIEW_NOMINAL_SPEED_METERS_PER_SECOND,
+        ) / preview_speed,
         pickup_eta_seconds=pickup_eta,
         destination_eta_seconds=destination_eta,
         completion_eta_seconds=destination_eta + PREVIEW_UNLOADING_SECONDS,
@@ -355,6 +374,7 @@ async def create_task(
             priority=payload.priority,
             map_revision=snapshot.revision,
             supervised_mode=payload.supervised_mode,
+            max_linear_speed=payload.max_linear_speed,
         )
     if validation is None:
         raise HTTPException(

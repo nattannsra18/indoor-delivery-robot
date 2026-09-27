@@ -225,15 +225,18 @@ def test_compatibility_migration_preserves_rows_and_backfills_normal():
         "priority",
         "recipient_name",
         "delivery_note",
+        "max_linear_speed",
+        "queue_order",
         "pickup_distance_meters",
         "delivery_distance_meters",
     } <= columns
     with legacy_engine.connect() as connection:
         row = connection.execute(text(
             "SELECT id, priority, recipient_name, delivery_note, "
-            "pickup_distance_meters, delivery_distance_meters FROM delivery_tasks"
+            "max_linear_speed, queue_order, pickup_distance_meters, delivery_distance_meters "
+            "FROM delivery_tasks"
         )).one()
-    assert row == ("TASK-OLD", "NORMAL", None, None, None, None)
+    assert row == ("TASK-OLD", "NORMAL", None, None, 0.10, 0, None, None)
 
 
 def test_user_cannot_create_high_but_admin_can_and_metadata_round_trips():
@@ -333,6 +336,27 @@ def test_priority_queue_is_canonical_for_dispatcher_and_eta_without_preemption()
         assert dispatched.id == high.id
         assert high.status == TaskStatus.GOING_TO_PICKUP
         assert normal.status == TaskStatus.QUEUED
+
+
+def test_admin_can_reorder_queued_tasks_and_preview_from_prior_destination():
+    with Session() as db:
+        service = DeliveryService(db)
+        service.create_task(payload(), owner_id="alice")
+        first = service.create_task(payload("B", "C"), owner_id="alice")
+        second = service.create_task(payload("C", "D"), owner_id="bob")
+
+        service.update_queued_task(second.id, direction="UP")
+        assert [item.id for item in service.repo.queued_tasks()] == [second.id, first.id]
+
+        service.update_queued_task(first.id, priority=TaskPriority.HIGH)
+        assert [item.id for item in service.repo.queued_tasks()] == [first.id, second.id]
+
+        destination = service.get_station("D")
+        assert service.projected_queue_start_pose("robot01") == (
+            destination.x,
+            destination.y,
+            destination.yaw,
+        )
 
 
 def test_task_dispatch_uses_connected_ready_paired_robot():

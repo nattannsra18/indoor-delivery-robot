@@ -277,6 +277,16 @@ def apply_compatibility_migrations(engine: Engine) -> None:
                 "ALTER TABLE delivery_tasks ADD COLUMN supervised_mode "
                 "BOOLEAN NOT NULL DEFAULT false"
             ))
+        if "max_linear_speed" not in columns:
+            connection.execute(text(
+                "ALTER TABLE delivery_tasks ADD COLUMN max_linear_speed "
+                "FLOAT NOT NULL DEFAULT 0.10"
+            ))
+        if "queue_order" not in columns:
+            connection.execute(text(
+                "ALTER TABLE delivery_tasks ADD COLUMN queue_order "
+                "INTEGER NOT NULL DEFAULT 0"
+            ))
         if "pickup_distance_meters" not in columns:
             connection.execute(
                 text("ALTER TABLE delivery_tasks ADD COLUMN pickup_distance_meters FLOAT")

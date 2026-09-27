@@ -243,10 +243,16 @@ class DeliveryTaskORM(Base):
         default=TaskPriority.NORMAL,
         server_default=TaskPriority.NORMAL.value,
     )
+    queue_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     recipient_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     delivery_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     supervised_mode: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
+    )
+    max_linear_speed: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.10, server_default="0.10"
     )
     pickup_distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
     delivery_distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)

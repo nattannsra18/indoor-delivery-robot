@@ -27,6 +27,8 @@ export default function LocalizationWorkspace() {
   const [driveSpeed, setDriveSpeed] = useState(0.08);
   const driveTimer = useRef<number | undefined>(undefined);
   const driveStopTimer = useRef<number | undefined>(undefined);
+  const driveGeneration = useRef(0);
+  const driving = useRef(false);
   const driveStartedAt = useRef(0);
   const activeDriveKey = useRef<string | undefined>(undefined);
   const targetRobotIdRef = useRef(targetRobotId);
@@ -131,7 +133,9 @@ export default function LocalizationWorkspace() {
   };
 
   const clearDriveTimers = useCallback(() => {
-    if (driveTimer.current !== undefined) window.clearInterval(driveTimer.current);
+    driveGeneration.current += 1;
+    driving.current = false;
+    if (driveTimer.current !== undefined) window.clearTimeout(driveTimer.current);
     if (driveStopTimer.current !== undefined) window.clearTimeout(driveStopTimer.current);
     driveTimer.current = undefined;
     driveStopTimer.current = undefined;
@@ -141,8 +145,10 @@ export default function LocalizationWorkspace() {
     if (status?.recoveryActive) void driveLocalizationRecovery(0, 0, targetRobotId).catch(() => undefined);
   }, [clearDriveTimers, status?.recoveryActive, targetRobotId]);
   const releaseDrive = useCallback(() => {
-    if (driveTimer.current === undefined) return;
-    window.clearInterval(driveTimer.current);
+    if (!driving.current) return;
+    driving.current = false;
+    driveGeneration.current += 1;
+    if (driveTimer.current !== undefined) window.clearTimeout(driveTimer.current);
     driveTimer.current = undefined;
     const remaining = Math.max(0, 300 - (performance.now() - driveStartedAt.current));
     driveStopTimer.current = window.setTimeout(() => {
@@ -153,13 +159,24 @@ export default function LocalizationWorkspace() {
   const startDrive = useCallback((linear: number, angular: number) => {
     if (!status?.recoveryActive) return;
     clearDriveTimers();
+    driving.current = true;
+    const generation = driveGeneration.current;
     driveStartedAt.current = performance.now();
-    const send = () => void driveLocalizationRecovery(linear, angular, targetRobotId).catch((reason) => {
-      stopDrive();
-      setToast({ kind: "error", title: copy.commandFailed, body: reason instanceof Error ? reason.message : copy.commandFailed });
-    });
-    send();
-    driveTimer.current = window.setInterval(send, 180);
+    const send = async () => {
+      try {
+        await driveLocalizationRecovery(linear, angular, targetRobotId);
+      } catch (reason) {
+        if (driveGeneration.current === generation) {
+          stopDrive();
+          setToast({ kind: "error", title: copy.commandFailed, body: reason instanceof Error ? reason.message : copy.commandFailed });
+        }
+        return;
+      }
+      if (driving.current && driveGeneration.current === generation) {
+        driveTimer.current = window.setTimeout(() => void send(), 180);
+      }
+    };
+    void send();
   }, [clearDriveTimers, copy.commandFailed, status?.recoveryActive, stopDrive, targetRobotId]);
   const turnSpeed = Math.min(0.4, driveSpeed * 3.3);
   const toggleAutomaticScan = async () => {

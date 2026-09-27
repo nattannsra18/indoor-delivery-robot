@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 from fastapi import BackgroundTasks, HTTPException
+from pydantic import ValidationError
 from sqlalchemy import create_engine, delete
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -38,6 +39,20 @@ engine = create_engine(
 )
 Session = sessionmaker(bind=engine, expire_on_commit=False)
 Base.metadata.create_all(engine)
+
+
+def test_navigation_speed_limit_is_server_bounded():
+    assert TaskRoutePreviewRequest(
+        pickup_station_id="A",
+        destination_station_id="B",
+        max_linear_speed=0.30,
+    ).max_linear_speed == pytest.approx(0.30)
+    with pytest.raises(ValidationError):
+        TaskRoutePreviewRequest(
+            pickup_station_id="A",
+            destination_station_id="B",
+            max_linear_speed=0.31,
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -182,10 +197,11 @@ def test_successful_preview_issues_bound_one_use_validation(monkeypatch):
         ))
         assert preview.pickup_distance_meters == pytest.approx(5.0)
         assert preview.delivery_distance_meters == pytest.approx(5.0)
-        assert preview.travel_time_seconds == pytest.approx(40.0)
-        assert preview.pickup_eta_seconds == pytest.approx(20.0)
-        assert preview.destination_eta_seconds == pytest.approx(50.0)
-        assert preview.completion_eta_seconds == pytest.approx(62.0)
+        assert preview.travel_time_seconds == pytest.approx(100.0)
+        assert preview.max_linear_speed == pytest.approx(0.10)
+        assert preview.pickup_eta_seconds == pytest.approx(50.0)
+        assert preview.destination_eta_seconds == pytest.approx(110.0)
+        assert preview.completion_eta_seconds == pytest.approx(122.0)
 
         payload = DeliveryTaskCreate(
             pickup_station_id="A",

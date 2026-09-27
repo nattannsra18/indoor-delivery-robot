@@ -24,7 +24,7 @@ export default function TasksPage() {
   const { user } = useAuth();
   const { locale, format, t } = useLocale();
   const copy = tasksText[locale];
-  const { tasks, stationName, cancelTask, retryTask, backendOnline, taskEstimates, navigationFeedback } = useDeliveryApi();
+  const { tasks, stationName, cancelTask, retryTask, backendOnline, taskEstimates, navigationFeedback, refreshAll } = useDeliveryApi();
   const [filter, setFilter] = useState<(typeof filters)[number]>("ALL");
   const [selectedTaskId, setSelectedTaskId] = useState<string>();
   const [historyTaskId, setHistoryTaskId] = useState<string | null>(null);
@@ -40,6 +40,7 @@ export default function TasksPage() {
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
   const [remoteTask, setRemoteTask] = useState<DeliveryTask>();
+  const [queueBusyId, setQueueBusyId] = useState<string>();
   const drawerRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -47,6 +48,11 @@ export default function TasksPage() {
   const selectedTask = pageTasks.find((task) => task.id === selectedTaskId) ?? tasks.find((task) => task.id === selectedTaskId) ?? (remoteTask?.id === selectedTaskId ? remoteTask : undefined);
   const drawerTaskId = selectedTask?.id;
   const taskEstimateById = useMemo(() => new Map(taskEstimates.map((estimate) => [estimate.taskId, estimate])), [taskEstimates]);
+  const queuedTasks = useMemo(() => tasks.filter((task) => task.status === "QUEUED").sort((left, right) => {
+    const leftPosition = taskEstimateById.get(left.id)?.queuePosition ?? Number.MAX_SAFE_INTEGER;
+    const rightPosition = taskEstimateById.get(right.id)?.queuePosition ?? Number.MAX_SAFE_INTEGER;
+    return (left.robotId ?? "").localeCompare(right.robotId ?? "") || leftPosition - rightPosition || left.queueOrder - right.queueOrder;
+  }), [taskEstimateById, tasks]);
   const historyTaskStatus = selectedTask?.id === historyTaskId ? selectedTask.status : tasks.find((task) => task.id === historyTaskId)?.status;
   const taskRevision = useMemo(() => tasks.map((task) => `${task.id}:${task.status}:${task.progress}`).join("|"), [tasks]);
 
@@ -129,6 +135,13 @@ export default function TasksPage() {
     finally { setBusyTaskId(undefined); }
   }
 
+  async function updateQueue(task: DeliveryTask, update: { priority?: DeliveryTask["priority"]; direction?: "UP" | "DOWN" }) {
+    setQueueBusyId(task.id); setMessage("");
+    try { await api.updateQueuedTask(task.id, update); await refreshAll(); setMessage(copy.queueUpdated); }
+    catch (reason) { setMessage(reason instanceof Error ? reason.message : copy.taskActionFailed); }
+    finally { setQueueBusyId(undefined); }
+  }
+
   function submitSearch(event: FormEvent) { event.preventDefault(); setPageOffset(0); setQuery(searchInput.trim()); }
 
   function changeFilter(next: (typeof filters)[number]) { setFilter(next); setPageOffset(0); }
@@ -136,6 +149,20 @@ export default function TasksPage() {
   return <>
     <PageHeader title={user?.role === "ADMIN" ? copy.allTitle : copy.myTitle} description={user?.role === "ADMIN" ? copy.allDescription : copy.myDescription} />
     {user?.role === "ADMIN" && <div className="mt-6"><WorkflowControls /></div>}
+    {user?.role === "ADMIN" && <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-bold text-slate-950">{copy.queueBoard}</h2><p className="mt-1 text-sm text-slate-500">{copy.queueBoardHelp}</p></div><a href="/delivery" className="grid min-h-11 place-items-center rounded-xl bg-blue-600 px-4 text-sm font-bold text-white">{copy.createAnother}</a></div>
+      {queuedTasks.length === 0 ? <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-500">{copy.noMatch}</p> : <ol className="mt-4 space-y-2">{queuedTasks.map((task, index) => {
+        const previous = queuedTasks[index - 1]; const next = queuedTasks[index + 1];
+        const canMoveUp = Boolean(previous && previous.robotId === task.robotId && previous.priority === task.priority);
+        const canMoveDown = Boolean(next && next.robotId === task.robotId && next.priority === task.priority);
+        return <li key={task.id} className="grid gap-3 rounded-2xl border border-slate-200 p-3 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] md:items-center">
+          <span className="grid h-9 min-w-9 place-items-center rounded-full bg-slate-100 px-2 text-sm font-bold text-slate-700">#{taskEstimateById.get(task.id)?.queuePosition ?? index + 1}</span>
+          <div className="min-w-0"><p className="font-bold text-slate-950">{task.id} <span className="font-normal text-slate-400">· {task.robotId ?? copy.unassigned}</span></p><p className="truncate text-sm text-slate-500">{stationName(task.pickupStationId)} → {stationName(task.destinationStationId)}</p></div>
+          <select aria-label={`${task.id} priority`} value={task.priority} disabled={queueBusyId === task.id} onChange={(event) => void updateQueue(task, { priority: event.target.value as DeliveryTask["priority"] })} className="min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold"><option value="HIGH">HIGH</option><option value="NORMAL">NORMAL</option></select>
+          <div className="flex gap-2"><button type="button" aria-label={`${copy.moveUp} ${task.id}`} disabled={!canMoveUp || queueBusyId === task.id} onClick={() => void updateQueue(task, { direction: "UP" })} className="h-10 w-10 rounded-xl border border-slate-200 font-bold disabled:opacity-30">↑</button><button type="button" aria-label={`${copy.moveDown} ${task.id}`} disabled={!canMoveDown || queueBusyId === task.id} onClick={() => void updateQueue(task, { direction: "DOWN" })} className="h-10 w-10 rounded-xl border border-slate-200 font-bold disabled:opacity-30">↓</button></div>
+        </li>;
+      })}</ol>}
+    </section>}
     <section className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
       <header className="border-b border-slate-100 p-4 md:p-5">
         <form onSubmit={submitSearch} className="mb-4 flex gap-2"><label className="sr-only" htmlFor="task-search">{copy.search}</label><input id="task-search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder={copy.searchPlaceholder} className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"/><button type="submit" className="min-h-11 rounded-xl bg-slate-900 px-4 text-sm font-bold text-white">{copy.search}</button></form>

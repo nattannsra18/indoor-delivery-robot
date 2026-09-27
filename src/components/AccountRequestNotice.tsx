@@ -35,11 +35,9 @@ export default function AccountRequestNotice() {
     void refresh();
     const handleChange = () => void refresh();
     const interval = window.setInterval(handleChange, FALLBACK_REFRESH_MS);
-    window.addEventListener("idr:notification", handleChange);
     window.addEventListener("idr:account-request", handleChange);
     return () => {
       window.clearInterval(interval);
-      window.removeEventListener("idr:notification", handleChange);
       window.removeEventListener("idr:account-request", handleChange);
     };
   }, [refresh, user?.role]);
