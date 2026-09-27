@@ -12,6 +12,7 @@ import { useLocale } from "@/context/LocaleContext";
 import { deliveryFlowText, deliveryText } from "@/lib/i18n";
 import { routePreviewIsFresh } from "@/lib/routePreview";
 import { allowedPriority } from "@/lib/taskCreation";
+import { DEFAULT_NAVIGATION_SPEED, NAVIGATION_SPEED_OPTIONS } from "@/lib/navigationSpeed";
 import { Station, TaskPriority, TaskRoutePreview } from "@/types";
 
 const NOTE_MAX_LENGTH = 500;
@@ -36,6 +37,7 @@ export default function CreateDeliveryPage() {
   const [note, setNote] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("NORMAL");
   const [supervisedMode, setSupervisedMode] = useState(false);
+  const [maxLinearSpeed, setMaxLinearSpeed] = useState(DEFAULT_NAVIGATION_SPEED);
   const [selectionMode, setSelectionMode] = useState<StationSelectionMode>("pickup");
   const [selectedStation, setSelectedStation] = useState<Station>();
   const [step, setStep] = useState<ModalStep>(null);
@@ -89,6 +91,7 @@ export default function CreateDeliveryPage() {
           priority: allowedPriority(user?.role, priority),
           robotId: selectedDeliveryRobotId || undefined,
           supervisedMode: user?.role === "ADMIN" && supervisedAuthorized,
+          maxLinearSpeed,
         });
         if (!cancelled) setPreview(result);
       } catch (error) {
@@ -98,7 +101,7 @@ export default function CreateDeliveryPage() {
       }
     }, 250);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [canPlan, copy.routeUnavailable, destination, occupancyMap?.revision, pickup, previewAttempt, previewTaskRoute, priority, selectedDeliveryRobotId, supervisedAuthorized, user?.role]);
+  }, [canPlan, copy.routeUnavailable, destination, maxLinearSpeed, occupancyMap?.revision, pickup, previewAttempt, previewTaskRoute, priority, selectedDeliveryRobotId, supervisedAuthorized, user?.role]);
 
   const primaryBusy = !backendOnline || !robot.online || robot.state !== "IDLE";
   const busy = preview ? preview.queuePosition > 0 : primaryBusy;
@@ -137,6 +140,7 @@ export default function CreateDeliveryPage() {
         deliveryNote: note, previewId: preview.previewId,
         robotId: preview.robotId,
         supervisedMode: preview.supervisedMode,
+        maxLinearSpeed: preview.maxLinearSpeed,
       });
       setSuccess({ taskId: task.id, queuePosition, start, completion });
       setStep("success");
@@ -144,6 +148,13 @@ export default function CreateDeliveryPage() {
       setSubmitError(error instanceof Error ? error.message : copy.createUnavailable);
       setPreview(undefined); setPreviewAttempt((value) => value + 1); setStep("review");
     } finally { setSubmitting(false); }
+  }
+
+  function createAnotherDelivery() {
+    setPickup(""); setDestination(""); setRecipient(""); setNote("");
+    setPriority("NORMAL"); setSupervisedMode(false); setMaxLinearSpeed(DEFAULT_NAVIGATION_SPEED);
+    setSelectedStation(undefined); setSelectionMode("pickup"); setPreview(undefined);
+    setPreviewError(""); setSubmitError(""); setSuccess(undefined); setStep(null);
   }
 
   return <>
@@ -246,6 +257,7 @@ export default function CreateDeliveryPage() {
       <div className="mt-6 grid gap-5">
         <Field label={copy.recipientName}><input data-autofocus value={recipient} onChange={(event) => setRecipient(event.target.value)} maxLength={100} placeholder={copy.recipientPlaceholder} className={inputClass} /></Field>
         <Field label={copy.deliveryNote}><textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={NOTE_MAX_LENGTH} rows={4} placeholder={copy.notePlaceholder} className={inputClass} /><span className="text-right text-xs text-slate-400">{note.length}/{NOTE_MAX_LENGTH}</span></Field>
+        <Field label={flow.speedLimit}><select value={maxLinearSpeed} onChange={(event) => { setMaxLinearSpeed(Number(event.target.value)); setPreview(undefined); }} className={inputClass}>{NAVIGATION_SPEED_OPTIONS.map((option) => <option key={option.value} value={option.value}>{flow[`speed_${option.key}`]} · {option.value.toFixed(2)} m/s</option>)}</select><span className="text-xs leading-5 text-slate-500">{flow.speedLimitHelp}</span></Field>
         {user?.role === "ADMIN" ? <Field label={copy.priority}><select value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)} className={inputClass}><option value="NORMAL">{copy.normalPriority}</option><option value="HIGH">{copy.highPriority}</option></select></Field> :
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4"><p className="text-sm font-semibold text-slate-700">{copy.priority}</p><div className="mt-2"><PriorityBadge priority="NORMAL" /></div><p className="mt-2 text-xs text-slate-500">{flow.normalPolicy}</p></div>}
       </div>
@@ -258,6 +270,7 @@ export default function CreateDeliveryPage() {
         <ReviewRow label={flow.routeDistance} value={preview ? `${preview.totalDistanceMeters.toFixed(1)} m` : flow.unavailable} /><ReviewRow label={flow.travelTime} value={formatDuration(travel, locale)} />
         <ReviewRow label={flow.estimatedStart} value={formatDuration(start, locale)} /><ReviewRow label={flow.estimatedCompletion} value={formatDuration(completion, locale)} />
         <ReviewRow label={flow.selectedRobot} value={selectedFleetRobot?.name ?? preview?.robotId ?? robot.name} />
+        <ReviewRow label={flow.speedLimit} value={`${(preview?.maxLinearSpeed ?? maxLinearSpeed).toFixed(2)} m/s`} />
         {preview?.supervisedMode && <ReviewRow label={flow.supervisedReview} value={flow.supervisedOnly} />}
         <div className="my-1 border-t border-slate-200" /><ReviewRow label={copy.recipient} value={recipient.trim() || copy.notSpecified} /><ReviewRow label={copy.deliveryNote} value={note.trim() || copy.noNote} /><ReviewRow label={copy.priority} value={priority === "HIGH" ? copy.highPriority : copy.normalPriority} />
       </dl>
@@ -269,7 +282,7 @@ export default function CreateDeliveryPage() {
       {success && <div><div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-full bg-emerald-100 text-3xl text-emerald-700">✓</div>
         <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5 text-center"><p className="text-sm text-blue-700">{flow.taskId}</p><p className="mt-1 text-2xl font-bold text-slate-950">{success.taskId}</p>
           <dl className="mt-5 grid gap-3 text-left text-sm"><ReviewRow label={flow.queuePosition} value={success.queuePosition === 0 ? flow.activeNow : String(success.queuePosition)} /><ReviewRow label={flow.estimatedStart} value={formatDuration(success.start, locale)} /><ReviewRow label={flow.estimatedCompletion} value={formatDuration(success.completion, locale)} /></dl></div>
-        <div className="mt-6 grid gap-3"><button data-autofocus type="button" onClick={() => router.push("/tasks")} className="min-h-12 rounded-xl bg-blue-600 px-5 font-semibold text-white">{flow.viewMyDelivery}</button><button type="button" onClick={() => router.push("/")} className="min-h-12 rounded-xl border border-slate-300 px-5 font-semibold text-slate-700">{flow.backToDashboard}</button></div>
+        <div className="mt-6 grid gap-3"><button data-autofocus type="button" onClick={createAnotherDelivery} className="min-h-12 rounded-xl border border-blue-200 px-5 font-semibold text-blue-700">{copy.createDelivery}</button><button type="button" onClick={() => router.push("/tasks")} className="min-h-12 rounded-xl bg-blue-600 px-5 font-semibold text-white">{flow.viewMyDelivery}</button><button type="button" onClick={() => router.push("/")} className="min-h-12 rounded-xl border border-slate-300 px-5 font-semibold text-slate-700">{flow.backToDashboard}</button></div>
       </div>}
     </Modal>
   </>;

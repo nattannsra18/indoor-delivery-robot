@@ -296,9 +296,11 @@ class DeliveryService:
             x=robot.x,
             y=robot.y,
             yaw=robot.yaw,
+            last_seen=robot.last_seen,
             enrollment_status=robot.enrollment_status,
             readiness_status=robot.readiness_status,
             readiness_detail=robot.readiness_detail,
+            readiness_updated_at=robot.readiness_updated_at,
             validation_results=validation_results,
             capabilities=capabilities,
             active_map_id=(
@@ -742,6 +744,7 @@ class DeliveryService:
             "expected_profile_version": robot.profile_version,
             "task_id": task.id,
             "stage": stage,
+            "max_linear_speed": task.max_linear_speed,
             "target": {
                 "station_id": station.id,
                 "frame_id": "map",
@@ -899,9 +902,11 @@ class DeliveryService:
             progress=0,
             owner_id=owner_id,
             priority=payload.priority,
+            queue_order=self.repo.next_queue_order(robot.id),
             recipient_name=payload.recipient_name,
             delivery_note=payload.delivery_note,
             supervised_mode=payload.supervised_mode,
+            max_linear_speed=payload.max_linear_speed,
             pickup_distance_meters=pickup_distance_meters,
             delivery_distance_meters=delivery_distance_meters,
         )
@@ -923,6 +928,61 @@ class DeliveryService:
         self.db.commit()
         self.db.refresh(task)
         return task
+
+    def update_queued_task(
+        self,
+        task_id: str,
+        *,
+        priority: TaskPriority | None = None,
+        direction: str | None = None,
+        actor: TrustedActor | None = None,
+    ) -> DeliveryTaskORM:
+        task = self._task_or_404(task_id, lock=True)
+        if task.status != TaskStatus.QUEUED or task.robot_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Only queued tasks can be reordered",
+            )
+        self._robot_or_404(task.robot_id, lock=True)
+        if priority is not None:
+            task.priority = priority
+
+        queued = self.repo.queued_tasks_for_robot(task.robot_id, for_update=True)
+        for index, queued_task in enumerate(queued, start=1):
+            queued_task.queue_order = index
+
+        same_priority = [item for item in queued if item.priority == task.priority]
+        current = same_priority.index(task)
+        target = current - 1 if direction == "UP" else current + 1
+        if direction is not None and 0 <= target < len(same_priority):
+            other = same_priority[target]
+            task.queue_order, other.queue_order = other.queue_order, task.queue_order
+
+        detail = f"priority={task.priority.value}"
+        if direction is not None:
+            detail += f", direction={direction}"
+        self._log_event(
+            task,
+            "QUEUE_UPDATED",
+            TaskStatus.QUEUED,
+            TaskStatus.QUEUED,
+            EventSource.WEB_OPERATOR.value,
+            detail,
+        )
+        self._record_task_change(task, "task.queue_updated", actor)
+        self.db.commit()
+        self.db.refresh(task)
+        return task
+
+    def projected_queue_start_pose(self, robot_id: str) -> tuple[float, float, float]:
+        """Start a new preview where the robot should finish prior work."""
+        queued = self.repo.queued_tasks_for_robot(robot_id)
+        previous = queued[-1] if queued else self.active_task_for_robot(robot_id)
+        if previous is not None:
+            destination = self.get_station(previous.destination_station_id)
+            return destination.x, destination.y, destination.yaw
+        robot = self._robot_or_404(robot_id)
+        return robot.x, robot.y, robot.yaw
 
     def _robot_available(self, robot: RobotORM) -> bool:
         from .emergency_service import EmergencyStopService

@@ -19,9 +19,13 @@ from app.camera_stream import (
 class Socket:
     def __init__(self):
         self.closed = None
+        self.sent_json = []
 
     async def close(self, code, reason):
         self.closed = (code, reason)
+
+    async def send_json(self, payload):
+        self.sent_json.append(payload)
 
 
 class BrowserSocket:
@@ -134,6 +138,28 @@ def test_camera_broker_replaces_and_revokes_publishers():
         assert await broker.close("robot01") is True
         assert second.closed == (1008, "Robot camera credential revoked")
         assert broker.is_connected("robot01") is False
+
+    asyncio.run(scenario())
+
+
+def test_camera_broker_pauses_robot_stream_without_viewers():
+    async def scenario():
+        broker = CameraStreamBroker()
+        publisher = Socket()
+        await broker.connect(
+            "robot01",
+            publisher,
+            demand_control=True,
+        )
+
+        await broker.viewer_connected("robot01")
+        await broker.viewer_disconnected("robot01")
+
+        assert publisher.sent_json == [
+            {"type": "camera_demand", "stream_requested": True},
+            {"type": "camera_demand", "stream_requested": False},
+        ]
+        assert broker.viewer_count("robot01") == 0
 
     asyncio.run(scenario())
 

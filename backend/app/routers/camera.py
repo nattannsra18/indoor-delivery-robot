@@ -59,12 +59,18 @@ async def robot_camera_websocket(
     db.rollback()
 
     await websocket.accept()
-    await camera_stream_broker.connect(robot_id, websocket)
-    await websocket.send_json({
+    demand_control = websocket.query_params.get("demand_control") == "1"
+    await camera_stream_broker.connect(
+        robot_id,
+        websocket,
+        demand_control=demand_control,
+    )
+    await camera_stream_broker.send_publisher_json(robot_id, websocket, {
         "type": "camera_ready",
         "robot_id": robot_id,
         "transport": "latest-jpeg-ack-v1",
         "max_frame_bytes": MAX_CAMERA_FRAME_BYTES,
+        "stream_requested": camera_stream_broker.viewer_count(robot_id) > 0,
     })
     try:
         while True:
@@ -82,10 +88,14 @@ async def robot_camera_websocket(
                     data,
                 )
                 if frame.source_sequence > 0:
-                    await websocket.send_json({
+                    await camera_stream_broker.send_publisher_json(
+                        robot_id,
+                        websocket,
+                        {
                         "type": "camera_frame_ack",
                         "source_sequence": frame.source_sequence,
-                    })
+                        },
+                    )
             except ValueError as error:
                 await websocket.close(code=1009, reason=str(error))
                 break
@@ -114,7 +124,10 @@ async def browser_camera_websocket(
     db.rollback()
 
     await websocket.accept()
+    viewer_registered = False
     try:
+        await camera_stream_broker.viewer_connected(robot_id)
+        viewer_registered = True
         while True:
             request = await websocket.receive_json()
             if request.get("type") != "next_frame":
@@ -144,6 +157,9 @@ async def browser_camera_websocket(
             await websocket.send_bytes(pack_browser_camera_frame(frame))
     except WebSocketDisconnect:
         pass
+    finally:
+        if viewer_registered:
+            await camera_stream_broker.viewer_disconnected(robot_id)
 
 
 @router.get("/api/robots/{robot_id}/camera/stream")
@@ -156,17 +172,21 @@ async def browser_camera_stream(
 
     async def frames() -> AsyncIterator[bytes]:
         sequence = 0
-        while True:
-            frame = await camera_stream_broker.wait_for_frame(
-                robot_id,
-                sequence,
-            )
-            if frame is None:
-                if not camera_stream_broker.is_connected(robot_id):
-                    return
-                continue
-            sequence = frame.sequence
-            yield multipart_frame(frame)
+        await camera_stream_broker.viewer_connected(robot_id)
+        try:
+            while True:
+                frame = await camera_stream_broker.wait_for_frame(
+                    robot_id,
+                    sequence,
+                )
+                if frame is None:
+                    if not camera_stream_broker.is_connected(robot_id):
+                        return
+                    continue
+                sequence = frame.sequence
+                yield multipart_frame(frame)
+        finally:
+            await camera_stream_broker.viewer_disconnected(robot_id)
 
     return StreamingResponse(
         frames(),
@@ -192,5 +212,6 @@ def camera_status(
     return {
         "robot_id": robot_id,
         "connected": camera_stream_broker.is_connected(robot_id),
+        "viewers": camera_stream_broker.viewer_count(robot_id),
         "transport": "latest-jpeg-pull-over-wss",
     }

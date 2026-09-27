@@ -313,20 +313,28 @@ class RobotRegistryService:
         robot.active_map_id = None
         self.db.commit()
 
-    def apply_readiness(self, robot: RobotORM, readiness: RobotAgentReadiness) -> None:
+    def apply_readiness(self, robot: RobotORM, readiness: RobotAgentReadiness) -> bool:
         if readiness.robot_id != robot.id:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "agent_readiness robot_id mismatch")
         if robot.enrollment_status != RobotEnrollmentStatus.PAIRED:
             raise HTTPException(status.HTTP_409_CONFLICT, "Robot is not paired")
+        checks_json = json.dumps(
+            [item.model_dump(mode="json") for item in readiness.validation_results],
+            separators=(",", ":"),
+        )
+        changed = (
+            robot.readiness_status != readiness.status
+            or robot.readiness_detail != readiness.detail
+            or robot.active_map_id != readiness.active_map_id
+            or robot.readiness_checks_json != checks_json
+        )
         robot.readiness_status = readiness.status
         robot.readiness_detail = readiness.detail
         robot.readiness_updated_at = readiness.timestamp
         robot.active_map_id = readiness.active_map_id
-        robot.readiness_checks_json = json.dumps(
-            [item.model_dump(mode="json") for item in readiness.validation_results],
-            separators=(",", ":"),
-        )
+        robot.readiness_checks_json = checks_json
         self.db.commit()
+        return changed
 
     def list_registry(self, *, include_archived: bool = False) -> list[RobotRegistryEntry]:
         statement = select(RobotORM)

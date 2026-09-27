@@ -67,9 +67,12 @@ def pack_browser_camera_frame(frame: CameraFrame) -> bytes:
 @dataclass
 class _CameraState:
     condition: asyncio.Condition = field(default_factory=asyncio.Condition)
+    send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     frame: CameraFrame | None = None
     publisher: WebSocket | None = None
     sequence: int = 0
+    viewers: int = 0
+    demand_control: bool = False
 
 
 class CameraStreamBroker:
@@ -86,7 +89,13 @@ class CameraStreamBroker:
     def _state(self, robot_id: str) -> _CameraState:
         return self._states.setdefault(robot_id, _CameraState())
 
-    async def connect(self, robot_id: str, websocket: WebSocket) -> None:
+    async def connect(
+        self,
+        robot_id: str,
+        websocket: WebSocket,
+        *,
+        demand_control: bool = False,
+    ) -> None:
         state = self._state(robot_id)
         previous = state.publisher
         if previous is not None and previous is not websocket:
@@ -99,13 +108,59 @@ class CameraStreamBroker:
                 pass
         state.frame = None
         state.publisher = websocket
+        state.demand_control = demand_control
 
     async def disconnect(self, robot_id: str, websocket: WebSocket) -> None:
         state = self._state(robot_id)
         if state.publisher is websocket:
             state.publisher = None
+            state.demand_control = False
             async with state.condition:
                 state.condition.notify_all()
+
+    async def send_publisher_json(
+        self,
+        robot_id: str,
+        websocket: WebSocket,
+        payload: dict[str, object],
+    ) -> None:
+        state = self._state(robot_id)
+        if state.publisher is not websocket:
+            raise RuntimeError("Camera publisher is no longer active")
+        async with state.send_lock:
+            await websocket.send_json(payload)
+
+    async def viewer_connected(self, robot_id: str) -> None:
+        state = self._state(robot_id)
+        state.viewers += 1
+        if state.viewers == 1:
+            await self._send_demand(robot_id, state, True)
+
+    async def viewer_disconnected(self, robot_id: str) -> None:
+        state = self._state(robot_id)
+        state.viewers = max(0, state.viewers - 1)
+        if state.viewers == 0:
+            await self._send_demand(robot_id, state, False)
+
+    async def _send_demand(
+        self,
+        robot_id: str,
+        state: _CameraState,
+        requested: bool,
+    ) -> None:
+        publisher = state.publisher
+        if publisher is None or not state.demand_control:
+            return
+        try:
+            await self.send_publisher_json(robot_id, publisher, {
+                "type": "camera_demand",
+                "stream_requested": requested,
+            })
+        except (RuntimeError, ClosedResourceError):
+            pass
+
+    def viewer_count(self, robot_id: str) -> int:
+        return self._state(robot_id).viewers
 
     async def publish(
         self,

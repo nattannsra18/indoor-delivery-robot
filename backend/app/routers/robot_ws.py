@@ -389,7 +389,7 @@ async def robot_websocket(
             elif message_type == "agent_readiness":
                 try:
                     readiness = RobotAgentReadiness.model_validate(message)
-                    registry.apply_readiness(robot, readiness)
+                    readiness_changed = registry.apply_readiness(robot, readiness)
                 except (ValidationError, HTTPException) as error:
                     detail = (
                         error.detail
@@ -406,6 +406,16 @@ async def robot_websocket(
                         "server_time": current_utc_time(),
                     }
                 )
+                if readiness_changed:
+                    await browser_connection_manager.broadcast_json(
+                        {
+                            "type": "robot_readiness_changed",
+                            "robot_id": robot_id,
+                            "status": readiness.status.value,
+                            "server_time": current_utc_time(),
+                        },
+                        admin_only=True,
+                    )
             elif message_type == "credential_rotated":
                 try:
                     rotated = RobotCredentialRotated.model_validate(message)

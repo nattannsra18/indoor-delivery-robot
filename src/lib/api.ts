@@ -93,9 +93,11 @@ type ApiFleetRobot = {
   x: number;
   y: number;
   yaw: number;
+  last_seen: string;
   enrollment_status: FleetRobot["enrollmentStatus"];
   readiness_status: FleetRobot["readinessStatus"];
   readiness_detail?: string | null;
+  readiness_updated_at?: string | null;
   validation_results?: Array<{
     check_id: string;
     category: "INTERFACE" | "DATA" | "TF" | "LIFECYCLE" | "CAPABILITY";
@@ -126,9 +128,11 @@ type ApiDeliveryTask = {
   owner_id: string | null;
   owner_username: string | null;
   priority: DeliveryTask["priority"];
+  queue_order: number;
   recipient_name: string | null;
   delivery_note: string | null;
   supervised_mode: boolean;
+  max_linear_speed: number;
   pickup_distance_meters: number | null;
   delivery_distance_meters: number | null;
 };
@@ -160,6 +164,7 @@ type ApiTaskRoutePreview = {
   preview_id: string;
   robot_id: string;
   supervised_mode: boolean;
+  max_linear_speed: number;
   status: "AVAILABLE";
   frame_id: string;
   map_revision: number;
@@ -236,9 +241,11 @@ function toTask(task: ApiDeliveryTask): DeliveryTask {
     ownerId: task.owner_id ?? undefined,
     ownerUsername: task.owner_username ?? undefined,
     priority: task.priority,
+    queueOrder: task.queue_order,
     recipientName: task.recipient_name ?? undefined,
     deliveryNote: task.delivery_note ?? undefined,
     supervisedMode: task.supervised_mode,
+    maxLinearSpeed: task.max_linear_speed,
     pickupDistanceMeters: task.pickup_distance_meters ?? undefined,
     deliveryDistanceMeters: task.delivery_distance_meters ?? undefined
   };
@@ -477,9 +484,11 @@ export async function getFleet(): Promise<FleetRobot[]> {
     x: robot.x,
     y: robot.y,
     yaw: robot.yaw,
+    lastSeen: robot.last_seen,
     enrollmentStatus: robot.enrollment_status,
     readinessStatus: robot.readiness_status,
     readinessDetail: robot.readiness_detail ?? undefined,
+    readinessUpdatedAt: robot.readiness_updated_at ?? undefined,
     validationResults: (robot.validation_results ?? []).map((result) => ({
       checkId: result.check_id,
       category: result.category,
@@ -1047,6 +1056,7 @@ export async function createTask(
       delivery_note: input.deliveryNote?.trim() || null,
       preview_id: input.previewId,
       supervised_mode: input.supervisedMode ?? false,
+      max_linear_speed: input.maxLinearSpeed,
       ...(input.robotId ? { robot_id: input.robotId } : {})
     })
   });
@@ -1063,6 +1073,7 @@ export async function previewTaskRoute(
       destination_station_id: input.destinationStationId,
       priority: input.priority,
       supervised_mode: input.supervisedMode ?? false,
+      max_linear_speed: input.maxLinearSpeed,
       ...(input.robotId ? { robot_id: input.robotId } : {})
     })
   });
@@ -1070,6 +1081,7 @@ export async function previewTaskRoute(
     previewId: preview.preview_id,
     robotId: preview.robot_id,
     supervisedMode: preview.supervised_mode,
+    maxLinearSpeed: preview.max_linear_speed,
     status: preview.status,
     frameId: preview.frame_id,
     mapRevision: preview.map_revision,
@@ -1120,6 +1132,16 @@ export async function retryTask(taskId: string): Promise<DeliveryTask> {
     method: "POST"
   });
   return toTask(task);
+}
+
+export async function updateQueuedTask(
+  taskId: string,
+  update: { priority?: DeliveryTask["priority"]; direction?: "UP" | "DOWN" }
+): Promise<DeliveryTask> {
+  return toTask(await request<ApiDeliveryTask>(
+    `/api/tasks/${encodeURIComponent(taskId)}/queue`,
+    { method: "PATCH", body: JSON.stringify(update) }
+  ));
 }
 
 export async function recoverRobot(robotId: string): Promise<Robot> {
