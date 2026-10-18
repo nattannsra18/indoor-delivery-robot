@@ -31,7 +31,7 @@ def service():
         data=[0, 100, -1, 0],
     ))
     with session_factory() as db:
-        seed_database(db)
+        seed_database(db, include_demo_records=True)
         yield DeliveryService(db)
     map_catalog_store.clear()
     map_store.clear()

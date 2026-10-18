@@ -48,7 +48,7 @@ def reset_database(monkeypatch):
         for model in (AuditRecordORM, NotificationORM, TaskEventORM, DeliveryTaskORM, SessionORM, AlertORM, EmergencyStopORM, UserORM, RobotORM, StationORM):
             db.execute(delete(model))
         db.commit()
-        seed_database(db)
+        seed_database(db, include_demo_records=True)
         db.add_all([
             UserORM(id="admin", username="admin", password_hash=hash_password("admin-pass", iterations=1000), role=UserRole.ADMIN),
             UserORM(id="alice", username="alice", password_hash=hash_password("alice-pass", iterations=1000), role=UserRole.USER),

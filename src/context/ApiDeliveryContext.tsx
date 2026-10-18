@@ -63,8 +63,8 @@ const DASHBOARD_FALLBACK_REFRESH_MS = 15_000;
 const MAP_FALLBACK_REFRESH_MS = 10_000;
 
 const EMPTY_ROBOT: Robot = {
-  id: "robot01",
-  name: "SCUTTLE-01",
+  id: "",
+  name: "Robot unavailable",
   online: false,
   battery: 0,
   batterySource: "UNAVAILABLE",

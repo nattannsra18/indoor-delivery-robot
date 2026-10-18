@@ -81,17 +81,24 @@ export default function RobotReadinessNotice({
       </div>
 
       {visibleChecks.length > 0 && (
-        <ul className="mt-3 space-y-2">
-          {visibleChecks.map((check) => (
-            <ReadinessCheck key={check.checkId} check={check} locale={locale} />
-          ))}
-        </ul>
-      )}
-
-      {compact && checks.length > visibleChecks.length && (
-        <p className="mt-2 text-xs font-semibold opacity-75">
-          +{checks.length - visibleChecks.length}
-        </p>
+        <details className="group mt-3 rounded-lg border border-current/10 bg-white/40">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-xs font-bold hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+            <span>{copy.showChecks}</span>
+            <span aria-hidden="true" className="text-sm transition-transform group-open:rotate-180">⌄</span>
+          </summary>
+          <div className="border-t border-current/10 p-2">
+            <ul className="space-y-2">
+              {visibleChecks.map((check) => (
+                <ReadinessCheck key={check.checkId} check={check} locale={locale} />
+              ))}
+            </ul>
+            {compact && checks.length > visibleChecks.length && (
+              <p className="mt-2 px-1 text-xs font-semibold opacity-75">
+                +{checks.length - visibleChecks.length}
+              </p>
+            )}
+          </div>
+        </details>
       )}
 
       <div className="mt-3 flex flex-wrap gap-2 border-t border-current/10 pt-3">

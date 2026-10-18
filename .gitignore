@@ -9,6 +9,7 @@ deploy/production/.env.production
 playwright-report/
 test-results/
 /AGENTS.md
+/tmp/
 
 # Python / FastAPI
 backend/.venv/

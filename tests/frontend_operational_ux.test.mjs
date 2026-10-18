@@ -89,6 +89,9 @@ test("delivery readiness failures name the exact check and offer a targeted reco
   assert.equal((delivery.match(/<RobotReadinessNotice/g) ?? []).length, 1);
   assert.equal((dashboardModal.match(/<RobotReadinessNotice/g) ?? []).length, 1);
   assert.match(diagnostics, /<RobotReadinessNotice robot=\{selectedFleetRobot\}/);
+  assert.match(notice, /<details className=/);
+  assert.match(notice, /<summary className=/);
+  assert.match(notice, /copy\.showChecks/);
   assert.match(notice, /data-readiness-check=\{check\.checkId\}/);
   assert.match(notice, /href="\/maps\?view=localization"/);
   assert.match(notice, /href="\/diagnostics"/);
@@ -96,6 +99,12 @@ test("delivery readiness failures name the exact check and offer a targeted reco
   assert.match(catalog, /ตั้ง Initial Pose/);
   assert.doesNotMatch(delivery, /โปรดตรวจ Localization และ Nav2/);
   assert.doesNotMatch(dashboardModal, /Check Localization and Nav2 in Diagnostics/);
+});
+
+test("the offline fallback does not resurrect the legacy robot01 placeholder", () => {
+  const context = read("src/context/ApiDeliveryContext.tsx");
+  assert.doesNotMatch(context, /name: "SCUTTLE-01"/);
+  assert.doesNotMatch(context, /id: "robot01"/);
 });
 
 test("station mutations use prominent accessible feedback", () => {

@@ -71,7 +71,7 @@ def reset_database(monkeypatch):
         ):
             db.execute(delete(model))
         db.commit()
-        seed_database(db)
+        seed_database(db, include_demo_records=True)
         db.add_all(
             [
                 UserORM(

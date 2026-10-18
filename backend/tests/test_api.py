@@ -185,7 +185,7 @@ def setup_function():
         db.execute(delete(RobotORM))
         db.execute(delete(StationORM))
         db.commit()
-        seed_database(db)
+        seed_database(db, include_demo_records=True)
         user = db.query(UserORM).filter_by(username="test-admin").one_or_none()
         if user is None:
             db.add(UserORM(id="test-admin-id", username="test-admin", password_hash=hash_password("test-password", iterations=1000), role=UserRole.ADMIN))
