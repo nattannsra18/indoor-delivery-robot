@@ -10,7 +10,14 @@ import { useLocale } from "@/context/LocaleContext";
 import { adminUiText, dashboardText, deliveryFlowText, deliveryText } from "@/lib/i18n";
 import { routePreviewIsFresh } from "@/lib/routePreview";
 import { allowedPriority } from "@/lib/taskCreation";
-import { DEFAULT_NAVIGATION_SPEED, NAVIGATION_SPEED_OPTIONS } from "@/lib/navigationSpeed";
+import {
+  DEFAULT_NAVIGATION_SPEED,
+  DEFAULT_NAVIGATION_TURN_SPEED,
+  NAVIGATION_LINEAR_SPEED_MAX,
+  NAVIGATION_LINEAR_SPEED_MIN,
+  NAVIGATION_TURN_SPEED_MAX,
+  NAVIGATION_TURN_SPEED_MIN,
+} from "@/lib/navigationSpeed";
 import type { Station, TaskPriority, TaskRoutePreview } from "@/types";
 
 const NOTE_MAX_LENGTH = 500;
@@ -40,6 +47,7 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
   const [destination, setDestination] = useState("");
   const [supervisedMode, setSupervisedMode] = useState(false);
   const [maxLinearSpeed, setMaxLinearSpeed] = useState(DEFAULT_NAVIGATION_SPEED);
+  const [maxAngularSpeed, setMaxAngularSpeed] = useState(DEFAULT_NAVIGATION_TURN_SPEED);
   const [recipient, setRecipient] = useState("");
   const [note, setNote] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("NORMAL");
@@ -100,6 +108,7 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
           robotId: selectedDeliveryRobotId || undefined,
           supervisedMode: user?.role === "ADMIN" && supervisedAuthorized,
           maxLinearSpeed,
+          maxAngularSpeed,
         });
         if (!cancelled) setPreview(result);
       } catch (error) {
@@ -122,6 +131,7 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
     copy.routeUnavailable,
     destination,
     maxLinearSpeed,
+    maxAngularSpeed,
     occupancyMap?.revision,
     pickup,
     previewAttempt,
@@ -140,6 +150,8 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
     setRecipient("");
     setNote("");
     setPriority("NORMAL");
+    setMaxLinearSpeed(DEFAULT_NAVIGATION_SPEED);
+    setMaxAngularSpeed(DEFAULT_NAVIGATION_TURN_SPEED);
     setPreview(undefined);
     setPreviewError("");
     setSubmitError("");
@@ -157,7 +169,7 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
 
   function createAnotherDelivery() {
     setPickup(""); setDestination(""); setRecipient(""); setNote("");
-    setPriority("NORMAL"); setSupervisedMode(false); setPreview(undefined);
+    setPriority("NORMAL"); setSupervisedMode(false); setMaxLinearSpeed(DEFAULT_NAVIGATION_SPEED); setMaxAngularSpeed(DEFAULT_NAVIGATION_TURN_SPEED); setPreview(undefined);
     setPreviewError(""); setSubmitError(""); setCreatedTaskId("");
   }
 
@@ -182,6 +194,7 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
         robotId: preview.robotId,
         supervisedMode: preview.supervisedMode,
         maxLinearSpeed: preview.maxLinearSpeed,
+        maxAngularSpeed: preview.maxAngularSpeed,
       });
       setCreatedTaskId(task.id);
     } catch (error) {
@@ -292,7 +305,8 @@ export default function DashboardDeliveryMap({ poseLive = false }: { poseLive?: 
             <div className="grid gap-4 border-t border-slate-200 p-4 sm:grid-cols-2">
               <Field label={copy.recipientName}><input value={recipient} onChange={(event) => setRecipient(event.target.value)} maxLength={100} placeholder={copy.recipientPlaceholder} className={inputClass} /></Field>
               <Field label={copy.priority}><select value={priority} onChange={(event) => { setPriority(event.target.value as TaskPriority); setPreview(undefined); }} className={inputClass}><option value="NORMAL">{copy.normalPriority}</option><option value="HIGH">{copy.highPriority}</option></select></Field>
-              <Field label={flow.speedLimit}><select value={maxLinearSpeed} onChange={(event) => { setMaxLinearSpeed(Number(event.target.value)); setPreview(undefined); }} className={inputClass}>{NAVIGATION_SPEED_OPTIONS.map((option) => <option key={option.value} value={option.value}>{flow[`speed_${option.key}`]} · {option.value.toFixed(2)} m/s</option>)}</select></Field>
+              <Field label={flow.speedLimit}><div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><div className="flex items-center justify-between gap-3"><span className="text-xs text-slate-600">{NAVIGATION_LINEAR_SPEED_MIN.toFixed(2)}–{NAVIGATION_LINEAR_SPEED_MAX.toFixed(2)} m/s</span><output className="text-sm font-semibold text-blue-700">{maxLinearSpeed.toFixed(2)} m/s</output></div><input aria-label={flow.speedLimit} type="range" min={NAVIGATION_LINEAR_SPEED_MIN} max={NAVIGATION_LINEAR_SPEED_MAX} step="0.01" value={maxLinearSpeed} onChange={(event) => { setMaxLinearSpeed(Number(event.target.value)); setPreview(undefined); }} className="mt-3 w-full accent-blue-600" /></div></Field>
+              <Field label={flow.turnSpeedLimit}><div className="rounded-xl border border-slate-200 bg-slate-50 p-3"><div className="flex items-center justify-between gap-3"><span className="text-xs text-slate-600">{NAVIGATION_TURN_SPEED_MIN.toFixed(2)}–{NAVIGATION_TURN_SPEED_MAX.toFixed(2)} rad/s</span><output className="text-sm font-semibold text-blue-700">{maxAngularSpeed.toFixed(2)} rad/s</output></div><input aria-label={flow.turnSpeedLimit} type="range" min={NAVIGATION_TURN_SPEED_MIN} max={NAVIGATION_TURN_SPEED_MAX} step="0.05" value={maxAngularSpeed} onChange={(event) => { setMaxAngularSpeed(Number(event.target.value)); setPreview(undefined); }} className="mt-3 w-full accent-blue-600" /></div></Field>
               <Field label={copy.deliveryNote} wide><textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={NOTE_MAX_LENGTH} rows={3} placeholder={copy.notePlaceholder} className={inputClass} /><span className="text-right text-xs text-slate-400">{note.length}/{NOTE_MAX_LENGTH}</span></Field>
             </div>
           </details>

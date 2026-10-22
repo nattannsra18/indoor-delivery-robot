@@ -743,6 +743,7 @@ class DeliveryService:
             "task_id": task.id,
             "stage": stage,
             "max_linear_speed": task.max_linear_speed,
+            "max_angular_speed": task.max_angular_speed,
             "target": {
                 "station_id": station.id,
                 "frame_id": "map",
@@ -905,6 +906,7 @@ class DeliveryService:
             delivery_note=payload.delivery_note,
             supervised_mode=payload.supervised_mode,
             max_linear_speed=payload.max_linear_speed,
+            max_angular_speed=payload.max_angular_speed,
             pickup_distance_meters=pickup_distance_meters,
             delivery_distance_meters=delivery_distance_meters,
         )

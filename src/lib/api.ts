@@ -133,6 +133,7 @@ type ApiDeliveryTask = {
   delivery_note: string | null;
   supervised_mode: boolean;
   max_linear_speed: number;
+  max_angular_speed: number;
   pickup_distance_meters: number | null;
   delivery_distance_meters: number | null;
 };
@@ -165,6 +166,7 @@ type ApiTaskRoutePreview = {
   robot_id: string;
   supervised_mode: boolean;
   max_linear_speed: number;
+  max_angular_speed: number;
   status: "AVAILABLE";
   frame_id: string;
   map_revision: number;
@@ -246,6 +248,7 @@ function toTask(task: ApiDeliveryTask): DeliveryTask {
     deliveryNote: task.delivery_note ?? undefined,
     supervisedMode: task.supervised_mode,
     maxLinearSpeed: task.max_linear_speed,
+    maxAngularSpeed: task.max_angular_speed,
     pickupDistanceMeters: task.pickup_distance_meters ?? undefined,
     deliveryDistanceMeters: task.delivery_distance_meters ?? undefined
   };
@@ -1057,6 +1060,7 @@ export async function createTask(
       preview_id: input.previewId,
       supervised_mode: input.supervisedMode ?? false,
       max_linear_speed: input.maxLinearSpeed,
+      max_angular_speed: input.maxAngularSpeed,
       ...(input.robotId ? { robot_id: input.robotId } : {})
     })
   });
@@ -1074,6 +1078,7 @@ export async function previewTaskRoute(
       priority: input.priority,
       supervised_mode: input.supervisedMode ?? false,
       max_linear_speed: input.maxLinearSpeed,
+      max_angular_speed: input.maxAngularSpeed,
       ...(input.robotId ? { robot_id: input.robotId } : {})
     })
   });
@@ -1082,6 +1087,7 @@ export async function previewTaskRoute(
     robotId: preview.robot_id,
     supervisedMode: preview.supervised_mode,
     maxLinearSpeed: preview.max_linear_speed,
+    maxAngularSpeed: preview.max_angular_speed,
     status: preview.status,
     frameId: preview.frame_id,
     mapRevision: preview.map_revision,

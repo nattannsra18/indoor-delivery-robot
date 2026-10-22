@@ -254,6 +254,9 @@ class DeliveryTaskORM(Base):
     max_linear_speed: Mapped[float] = mapped_column(
         Float, nullable=False, default=0.10, server_default="0.10"
     )
+    max_angular_speed: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.60, server_default="0.60"
+    )
     pickup_distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
     delivery_distance_meters: Mapped[float | None] = mapped_column(Float, nullable=True)
     navigation_command_id: Mapped[str | None] = mapped_column(

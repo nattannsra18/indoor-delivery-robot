@@ -226,6 +226,7 @@ def test_compatibility_migration_preserves_rows_and_backfills_normal():
         "recipient_name",
         "delivery_note",
         "max_linear_speed",
+        "max_angular_speed",
         "queue_order",
         "pickup_distance_meters",
         "delivery_distance_meters",
@@ -233,10 +234,10 @@ def test_compatibility_migration_preserves_rows_and_backfills_normal():
     with legacy_engine.connect() as connection:
         row = connection.execute(text(
             "SELECT id, priority, recipient_name, delivery_note, "
-            "max_linear_speed, queue_order, pickup_distance_meters, delivery_distance_meters "
+            "max_linear_speed, max_angular_speed, queue_order, pickup_distance_meters, delivery_distance_meters "
             "FROM delivery_tasks"
         )).one()
-    assert row == ("TASK-OLD", "NORMAL", None, None, 0.10, 0, None, None)
+    assert row == ("TASK-OLD", "NORMAL", None, None, 0.10, 0.60, 0, None, None)
 
 
 def test_user_cannot_create_high_but_admin_can_and_metadata_round_trips():

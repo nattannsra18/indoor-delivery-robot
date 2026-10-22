@@ -41,17 +41,28 @@ Session = sessionmaker(bind=engine, expire_on_commit=False)
 Base.metadata.create_all(engine)
 
 
-def test_navigation_speed_limit_is_server_bounded():
+def test_navigation_speed_limits_are_server_bounded():
     assert TaskRoutePreviewRequest(
         pickup_station_id="A",
         destination_station_id="B",
         max_linear_speed=0.30,
     ).max_linear_speed == pytest.approx(0.30)
+    assert TaskRoutePreviewRequest(
+        pickup_station_id="A",
+        destination_station_id="B",
+        max_angular_speed=1.00,
+    ).max_angular_speed == pytest.approx(1.00)
     with pytest.raises(ValidationError):
         TaskRoutePreviewRequest(
             pickup_station_id="A",
             destination_station_id="B",
             max_linear_speed=0.31,
+        )
+    with pytest.raises(ValidationError):
+        TaskRoutePreviewRequest(
+            pickup_station_id="A",
+            destination_station_id="B",
+            max_angular_speed=1.01,
         )
 
 

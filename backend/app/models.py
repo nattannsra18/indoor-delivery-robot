@@ -1178,6 +1178,7 @@ class DeliveryTask(BaseModel):
     delivery_note: Optional[str] = None
     supervised_mode: bool = False
     max_linear_speed: float = Field(default=0.10, ge=0.08, le=0.30)
+    max_angular_speed: float = Field(default=0.60, ge=0.40, le=1.00)
     pickup_distance_meters: Optional[float] = Field(default=None, ge=0.0)
     delivery_distance_meters: Optional[float] = Field(default=None, ge=0.0)
 
@@ -1276,6 +1277,7 @@ class DeliveryTaskCreate(BaseModel):
     robot_id: Optional[str] = Field(default=None, min_length=1, max_length=40)
     supervised_mode: bool = False
     max_linear_speed: float = Field(default=0.10, ge=0.08, le=0.30)
+    max_angular_speed: float = Field(default=0.60, ge=0.40, le=1.00)
 
     @field_validator("recipient_name", "delivery_note", mode="before")
     @classmethod
@@ -1314,6 +1316,7 @@ class TaskRoutePreviewRequest(BaseModel):
     robot_id: Optional[str] = Field(default=None, min_length=1, max_length=40)
     supervised_mode: bool = False
     max_linear_speed: float = Field(default=0.10, ge=0.08, le=0.30)
+    max_angular_speed: float = Field(default=0.60, ge=0.40, le=1.00)
 
     @model_validator(mode="after")
     def validate_stations(self):
@@ -1329,6 +1332,7 @@ class TaskRoutePreview(BaseModel):
     robot_id: str
     supervised_mode: bool = False
     max_linear_speed: float = Field(ge=0.08, le=0.30)
+    max_angular_speed: float = Field(ge=0.40, le=1.00)
     status: Literal["AVAILABLE"]
     frame_id: str
     map_revision: int = Field(ge=1)
