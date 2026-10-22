@@ -22,8 +22,8 @@ export const TERMINAL_TASK_STATUSES: readonly TaskStatus[] = [
 const SHARED_NAVIGATION: NavigationItem[] = [
   { href: "/", label: "Dashboard", icon: "▦" },
   { href: "/delivery", label: "Create Delivery", icon: "＋" },
-  { href: "/tasks", label: "My Tasks", icon: "≡" }
-  , { href: "/notifications", label: "Notifications", icon: "●" }
+  { href: "/tasks", label: "My Tasks", icon: "≡" },
+  { href: "/notifications", label: "Notifications", icon: "●" }
 ];
 
 const ADMIN_NAVIGATION: NavigationItem[] = [
@@ -35,8 +35,8 @@ const ADMIN_NAVIGATION: NavigationItem[] = [
   { href: "/robots", label: "Robot Registry", icon: "◉" },
   { href: "/diagnostics", label: "Diagnostics", icon: "◌" },
   { href: "/users", label: "Account Requests", icon: "◎" },
-  { href: "/notifications", label: "Notifications", icon: "●" }
-  , { href: "/audit", label: "Audit Log", icon: "▤" }
+  { href: "/notifications", label: "Notifications", icon: "●" },
+  { href: "/audit", label: "Audit Log", icon: "▤" }
 ];
 
 const ADMIN_ONLY_ROUTES = ["/maps", "/stations", "/robots", "/diagnostics", "/users", "/audit"];

@@ -27,6 +27,9 @@ test("camera pipelines direct authenticated WSS without stale buffering", () => 
   assert.match(camera, /type: "next_frame"/);
   assert.match(camera, /createImageBitmap/);
   assert.match(camera, /requestNextFrame\(\);/);
+  assert.match(camera, /let pendingFrame: PendingCameraFrame \| null = null/);
+  assert.match(camera, /if \(pendingFrame !== null\)/);
+  assert.match(camera, /skip the stale bitmap/);
   assert.match(camera, /getBigUint64/);
   assert.doesNotMatch(camera, /<img/);
   assert.doesNotMatch(camera, /base64/i);
@@ -36,6 +39,7 @@ test("camera pipelines direct authenticated WSS without stale buffering", () => 
     camera.indexOf("socket.onmessage"),
     camera.indexOf("socket.onerror"),
   );
-  assert.ok(handler.indexOf("requestNextFrame();") < handler.indexOf("createImageBitmap"));
-  assert.match(handler, /elapsedMs >= 2_000/);
+  assert.ok(handler.indexOf("pendingFrame =") < handler.indexOf("requestNextFrame();"));
+  assert.ok(handler.indexOf("requestNextFrame();") < handler.indexOf("renderLatestFrame();"));
+  assert.match(camera, /elapsedMs >= 2_000/);
 });

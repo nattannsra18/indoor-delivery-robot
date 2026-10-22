@@ -65,7 +65,7 @@ def reset_database():
         ):
             db.execute(delete(model))
         db.commit()
-        seed_database(db)
+        seed_database(db, include_demo_records=True)
         db.add_all([
             UserORM(
                 id="admin",
@@ -615,6 +615,22 @@ def test_degraded_robot_requires_explicit_supervised_mode_and_records_it():
         task = service.create_task(request, owner_id="admin")
         assert task.robot_id == "prototype"
         assert task.supervised_mode is True
+
+        fleet = next(item for item in service.list_fleet() if item.id == "prototype")
+        assert fleet.current_task_id == task.id
+        assert fleet.queued_count == 0
+        assert fleet.allows_supervised_navigation is True
+
+        queued_request = payload()
+        queued_request.robot_id = "prototype"
+        queued_request.supervised_mode = True
+        queued_task = service.create_task(queued_request, owner_id="admin")
+        assert queued_task.robot_id == "prototype"
+        assert queued_task.supervised_mode is True
+
+        fleet = next(item for item in service.list_fleet() if item.id == "prototype")
+        assert fleet.queued_count == 1
+        assert fleet.allows_supervised_navigation is True
 
 
 def test_not_ready_robot_cannot_use_supervised_mode():

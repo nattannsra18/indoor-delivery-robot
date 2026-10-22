@@ -74,3 +74,16 @@ test("manual drive waits for each command before scheduling the next one", () =>
     assert.doesNotMatch(source, /window\.setInterval\([^\n]*drive(?:MappingRobot|LocalizationRecovery)/);
   }
 });
+
+test("mapping keyboard controls mirror their pressed state on screen", () => {
+  const source = read("src/app/maps/page.tsx");
+
+  assert.match(source, /setPressedDriveControl\(command\.control\)/);
+  assert.match(source, /setPressedDriveControl\("stop"\)/);
+  assert.match(source, /pressed=\{pressedDriveControl === "forward"\}/);
+  assert.match(source, /pressed=\{pressedDriveControl === "backward"\}/);
+  assert.match(source, /pressed=\{pressedDriveControl === "left"\}/);
+  assert.match(source, /pressed=\{pressedDriveControl === "right"\}/);
+  assert.match(source, /aria-pressed=\{pressed\}/);
+  assert.match(source, /target\.matches\("input, textarea, select"\)/);
+});

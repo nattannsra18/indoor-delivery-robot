@@ -15,8 +15,16 @@ from app.database import Base, get_db
 from app.db_models import AlertORM, AuditRecordORM, DeliveryTaskORM, EmergencyStopORM, NotificationORM, RobotORM, SessionORM, StationORM, TaskEventORM, UserORM
 from app.emergency_service import EmergencyStopService
 from app.main import app
-from app.models import AlertSeverity, DeliveryTaskCreate, UserRole, utc_now
-from app.models import OccupancyGridPayload, TaskPriority
+from app.models import (
+    AlertSeverity,
+    DeliveryTaskCreate,
+    EventSource,
+    OccupancyGridPayload,
+    TaskEvent,
+    TaskPriority,
+    UserRole,
+    utc_now,
+)
 from app.routers.dashboard_ws import dashboard_websocket
 from app.routers.robot_ws import robot_websocket
 from app.seed import seed_database
@@ -48,7 +56,7 @@ def reset_database(monkeypatch):
         for model in (AuditRecordORM, NotificationORM, TaskEventORM, DeliveryTaskORM, SessionORM, AlertORM, EmergencyStopORM, UserORM, RobotORM, StationORM):
             db.execute(delete(model))
         db.commit()
-        seed_database(db)
+        seed_database(db, include_demo_records=True)
         db.add_all([
             UserORM(id="admin", username="admin", password_hash=hash_password("admin-pass", iterations=1000), role=UserRole.ADMIN),
             UserORM(id="alice", username="alice", password_hash=hash_password("alice-pass", iterations=1000), role=UserRole.USER),
@@ -140,7 +148,35 @@ def test_rbac_task_ownership_and_legacy_ownerless_safety():
     assert created.json()["owner_id"] == "alice"
     task_id = created.json()["id"]
     assert bob.get(f"/api/tasks/{task_id}").status_code == 403
+    assert bob.get(f"/api/tasks/{task_id}/history").status_code == 403
     assert bob.post(f"/api/tasks/{task_id}/cancel").status_code == 403
+
+    with Session() as db:
+        DeliveryService(db).apply_task_event(
+            task_id,
+            TaskEvent.ARRIVED_PICKUP,
+            EventSource.ROBOT_AGENT,
+        )
+    confirmation = {
+        "event": "CONFIRM_LOADED",
+        "detail": "Package loaded by task owner",
+    }
+    assert bob.post(f"/api/tasks/{task_id}/events", json=confirmation).status_code == 403
+    confirmed = alice.post(f"/api/tasks/{task_id}/events", json=confirmation)
+    assert confirmed.status_code == 200
+    assert confirmed.json()["status"] == "DELIVERING"
+    assert alice.get(f"/api/tasks/{task_id}/history").status_code == 200
+    assert alice.post(f"/api/tasks/{task_id}/cancel").status_code == 403
+
+    queued = alice.post("/api/tasks", json={
+        "pickup_station_id": "B",
+        "destination_station_id": "C",
+        "preview_id": task_preview_id("alice", "B", "C"),
+    })
+    assert queued.status_code == 201
+    assert queued.json()["status"] == "QUEUED"
+    assert alice.post(f"/api/tasks/{queued.json()['id']}/cancel").status_code == 200
+
     assert admin.post(f"/api/tasks/{task_id}/cancel").status_code == 200
     assert alice.post("/api/stations", json={"name": "No", "x": 0, "y": 0, "yaw": 0}).status_code == 403
     with Session() as db:

@@ -1,11 +1,25 @@
 import asyncio
 
+import pytest
+from pydantic import ValidationError
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.mapping_store import mapping_store
 from app.models import MappingPhase, MappingTeleopRequest
 from app.routers import mapping as mapping_router
+
+
+def test_mapping_teleop_enforces_robot_speed_limits():
+    command = MappingTeleopRequest(linear_x=0.30, angular_z=1.0)
+    assert command.linear_x == 0.30
+    assert command.angular_z == 1.0
+
+    with pytest.raises(ValidationError):
+        MappingTeleopRequest(linear_x=0.31, angular_z=0.0)
+    with pytest.raises(ValidationError):
+        MappingTeleopRequest(linear_x=0.0, angular_z=1.01)
 
 
 def test_mapping_teleop_releases_database_before_robot_delivery(monkeypatch):

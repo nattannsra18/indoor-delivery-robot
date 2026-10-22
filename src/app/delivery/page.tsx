@@ -89,7 +89,7 @@ export default function CreateDeliveryPage() {
         const result = await previewTaskRoute({
           pickupStationId: pickup, destinationStationId: destination,
           priority: allowedPriority(user?.role, priority),
-          robotId: selectedDeliveryRobotId || undefined,
+          robotId: user?.role === "ADMIN" ? selectedDeliveryRobotId || undefined : undefined,
           supervisedMode: user?.role === "ADMIN" && supervisedAuthorized,
           maxLinearSpeed,
         });

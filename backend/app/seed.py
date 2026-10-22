@@ -40,8 +40,13 @@ INITIAL_STATIONS = [
 ]
 
 
-def seed_database(db: Session, *, app_env: str = "development") -> None:
-    """Populate demo records outside production environments only."""
+def seed_database(
+    db: Session,
+    *,
+    app_env: str = "development",
+    include_demo_records: bool = False,
+) -> None:
+    """Populate shared development data and optional test-only demo records."""
     if app_env.strip().lower() == "production":
         return
 
@@ -59,51 +64,51 @@ def seed_database(db: Session, *, app_env: str = "development") -> None:
             )
         )
 
-    if db.get(RobotORM, "robot01") is None:
-        db.add(
-            RobotORM(
-                id="robot01",
-                name="SCUTTLE-01",
-                online=True,
-                battery=100,
-                battery_source="SIMULATED",
-                state=RobotState.IDLE,
-                x=1.2,
-                y=3.7,
-                yaw=0.0,
-                current_task_id=None,
-                last_seen=utc_now().isoformat(),
+    if include_demo_records:
+        if db.get(RobotORM, "robot01") is None:
+            db.add(
+                RobotORM(
+                    id="robot01",
+                    name="SCUTTLE-01",
+                    online=True,
+                    battery=100,
+                    battery_source="SIMULATED",
+                    state=RobotState.IDLE,
+                    x=1.2,
+                    y=3.7,
+                    yaw=0.0,
+                    current_task_id=None,
+                    last_seen=utc_now().isoformat(),
+                )
             )
-        )
-
-    db.flush()
-
-    if db.scalar(select(DeliveryTaskORM.id).limit(1)) is None:
-        now = utc_now()
-        demo_task = DeliveryTaskORM(
-            id="TASK-001",
-            robot_id="robot01",
-            pickup_station_id="D",
-            destination_station_id="A",
-            status=TaskStatus.COMPLETED,
-            created_at=now,
-            started_at=now,
-            completed_at=now,
-            progress=100,
-        )
-        db.add(demo_task)
         db.flush()
-        db.add(
-            TaskEventORM(
-                task_id=demo_task.id,
-                event_type="DEMO_SEED",
-                from_status=None,
-                to_status=TaskStatus.COMPLETED,
-                source="SYSTEM",
-                detail="Initial completed demo task",
+
+        if db.scalar(select(DeliveryTaskORM.id).limit(1)) is None:
+            now = utc_now()
+            demo_task = DeliveryTaskORM(
+                id="TASK-001",
+                robot_id="robot01",
+                pickup_station_id="D",
+                destination_station_id="A",
+                status=TaskStatus.COMPLETED,
                 created_at=now,
+                started_at=now,
+                completed_at=now,
+                progress=100,
             )
-        )
+            db.add(demo_task)
+            db.flush()
+            db.add(
+                TaskEventORM(
+                    task_id=demo_task.id,
+                    event_type="DEMO_SEED",
+                    from_status=None,
+                    to_status=TaskStatus.COMPLETED,
+                    source="SYSTEM",
+                    detail="Initial completed demo task",
+                    created_at=now,
+                )
+            )
 
     db.commit()
 
@@ -114,4 +119,4 @@ def reset_demo_data(db: Session) -> None:
     db.execute(delete(RobotORM))
     db.execute(delete(StationORM))
     db.commit()
-    seed_database(db)
+    seed_database(db, include_demo_records=True)

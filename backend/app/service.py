@@ -283,8 +283,6 @@ class DeliveryService:
             and bool(robot.active_map_id)
             and not EmergencyStopService(self.db).is_latched(robot.id)
             and not mapping_store.is_active(robot.id)
-            and self._robot_available(robot)
-            and queued_count == 0
         )
         return FleetRobot(
             id=robot.id,

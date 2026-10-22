@@ -158,6 +158,52 @@ async def broadcast_path_clear(
     )
 
 
+async def fail_rejected_navigation_command(
+    service: DeliveryService,
+    robot_id: str,
+    command_id: str,
+    detail: str | None,
+) -> Any | None:
+    """Fail the matching active delivery once when its command is rejected."""
+    service.db.expire_all()
+    if service.navigation_result_receipt(command_id) is not None:
+        return None
+
+    task = service.active_task_for_robot(robot_id)
+    if task is None or task.navigation_command_id != command_id:
+        return None
+
+    stage = task.navigation_command_stage
+    updated_task = service.apply_task_event(
+        task.id,
+        TaskEvent.NAVIGATION_FAILED,
+        EventSource.ROBOT_AGENT,
+        detail or "Robot Agent rejected the navigation command",
+        actor=TrustedActor.robot(robot_id),
+        external_message_id=command_id,
+        external_message_status="rejected",
+    )
+    publish_committed_notifications(
+        service.db, service.take_pending_notification_ids()
+    )
+    await broadcast_path_clear(robot_id, "navigation_command_rejected")
+    navigation_feedback_store.clear_matching(robot_id, task.id, stage)
+    await browser_connection_manager.broadcast_json(
+        {
+            "type": "workflow_updated",
+            "reason": "navigation_command_rejected",
+            "robot_id": robot_id,
+            "task_id": task.id,
+            "task_status": updated_task.status.value,
+            "navigation_status": "rejected",
+            "stage": stage,
+            "server_time": current_utc_time(),
+        },
+        owner_id=updated_task.owner_id,
+    )
+    return updated_task
+
+
 @router.get("/api/robot-connections", dependencies=[Depends(require_admin)])
 def list_robot_connections() -> dict[str, Any]:
     robot_ids = (
@@ -1689,6 +1735,13 @@ async def robot_websocket(
                     command_status.lifecycle,
                     command_status.detail,
                 )
+                if command_status.lifecycle == "rejected":
+                    await fail_rejected_navigation_command(
+                        service,
+                        robot_id,
+                        command_status.command_id,
+                        command_status.detail,
+                    )
                 await websocket.send_json(
                     {
                         "type": "command_status_received",
@@ -1728,6 +1781,18 @@ async def robot_websocket(
                         ),
                     )
                     continue
+
+                if not accepted:
+                    await fail_rejected_navigation_command(
+                        service,
+                        robot_id,
+                        command_id,
+                        (
+                            str(message.get("detail"))
+                            if message.get("detail")
+                            else None
+                        ),
+                    )
 
                 await websocket.send_json(
                     {

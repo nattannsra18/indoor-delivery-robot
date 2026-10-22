@@ -12,6 +12,11 @@ type CameraMetrics = {
   latencyMs: number | null;
 };
 
+type PendingCameraFrame = {
+  capturedAtNs: bigint;
+  jpeg: ArrayBuffer;
+};
+
 function isCameraFrame(view: DataView) {
   return view.byteLength > FRAME_HEADER_BYTES
     && view.getUint8(0) === 0x49
@@ -45,10 +50,62 @@ export default function LiveCamera({ enabled, robotId }: { enabled: boolean; rob
     let metricStartedAt = performance.now();
     let renderedFrames = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let decoding = false;
+    let pendingFrame: PendingCameraFrame | null = null;
 
     function requestNextFrame() {
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: "next_frame", after_sequence: sequence }));
+      }
+    }
+
+    async function renderLatestFrame() {
+      if (decoding) return;
+      decoding = true;
+      try {
+        while (active && pendingFrame !== null) {
+          const frame = pendingFrame;
+          pendingFrame = null;
+          const bitmap = await createImageBitmap(new Blob([frame.jpeg], { type: "image/jpeg" }));
+          if (!active) {
+            bitmap.close();
+            return;
+          }
+
+          // A newer frame arrived while decoding; skip the stale bitmap.
+          if (pendingFrame !== null) {
+            bitmap.close();
+            continue;
+          }
+
+          const canvas = canvasRef.current;
+          const context = canvas?.getContext("2d", { alpha: false });
+          if (!canvas || !context) throw new Error("Camera canvas is unavailable");
+          context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          bitmap.close();
+          setLoaded(true);
+          setFailed(false);
+
+          renderedFrames += 1;
+          const now = performance.now();
+          const elapsedMs = now - metricStartedAt;
+          if (elapsedMs >= 2_000) {
+            setMetrics({
+              fps: Math.round((renderedFrames * 1000 / elapsedMs) * 10) / 10,
+              latencyMs: frame.capturedAtNs > BigInt(0)
+                ? Math.max(0, Math.round(Date.now() - Number(frame.capturedAtNs / BigInt(1_000_000))))
+                : null,
+            });
+            metricStartedAt = now;
+            renderedFrames = 0;
+          }
+        }
+      } catch {
+        setFailed(true);
+        socket.close(4003, "Camera frame could not be decoded");
+      } finally {
+        decoding = false;
+        if (active && pendingFrame !== null) void renderLatestFrame();
       }
     }
 
@@ -70,39 +127,12 @@ export default function LiveCamera({ enabled, robotId }: { enabled: boolean; rob
 
       sequence = Number(view.getBigUint64(5));
       const capturedAtNs = view.getBigUint64(21);
-      const jpeg = event.data.slice(FRAME_HEADER_BYTES);
+      pendingFrame = {
+        capturedAtNs,
+        jpeg: event.data.slice(FRAME_HEADER_BYTES),
+      };
       requestNextFrame();
-      try {
-        const bitmap = await createImageBitmap(new Blob([jpeg], { type: "image/jpeg" }));
-        if (!active) {
-          bitmap.close();
-          return;
-        }
-        const canvas = canvasRef.current;
-        const context = canvas?.getContext("2d", { alpha: false });
-        if (!canvas || !context) throw new Error("Camera canvas is unavailable");
-        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-        bitmap.close();
-        setLoaded(true);
-        setFailed(false);
-
-        renderedFrames += 1;
-        const now = performance.now();
-        const elapsedMs = now - metricStartedAt;
-        if (elapsedMs >= 2_000) {
-          setMetrics({
-            fps: Math.round((renderedFrames * 1000 / elapsedMs) * 10) / 10,
-            latencyMs: capturedAtNs > BigInt(0)
-              ? Math.max(0, Math.round(Date.now() - Number(capturedAtNs / BigInt(1_000_000))))
-              : null,
-          });
-          metricStartedAt = now;
-          renderedFrames = 0;
-        }
-      } catch {
-        setFailed(true);
-        socket.close(4003, "Camera frame could not be decoded");
-      }
+      void renderLatestFrame();
     };
     socket.onerror = () => setFailed(true);
     socket.onclose = () => {
@@ -117,6 +147,7 @@ export default function LiveCamera({ enabled, robotId }: { enabled: boolean; rob
 
     return () => {
       active = false;
+      pendingFrame = null;
       if (reconnectTimer !== undefined) clearTimeout(reconnectTimer);
       socket.close(1000, "Camera view closed");
     };

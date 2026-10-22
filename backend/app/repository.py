@@ -102,11 +102,7 @@ class DeliveryRepository:
         return self.db.scalar(stmt)
 
     def preferred_robot(self, *, for_update: bool = False) -> RobotORM | None:
-        """Return the best robot for the current single-dispatch workflow.
-
-        An online robot that already owns a task must remain primary. Otherwise
-        prefer a paired, ready Agent over the seeded legacy simulator record.
-        """
+        """Return the best robot for the current single-dispatch workflow."""
         rank = case(
             (
                 RobotORM.current_task_id.is_not(None),
@@ -129,7 +125,6 @@ class DeliveryRepository:
         )
         stmt = select(RobotORM).where(RobotORM.archived_at.is_(None)).order_by(
             rank,
-            case((RobotORM.id == "robot01", 0), else_=1),
             RobotORM.id,
         ).limit(1)
         if for_update:

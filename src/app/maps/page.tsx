@@ -267,6 +267,8 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
   const [floor, setFloor] = useState("");
   const [area, setArea] = useState("");
   const [driveSpeed, setDriveSpeed] = useState(0.16);
+  const [turnSpeed, setTurnSpeed] = useState(0.80);
+  const [pressedDriveControl, setPressedDriveControl] = useState<"forward" | "backward" | "left" | "right" | "stop">();
   const driveTimer = useRef<number | undefined>(undefined);
   const driveStopTimer = useRef<number | undefined>(undefined);
   const driveGeneration = useRef(0);
@@ -394,21 +396,23 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
     onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => { if (!event.repeat && (event.key === " " || event.key === "Enter")) startDrive(linear, angular); },
     onKeyUp: releaseDrive,
   });
-  const turnSpeed = Math.min(0.55, driveSpeed * 4);
   useEffect(() => {
     if (!active) return;
-    const commands: Record<string, [number, number]> = {
-      ArrowUp: [driveSpeed, 0], w: [driveSpeed, 0],
-      ArrowDown: [-driveSpeed * 0.75, 0], s: [-driveSpeed * 0.75, 0],
-      ArrowLeft: [0, turnSpeed], a: [0, turnSpeed],
-      ArrowRight: [0, -turnSpeed], d: [0, -turnSpeed],
+    const commands: Record<string, { linear: number; angular: number; control: "forward" | "backward" | "left" | "right" }> = {
+      ArrowUp: { linear: driveSpeed, angular: 0, control: "forward" }, w: { linear: driveSpeed, angular: 0, control: "forward" },
+      ArrowDown: { linear: -driveSpeed * 0.75, angular: 0, control: "backward" }, s: { linear: -driveSpeed * 0.75, angular: 0, control: "backward" },
+      ArrowLeft: { linear: 0, angular: turnSpeed, control: "left" }, a: { linear: 0, angular: turnSpeed, control: "left" },
+      ArrowRight: { linear: 0, angular: -turnSpeed, control: "right" }, d: { linear: 0, angular: -turnSpeed, control: "right" },
     };
     const commandForKey = (key: string) => commands[key];
     const keyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.matches("input, textarea, select") || target.isContentEditable)) return;
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
       if (key === " " || key === "Spacebar") {
         event.preventDefault();
-        activeDriveKey.current = undefined;
+        activeDriveKey.current = key;
+        setPressedDriveControl("stop");
         stopDrive();
         return;
       }
@@ -416,16 +420,18 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
       if (!command || event.repeat || activeDriveKey.current === key) return;
       event.preventDefault();
       activeDriveKey.current = key;
-      startDrive(...command);
+      setPressedDriveControl(command.control);
+      startDrive(command.linear, command.angular);
     };
     const keyUp = (event: KeyboardEvent) => {
       const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
       if (activeDriveKey.current !== key) return;
       event.preventDefault();
       activeDriveKey.current = undefined;
+      setPressedDriveControl(undefined);
       releaseDrive();
     };
-    const blur = () => { activeDriveKey.current = undefined; stopDrive(); };
+    const blur = () => { activeDriveKey.current = undefined; setPressedDriveControl(undefined); stopDrive(); };
     window.addEventListener("keydown", keyDown);
     window.addEventListener("keyup", keyUp);
     window.addEventListener("blur", blur);
@@ -434,6 +440,7 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
       window.removeEventListener("keyup", keyUp);
       window.removeEventListener("blur", blur);
       activeDriveKey.current = undefined;
+      setPressedDriveControl(undefined);
       stopDrive();
     };
   }, [active, driveSpeed, releaseDrive, startDrive, stopDrive, turnSpeed]);
@@ -447,7 +454,7 @@ function MappingWorkspace({ robotId, session, busy, error, copy, locale, onBusy,
         {session?.detail && !(phase === "IDLE" && session.savedMapId) && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">{session.detail}</p>}
         {session?.startedAt && <p className="mt-3 text-xs text-slate-400">{copy.elapsed}: {formatDate(session.startedAt, locale)}</p>}
         {phase === "IDLE" && <><p className="mt-5 rounded-2xl bg-blue-50 p-4 text-sm leading-6 text-blue-900">{copy.startHelp}</p><button type="button" disabled={busy} onClick={() => { setMappingStartRevision(occupancyMap?.revision ?? 0); void run(() => startMapping(robotId || undefined)); }} className="mt-4 min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{copy.start}</button></>}
-        {phase === "MAPPING" && <><label className="mt-5 block text-sm font-bold text-slate-700">{copy.speed}<span className="float-right font-mono text-blue-700">{driveSpeed.toFixed(2)} m/s</span><input type="range" min="0.06" max="0.16" step="0.01" value={driveSpeed} onChange={(event) => setDriveSpeed(Number(event.target.value))} className="mt-3 w-full accent-blue-600" /></label><div className="mx-auto mt-4 grid max-w-[230px] grid-cols-3 gap-2 select-none"><span /><DriveButton label={copy.forward} {...driveProps(driveSpeed, 0)}>↑</DriveButton><span /><DriveButton label={copy.left} {...driveProps(0, turnSpeed)}>↶</DriveButton><DriveButton label={copy.stopRobot} onClick={stopDrive}>■</DriveButton><DriveButton label={copy.right} {...driveProps(0, -turnSpeed)}>↷</DriveButton><span /><DriveButton label={copy.backward} {...driveProps(-driveSpeed * 0.75, 0)}>↓</DriveButton><span /></div><p className="mt-3 text-center text-xs font-semibold leading-5 text-slate-500">{copy.keyboardHelp}</p><p className="mt-1 text-center text-xs leading-5 text-slate-400">{copy.safety}</p><button type="button" disabled={busy} onClick={() => void run(() => stopMapping(robotId || undefined))} className="mt-5 min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{copy.stop}</button><button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="mt-2 min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button></>}
+        {phase === "MAPPING" && <><label className="mt-5 block text-sm font-bold text-slate-700">{copy.speed}<span className="float-right font-mono text-blue-700">{driveSpeed.toFixed(2)} m/s</span><input type="range" min="0.06" max="0.30" step="0.01" value={driveSpeed} onChange={(event) => setDriveSpeed(Number(event.target.value))} className="mt-3 w-full accent-blue-600" /></label><label className="mt-4 block text-sm font-bold text-slate-700">{copy.turnSpeed}<span className="float-right font-mono text-blue-700">{turnSpeed.toFixed(2)} rad/s</span><input type="range" min="0.30" max="1.00" step="0.05" value={turnSpeed} onChange={(event) => setTurnSpeed(Number(event.target.value))} className="mt-3 w-full accent-blue-600" /></label><div className="mx-auto mt-4 grid max-w-[230px] grid-cols-3 gap-2 select-none"><span /><DriveButton label={copy.forward} pressed={pressedDriveControl === "forward"} {...driveProps(driveSpeed, 0)}>↑</DriveButton><span /><DriveButton label={copy.left} pressed={pressedDriveControl === "left"} {...driveProps(0, turnSpeed)}>↶</DriveButton><DriveButton label={copy.stopRobot} pressed={pressedDriveControl === "stop"} onClick={stopDrive}>■</DriveButton><DriveButton label={copy.right} pressed={pressedDriveControl === "right"} {...driveProps(0, -turnSpeed)}>↷</DriveButton><span /><DriveButton label={copy.backward} pressed={pressedDriveControl === "backward"} {...driveProps(-driveSpeed * 0.75, 0)}>↓</DriveButton><span /></div><p className="mt-3 text-center text-xs font-semibold leading-5 text-slate-500">{copy.keyboardHelp}</p><p className="mt-1 text-center text-xs leading-5 text-slate-400">{copy.safety}</p><button type="button" disabled={busy} onClick={() => void run(() => stopMapping(robotId || undefined))} className="mt-5 min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{copy.stop}</button><button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="mt-2 min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button></>}
         {phase === "REVIEW" && <form className="mt-5 space-y-3" onSubmit={(event) => { event.preventDefault(); if (valid && !busy) void run(async () => { const result = await saveMapping({ mapId, name: name.trim(), building: building.trim() || undefined, floor: floor.trim() || undefined, areaDescription: area.trim() || undefined }, robotId || undefined); onSaved(); return result; }); }}><label className="block text-sm font-semibold text-slate-700">{copy.mapId}<input value={mapId} maxLength={120} onChange={(event) => setMapId(event.target.value)} className={field} /><span className="mt-1 block text-xs font-normal text-slate-400">{copy.mapIdHelp}</span></label><label className="block text-sm font-semibold text-slate-700">{copy.mapName}<input value={name} maxLength={160} onChange={(event) => setName(event.target.value)} className={field} /></label><div className="grid grid-cols-2 gap-3"><label className="block text-sm font-semibold text-slate-700">{copy.building}<input value={building} maxLength={120} onChange={(event) => setBuilding(event.target.value)} className={field} /></label><label className="block text-sm font-semibold text-slate-700">{copy.floor}<input value={floor} maxLength={80} onChange={(event) => setFloor(event.target.value)} className={field} /></label></div><label className="block text-sm font-semibold text-slate-700">{copy.area}<textarea value={area} maxLength={240} rows={3} onChange={(event) => setArea(event.target.value)} className={`${field} py-3`} /></label><button type="submit" disabled={!valid || busy} className="min-h-12 w-full rounded-xl bg-blue-600 font-bold text-white disabled:opacity-50">{busy ? copy.saving : copy.save}</button><button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button></form>}
         {["STARTING", "STOPPING", "SAVING", "RESTORING"].includes(phase) && <div className="mt-5 flex items-center gap-3 rounded-2xl bg-blue-50 p-4 text-sm font-semibold text-blue-800"><span className="size-5 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600" />{phase === "SAVING" ? copy.saving : phase === "RESTORING" ? copy.restoring : copy.preparing}</div>}
         {phase === "FAILED" && <button type="button" disabled={busy} onClick={() => setConfirmDiscard(true)} className="mt-4 min-h-11 w-full rounded-xl border border-rose-200 font-bold text-rose-700 disabled:opacity-50">{copy.discard}</button>}
@@ -472,8 +479,8 @@ function MappingToast({ toast, copy, onClose, onOpenLibrary }: { toast: { kind: 
   </section>;
 }
 
-function DriveButton({ label, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
-  return <button type="button" aria-label={label} title={label} className="grid size-16 touch-none place-items-center rounded-2xl border border-blue-200 bg-blue-50 text-2xl font-black text-blue-700 transition active:scale-95 active:bg-blue-600 active:text-white" {...props}>{children}</button>;
+function DriveButton({ label, pressed = false, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; pressed?: boolean }) {
+  return <button type="button" aria-label={label} aria-pressed={pressed} title={label} className={`grid size-16 touch-none place-items-center rounded-2xl border text-2xl font-black transition active:scale-95 active:bg-blue-600 active:text-white ${pressed ? "scale-95 border-blue-600 bg-blue-600 text-white shadow-inner" : "border-blue-200 bg-blue-50 text-blue-700"}`} {...props}>{children}</button>;
 }
 
 function ConfirmDialog({ title, body, cancel, confirm, onCancel, onConfirm }: { title: string; body: string; cancel: string; confirm: string; onCancel: () => void; onConfirm: () => void }) {

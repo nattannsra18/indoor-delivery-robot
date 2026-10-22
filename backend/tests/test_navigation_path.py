@@ -81,7 +81,7 @@ def reset_state():
         db.execute(delete(RobotORM))
         db.execute(delete(StationORM))
         db.commit()
-        seed_database(db)
+        seed_database(db, include_demo_records=True)
         if db.get(UserORM, "admin-id") is None:
             db.add(UserORM(id="admin-id", username="admin", password_hash=hash_password("pw", iterations=1000), role=UserRole.ADMIN))
             db.commit()
@@ -169,6 +169,76 @@ def test_navigation_command_identity_survives_control_plane_restart():
         task_id,
         "pickup",
     )
+
+
+def test_rejected_navigation_command_fails_task_once(monkeypatch):
+    with Session() as db:
+        task, command = active_command(db)
+        task_id = task.id
+
+    rejected = {
+        "type": "command_status",
+        "protocol_version": "1.0",
+        "command_id": command["command_id"],
+        "robot_id": "robot01",
+        "lifecycle": "rejected",
+        "timestamp": "2026-09-03T10:00:00+00:00",
+        "detail": "Motors are disabled; arm the base before navigation",
+    }
+    duplicate_ack = {
+        "type": "command_ack",
+        "command_id": command["command_id"],
+        "accepted": False,
+        "detail": rejected["detail"],
+    }
+    websocket, events = run_robot([rejected, duplicate_ack], monkeypatch)
+
+    with Session() as db:
+        service = DeliveryService(db)
+        failed = service.get_task(task_id)
+        matching_events = [
+            event
+            for event in service.get_task_history(task_id)
+            if event.external_message_id == command["command_id"]
+        ]
+
+    assert failed.status.value == "FAILED"
+    assert len(matching_events) == 1
+    assert matching_events[0].external_message_status == "rejected"
+    assert any(
+        message.get("type") == "command_status_received"
+        for message in websocket.sent
+    )
+    assert any(
+        message.get("type") == "command_ack_received"
+        for message in websocket.sent
+    )
+    assert any(
+        event.get("reason") == "navigation_command_rejected"
+        and event.get("task_status") == "FAILED"
+        for event in events
+    )
+
+
+def test_unrelated_rejected_command_does_not_fail_active_task(monkeypatch):
+    with Session() as db:
+        task, _ = active_command(db)
+        task_id = task.id
+
+    rejected = {
+        "type": "command_status",
+        "protocol_version": "1.0",
+        "command_id": "unrelated-admin-operation",
+        "robot_id": "robot01",
+        "lifecycle": "rejected",
+        "timestamp": "2026-09-03T10:00:00+00:00",
+        "detail": "Operation rejected",
+    }
+    run_robot([rejected], monkeypatch)
+
+    with Session() as db:
+        task = DeliveryService(db).get_task(task_id)
+    assert task.status.value == "GOING_TO_PICKUP"
 
 
 def test_duplicate_navigation_result_replays_ack_without_transition(

@@ -201,6 +201,7 @@ export const robotReadinessText = {
     blockedTitle: "Robot is blocked by a readiness check",
     degradedTitle: "Robot needs supervised operation",
     checkCount: "{count} checks need attention",
+    showChecks: "View check details",
     reportPending: "The robot has not reported the exact failed check yet. Wait for the next readiness update.",
     observed: "Observed",
     required: "Required",
@@ -212,6 +213,7 @@ export const robotReadinessText = {
     blockedTitle: "หุ่นยนต์ติดเงื่อนไขตรวจความพร้อม",
     degradedTitle: "หุ่นยนต์ต้องทำงานแบบมีผู้ควบคุม",
     checkCount: "มี {count} จุดที่ต้องตรวจสอบ",
+    showChecks: "ดูรายละเอียดการตรวจสอบ",
     reportPending: "หุ่นยนต์ยังไม่รายงานชื่อ check ที่ล้มเหลว โปรดรอ readiness update รอบถัดไป",
     observed: "ค่าที่พบ",
     required: "จำเป็น",
@@ -355,9 +357,11 @@ export const mapManagementActionsText = {
 
 export const webMappingText = {
   en: {
+    turnSpeed: "Turning speed",
     library: "Map library", create: "Create new map", title: "Web mapping", description: "Build a new ROS occupancy map while driving the robot from this screen.", start: "Start mapping", startHelp: "The robot must be idle with no active or queued deliveries. Nav2 localization pauses during mapping.", preparing: "Preparing mapping mode…", live: "Mapping live", liveHelp: "Press and hold a direction. Releasing it stops the robot automatically.", stop: "Stop and review", discard: "Discard capture", review: "Review captured map", reviewHelp: "Name and save the captured map to the robot. The new map becomes active automatically.", mapId: "Map ID", mapIdHelp: "Letters, numbers, dots, underscores, or hyphens only.", mapName: "Map name", building: "Building", floor: "Floor", area: "Area details", save: "Save map", saving: "Saving map…", restoring: "Restoring Nav2…", failed: "Mapping needs attention", retryHint: "Discard this session to restore localization, then try again.", forward: "Drive forward", backward: "Drive backward", left: "Turn left", right: "Turn right", stopRobot: "Stop robot", speed: "Driving speed", keyboardHelp: "Keyboard: WASD or arrow keys · Space to stop", safety: "Dead-man control stops motion within 0.35 seconds if commands stop arriving.", saved: "Map saved on the robot", savedTitle: "Map saved successfully", savedBody: "Map {id} is stored and active. Set the Initial Pose before navigating.", viewLibrary: "View map library", dismissNotification: "Dismiss notification", errorTitle: "Mapping action failed", unavailable: "Unable to load mapping status.", commandFailed: "The Robot Agent could not complete the mapping command.", mapData: "Live SLAM map", mapDataHelp: "Occupancy data is streamed directly from ROS /map.", waitingForNewMap: "Starting SLAM and waiting for the first map from this session ({seconds}s). It normally appears within 10–20 seconds.", elapsed: "Session started", confirmDiscard: "Discard the captured map?", confirmDiscardBody: "Unsaved map data will be lost and Nav2 localization will be restored.", cancel: "Cancel", confirm: "Discard",
   },
   th: {
+    turnSpeed: "ความเร็วในการหมุน",
     library: "คลังแผนที่", create: "สร้างแผนที่ใหม่", title: "สร้างแผนที่ผ่านเว็บ", description: "สร้าง ROS occupancy map ใหม่พร้อมขับหุ่นยนต์จากหน้าจอนี้", start: "เริ่มสร้างแผนที่", startHelp: "หุ่นยนต์ต้องว่างและไม่มีงานที่กำลังทำหรือรอคิว ระบบจะพัก Nav2 localization ระหว่างสร้างแผนที่", preparing: "กำลังเตรียมโหมดสร้างแผนที่…", live: "กำลังสร้างแผนที่", liveHelp: "กดปุ่มทิศทางค้างไว้ เมื่อปล่อยปุ่มหุ่นยนต์จะหยุดอัตโนมัติ", stop: "หยุดและตรวจสอบ", discard: "ยกเลิกแผนที่นี้", review: "ตรวจสอบแผนที่ที่สร้าง", reviewHelp: "ตั้งชื่อและบันทึกแผนที่ลงบนหุ่นยนต์ ระบบจะเปิดใช้แผนที่ใหม่ให้อัตโนมัติ", mapId: "Map ID", mapIdHelp: "ใช้ตัวอักษร ตัวเลข จุด ขีดล่าง หรือขีดกลางเท่านั้น", mapName: "ชื่อแผนที่", building: "อาคาร", floor: "ชั้น", area: "รายละเอียดพื้นที่", save: "บันทึกแผนที่", saving: "กำลังบันทึกแผนที่…", restoring: "กำลังคืนค่า Nav2…", failed: "การสร้างแผนที่ต้องได้รับการตรวจสอบ", retryHint: "ยกเลิก session นี้เพื่อคืนค่า localization แล้วลองใหม่", forward: "เดินหน้า", backward: "ถอยหลัง", left: "เลี้ยวซ้าย", right: "เลี้ยวขวา", stopRobot: "หยุดหุ่นยนต์", speed: "ความเร็วในการขับ", keyboardHelp: "คีย์บอร์ด: WASD หรือปุ่มลูกศร · Space เพื่อหยุด", safety: "Dead-man control จะหยุดการเคลื่อนที่ภายใน 0.35 วินาทีเมื่อไม่ได้รับคำสั่งต่อเนื่อง", saved: "บันทึกแผนที่บนหุ่นยนต์แล้ว", savedTitle: "บันทึกแผนที่สำเร็จ", savedBody: "จัดเก็บและเปิดใช้แผนที่ {id} แล้ว กรุณาตั้ง Initial Pose ก่อนนำทาง", viewLibrary: "ดูคลังแผนที่", dismissNotification: "ปิดการแจ้งเตือน", errorTitle: "ดำเนินการสร้างแผนที่ไม่สำเร็จ", unavailable: "ไม่สามารถโหลดสถานะการสร้างแผนที่ได้", commandFailed: "Robot Agent ไม่สามารถทำคำสั่งสร้างแผนที่ให้สำเร็จ", mapData: "แผนที่ SLAM แบบสด", mapDataHelp: "ข้อมูล occupancy ส่งตรงจาก ROS /map", waitingForNewMap: "กำลังเริ่ม SLAM และรอแผนที่เฟรมแรกของ session นี้ ({seconds} วินาที) โดยปกติจะใช้เวลาประมาณ 10–20 วินาที", elapsed: "เริ่ม session เมื่อ", confirmDiscard: "ยกเลิกแผนที่ที่สร้างหรือไม่", confirmDiscardBody: "ข้อมูลแผนที่ที่ยังไม่บันทึกจะหายไป และระบบจะคืนค่า Nav2 localization", cancel: "กลับ", confirm: "ยกเลิกแผนที่",
   },
 } as const;
@@ -423,7 +427,7 @@ export const dashboardOperationsText = {
     cameraPaused: "Robot offline",
     cameraUnavailable: "Camera stream unavailable",
     retryCamera: "Retry stream",
-    cameraResolution: "640 × 480 · low latency",
+    cameraResolution: "MJPEG · low latency",
     cameraTransport: "Latest frame · WSS",
     cameraMeasuring: "Measuring live performance…",
     cameraMetrics: "{fps} FPS · {latency} ms capture-to-screen",
@@ -489,7 +493,7 @@ export const dashboardOperationsText = {
     cameraPaused: "หุ่นยนต์ออฟไลน์",
     cameraUnavailable: "ไม่สามารถรับภาพจากกล้องได้",
     retryCamera: "ลองเชื่อมต่ออีกครั้ง",
-    cameraResolution: "640 × 480 · หน่วงต่ำ",
+    cameraResolution: "MJPEG · หน่วงต่ำ",
     cameraTransport: "เฟรมล่าสุด · WSS",
     cameraMeasuring: "กำลังวัดประสิทธิภาพภาพสด…",
     cameraMetrics: "{fps} FPS · {latency} ms จากกล้องถึงหน้าจอ",
