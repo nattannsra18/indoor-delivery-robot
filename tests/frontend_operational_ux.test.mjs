@@ -4,6 +4,17 @@ import test from "node:test";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
+test("manual control serializes drive requests and stops when browser focus is lost", () => {
+  const manual = read("src/app/manual/page.tsx");
+  assert.match(manual, /const requestChain = useRef\(Promise\.resolve\(\)\)/);
+  assert.match(manual, /requestChain\.current\.then\(\(\) => driveRobotManually/);
+  assert.match(manual, /window\.setTimeout\(\(\) => void repeat\(\), 180\)/);
+  assert.doesNotMatch(manual, /window\.setInterval/);
+  assert.match(manual, /window\.addEventListener\("blur", stop\)/);
+  assert.match(manual, /document\.addEventListener\("visibilitychange", hidden\)/);
+  assert.match(manual, /onPointerCancel=\{onStop\}/);
+});
+
 test("admin account approval is available only through the protected user route", () => {
   const page = read("src/app/users/page.tsx");
   const api = read("src/lib/api.ts");
