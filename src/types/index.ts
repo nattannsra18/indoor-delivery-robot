@@ -30,6 +30,7 @@ export interface TaskCreateInput {
   robotId?: string;
   supervisedMode?: boolean;
   maxLinearSpeed: number;
+  maxAngularSpeed: number;
 }
 
 export interface TaskRoutePreviewInput {
@@ -39,6 +40,7 @@ export interface TaskRoutePreviewInput {
   robotId?: string;
   supervisedMode?: boolean;
   maxLinearSpeed: number;
+  maxAngularSpeed: number;
 }
 
 export interface TaskRoutePreview {
@@ -46,6 +48,7 @@ export interface TaskRoutePreview {
   robotId: string;
   supervisedMode: boolean;
   maxLinearSpeed: number;
+  maxAngularSpeed: number;
   status: "AVAILABLE";
   frameId: string;
   mapRevision: number;
@@ -394,6 +397,7 @@ export interface DeliveryTask {
   deliveryNote?: string;
   supervisedMode: boolean;
   maxLinearSpeed?: number;
+  maxAngularSpeed?: number;
   pickupDistanceMeters?: number;
   deliveryDistanceMeters?: number;
 }

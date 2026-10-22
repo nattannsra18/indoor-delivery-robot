@@ -43,6 +43,7 @@ class PreviewValidation:
     map_revision: int
     supervised_mode: bool
     max_linear_speed: float
+    max_angular_speed: float
     expires_at: float
     pickup_distance_meters: float | None = None
     delivery_distance_meters: float | None = None
@@ -129,6 +130,7 @@ class RoutePreviewCoordinator:
         map_revision: int,
         supervised_mode: bool = False,
         max_linear_speed: float = 0.10,
+        max_angular_speed: float = 0.60,
         pickup_distance_meters: float | None = None,
         delivery_distance_meters: float | None = None,
         validity_seconds: float = PREVIEW_VALIDITY_SECONDS,
@@ -144,6 +146,7 @@ class RoutePreviewCoordinator:
             map_revision=map_revision,
             supervised_mode=supervised_mode,
             max_linear_speed=max_linear_speed,
+            max_angular_speed=max_angular_speed,
             expires_at=now + validity_seconds,
             pickup_distance_meters=pickup_distance_meters,
             delivery_distance_meters=delivery_distance_meters,
@@ -165,6 +168,7 @@ class RoutePreviewCoordinator:
         map_revision: int,
         supervised_mode: bool = False,
         max_linear_speed: float = 0.10,
+        max_angular_speed: float = 0.60,
     ) -> PreviewValidation | None:
         if not preview_id:
             return None
@@ -182,6 +186,7 @@ class RoutePreviewCoordinator:
             and validation.map_revision == map_revision
             and validation.supervised_mode == supervised_mode
             and validation.max_linear_speed == max_linear_speed
+            and validation.max_angular_speed == max_angular_speed
         )
         return validation if matches else None
 

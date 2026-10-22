@@ -301,6 +301,7 @@ async def preview_task_route(
         map_revision=snapshot.revision,
         supervised_mode=payload.supervised_mode,
         max_linear_speed=payload.max_linear_speed,
+        max_angular_speed=payload.max_angular_speed,
         pickup_distance_meters=pickup_distance,
         delivery_distance_meters=delivery_distance,
     )
@@ -309,6 +310,7 @@ async def preview_task_route(
         robot_id=robot.id,
         supervised_mode=payload.supervised_mode,
         max_linear_speed=payload.max_linear_speed,
+        max_angular_speed=payload.max_angular_speed,
         status="AVAILABLE",
         frame_id=result.frame_id,
         map_revision=snapshot.revision,
@@ -375,6 +377,7 @@ async def create_task(
             map_revision=snapshot.revision,
             supervised_mode=payload.supervised_mode,
             max_linear_speed=payload.max_linear_speed,
+            max_angular_speed=payload.max_angular_speed,
         )
     if validation is None:
         raise HTTPException(

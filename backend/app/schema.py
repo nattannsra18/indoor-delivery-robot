@@ -282,6 +282,11 @@ def apply_compatibility_migrations(engine: Engine) -> None:
                 "ALTER TABLE delivery_tasks ADD COLUMN max_linear_speed "
                 "FLOAT NOT NULL DEFAULT 0.10"
             ))
+        if "max_angular_speed" not in columns:
+            connection.execute(text(
+                "ALTER TABLE delivery_tasks ADD COLUMN max_angular_speed "
+                "FLOAT NOT NULL DEFAULT 0.60"
+            ))
         if "queue_order" not in columns:
             connection.execute(text(
                 "ALTER TABLE delivery_tasks ADD COLUMN queue_order "
