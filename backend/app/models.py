@@ -1028,7 +1028,7 @@ class MappingSaveRequest(BaseModel):
 class MappingTeleopRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
-    linear_x: float = Field(ge=-0.22, le=0.22)
+    linear_x: float = Field(ge=-0.30, le=0.30)
     angular_z: float = Field(ge=-1.0, le=1.0)
 
 

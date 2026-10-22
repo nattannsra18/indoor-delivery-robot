@@ -4,13 +4,13 @@ import test from "node:test";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("delivery creation stays bound to the robot selected on the dashboard", () => {
+test("admin delivery creation stays bound to the selected robot while users get automatic assignment", () => {
   const page = read("src/app/delivery/page.tsx");
   const api = read("src/lib/api.ts");
   const types = read("src/types/index.ts");
 
   assert.match(page, /selectedRobotId/);
-  assert.match(page, /robotId: selectedDeliveryRobotId/);
+  assert.match(page, /robotId: user\?\.role === "ADMIN" \? selectedDeliveryRobotId \|\| undefined : undefined/);
   assert.match(page, /selectedRobotLockedHelp/);
   assert.doesNotMatch(page, /id="robot-assignment"/);
   assert.doesNotMatch(page, /rankedFleet/);
@@ -84,4 +84,15 @@ test("map view uses crisp occupancy cells, grouped controls, and a visible map b
   assert.match(map, /bg-slate-100/);
   assert.match(map, /map\.data\[mapIndex\] < 0 \? 0 : 255/);
   assert.doesNotMatch(map, /context\.fillRect\(0, 0, canvasSize\.width, canvasSize\.height\)/);
+});
+
+test("station markers use configured short names and reveal details on hover", () => {
+  const map = read("src/components/RobotMap.tsx");
+
+  assert.match(map, /context\.fillText\(station\.name\.trim\(\) \|\| station\.id/);
+  assert.match(map, /role="tooltip"/);
+  assert.match(map, /hoveredStation\.station\.description/);
+  assert.match(map, /hoveredStation\.station\.location/);
+  assert.match(map, /hoveredStation\.station\.instructions/);
+  assert.match(map, /nearestStation\(/);
 });

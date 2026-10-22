@@ -461,7 +461,13 @@ async def cancel_task(
     ),
     user: UserORM = Depends(require_user),
 ):
-    authorize_task(user, service.get_task(task_id))
+    task_to_cancel = service.get_task(task_id)
+    authorize_task(user, task_to_cancel)
+    if user.role != UserRole.ADMIN and task_to_cancel.status != TaskStatus.QUEUED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Users can cancel only queued tasks",
+        )
     task = service.cancel_task(task_id, actor=TrustedActor.user(user))
     publish_committed_notifications(
         service.db, service.take_pending_notification_ids()
@@ -492,9 +498,8 @@ async def retry_task(
     task_id: str,
     background_tasks: BackgroundTasks,
     service: DeliveryService = Depends(get_service),
-    user: UserORM = Depends(require_user),
+    user: UserORM = Depends(require_admin),
 ):
-    authorize_task(user, service.get_task(task_id))
     task = service.retry_task(task_id, actor=TrustedActor.user(user))
     publish_committed_notifications(
         service.db, service.take_pending_notification_ids()

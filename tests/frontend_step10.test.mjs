@@ -40,6 +40,7 @@ test("ADMIN navigation exposes operational and system destinations", () => {
 test("USER navigation excludes admin and system destinations", () => {
   const paths = navigationForRole("USER").map((item) => item.href);
   assert.deepEqual(paths, ["/", "/delivery", "/tasks", "/notifications"]);
+  assert.equal(routeAllowedForRole("/delivery", "USER"), true);
   assert.equal(paths.includes("/robots"), false);
   assert.equal(paths.includes("/stations"), false);
   assert.equal(paths.includes("/audit"), false);

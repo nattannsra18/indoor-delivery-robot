@@ -37,6 +37,9 @@ test("account request, admin approval, user sign-in, and role redirect", async (
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: `Welcome back, ${username}!` })).toBeVisible();
 
+  await page.goto("/delivery");
+  await expect(page).toHaveURL(/\/delivery$/);
+
   await page.goto("/maps");
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("link", { name: "Map Management" })).toHaveCount(0);

@@ -80,6 +80,9 @@ export default function RobotMap({
     width: 900, height: 540
   });
   const [view, setView] = useState({ zoom: 1, rotation: 0, x: 0, y: 0 });
+  const [hoveredStation, setHoveredStation] = useState<{
+    station: Station; x: number; y: number;
+  }>();
   const {
     occupancyMap: receivedOccupancyMap, navigationPath, navigationPathStatus, robot: liveRobot,
     stations: contextStations, activeTask, stationName
@@ -222,18 +225,34 @@ export default function RobotMap({
       return;
     }
     if (!onStationSelect) return;
-    const nearest = stations.map((station) => ({
-      station,
-      point: worldToCanvas(
-        occupancyMap, viewport, station.x, station.y
-      )
-    })).filter((item): item is { station: Station; point: CanvasPoint } =>
-      Boolean(item.point)
-    ).map((item) => ({
-      ...item,
-      distance: Math.hypot(item.point.x - click.x, item.point.y - click.y)
-    })).sort((a, b) => a.distance - b.distance)[0];
+    const nearest = nearestStation(click, occupancyMap, viewport, stations);
     if (nearest && nearest.distance <= 20) onStationSelect(nearest.station);
+  }
+
+  function updateStationHover(event: React.PointerEvent<HTMLCanvasElement>) {
+    if (!showStations || panGesture.current || poseGesture.current || !occupancyMap) {
+      setHoveredStation(undefined);
+      return;
+    }
+    const point = canvasPointFromClient(
+      event.currentTarget, event.clientX, event.clientY
+    );
+    const nearest = nearestStation(
+      point,
+      occupancyMap,
+      calculateMapViewport(occupancyMap, canvasSize),
+      stations,
+    );
+    if (!nearest || nearest.distance > 20) {
+      setHoveredStation(undefined);
+      return;
+    }
+    const bounds = event.currentTarget.getBoundingClientRect();
+    setHoveredStation({
+      station: nearest.station,
+      x: event.clientX - bounds.left,
+      y: event.clientY - bounds.top,
+    });
   }
 
   function worldPointFromPointer(event: React.PointerEvent<HTMLCanvasElement>) {
@@ -293,10 +312,14 @@ export default function RobotMap({
       const dy = event.clientY - pan.clientY;
       if (Math.hypot(dx, dy) > 4) pan.moved = true;
       setView((current) => ({ ...current, x: pan.startX + dx, y: pan.startY + dy }));
+      setHoveredStation(undefined);
       return;
     }
     const start = poseGesture.current;
-    if (!start || start.pointerId !== event.pointerId || !onMapPoseSelect) return;
+    if (!start || start.pointerId !== event.pointerId || !onMapPoseSelect) {
+      updateStationHover(event);
+      return;
+    }
     const point = worldPointFromPointer(event);
     if (!point) return;
     const distance = Math.hypot(point.x - start.x, point.y - start.y);
@@ -365,11 +388,33 @@ export default function RobotMap({
           onPointerMove={handlePosePointerMove}
           onPointerUp={finishPoseGesture}
           onPointerCancel={finishPoseGesture}
+          onPointerLeave={() => setHoveredStation(undefined)}
           onWheel={(event) => {
             event.preventDefault();
             zoomBy(event.deltaY < 0 ? 0.15 : -0.15);
           }}
         />
+        {hoveredStation && (
+          <div
+            role="tooltip"
+            className="pointer-events-none absolute z-20 w-max max-w-64 -translate-x-1/2 -translate-y-[calc(100%+0.75rem)] rounded-xl border border-slate-200 bg-slate-950/95 px-3 py-2 text-left text-xs text-white shadow-xl"
+            style={{ left: hoveredStation.x, top: hoveredStation.y }}
+          >
+            <p className="font-bold">{hoveredStation.station.name}</p>
+            {hoveredStation.station.description && (
+              <p className="mt-0.5 text-slate-200">{hoveredStation.station.description}</p>
+            )}
+            {hoveredStation.station.location && (
+              <p className="mt-1 text-slate-300">{hoveredStation.station.location}</p>
+            )}
+            {hoveredStation.station.instructions && (
+              <p className="mt-1 text-slate-300">{hoveredStation.station.instructions}</p>
+            )}
+            <p className="mt-1 font-mono text-[10px] text-slate-400">
+              x={hoveredStation.station.x.toFixed(2)}, y={hoveredStation.station.y.toFixed(2)} · {Math.round(hoveredStation.station.yaw * 180 / Math.PI)}°
+            </p>
+          </div>
+        )}
         <div className="absolute right-4 top-4 z-10 w-12 rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-lg shadow-slate-900/15 backdrop-blur" aria-label={locale === "th" ? "เครื่องมือควบคุมแผนที่" : "Map view controls"}>
           <div className="flex flex-col gap-1" aria-label={locale === "th" ? "ซูม" : "Zoom"}>
             <MapControlButton onClick={() => zoomBy(0.2)} label={locale === "th" ? "ซูมเข้า" : "Zoom in"}><ZoomInIcon /></MapControlButton>
@@ -418,7 +463,7 @@ export default function RobotMap({
                 className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                 aria-label={format(copy.selectStation, { name: station.name, mode: selectionMode === "pickup" ? (locale === "th" ? "จุดรับ" : "pickup") : (locale === "th" ? "จุดหมาย" : "destination") })}
               >
-                {station.id} · {station.name}
+                {station.name}
               </button>
             ))}
           </div>
@@ -608,7 +653,24 @@ function drawStation(
   context.font = "700 12px ui-sans-serif, system-ui, sans-serif";
   context.textAlign = "center";
   context.textBaseline = "middle";
-  context.fillText(station.id, point.x, point.y + 0.5);
+  context.fillText(station.name.trim() || station.id, point.x, point.y + 0.5);
+}
+
+function nearestStation(
+  point: CanvasPoint,
+  map: OccupancyGridMap,
+  viewport: MapViewport,
+  stations: Station[],
+) {
+  return stations.map((station) => ({
+    station,
+    point: worldToCanvas(map, viewport, station.x, station.y),
+  })).filter((item): item is { station: Station; point: CanvasPoint } =>
+    Boolean(item.point)
+  ).map((item) => ({
+    ...item,
+    distance: Math.hypot(item.point.x - point.x, item.point.y - point.y),
+  })).sort((a, b) => a.distance - b.distance)[0];
 }
 
 function drawRobot(
