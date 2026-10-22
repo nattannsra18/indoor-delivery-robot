@@ -24,7 +24,7 @@ export default function TasksPage() {
   const { user } = useAuth();
   const { locale, format, t } = useLocale();
   const copy = tasksText[locale];
-  const { tasks, stationName, cancelTask, retryTask, backendOnline, taskEstimates, navigationFeedback, refreshAll } = useDeliveryApi();
+  const { tasks, fleet, stationName, cancelTask, retryTask, backendOnline, taskEstimates, navigationFeedback, refreshAll } = useDeliveryApi();
   const [filter, setFilter] = useState<(typeof filters)[number]>("ALL");
   const [selectedTaskId, setSelectedTaskId] = useState<string>();
   const [historyTaskId, setHistoryTaskId] = useState<string | null>(null);
@@ -39,6 +39,7 @@ export default function TasksPage() {
   const [pageLoading, setPageLoading] = useState(true);
   const [searchInput, setSearchInput] = useState("");
   const [query, setQuery] = useState("");
+  const [robotId, setRobotId] = useState("");
   const [remoteTask, setRemoteTask] = useState<DeliveryTask>();
   const [queueBusyId, setQueueBusyId] = useState<string>();
   const drawerRef = useRef<HTMLElement>(null);
@@ -59,12 +60,12 @@ export default function TasksPage() {
   const loadPage = useCallback(async () => {
     setPageLoading(true);
     try {
-      const page = await api.getTaskPage({status: filter === "ALL" ? undefined : filter, query, offset: pageOffset, limit: PAGE_SIZE});
+      const page = await api.getTaskPage({status: filter === "ALL" ? undefined : filter, query, robotId: user?.role === "ADMIN" ? robotId || undefined : undefined, offset: pageOffset, limit: PAGE_SIZE});
       setPageTasks(page.items); setPageTotal(page.total); setMessage("");
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : copy.loadFailed);
     } finally { setPageLoading(false); }
-  }, [copy.loadFailed, filter, pageOffset, query]);
+  }, [copy.loadFailed, filter, pageOffset, query, robotId, user?.role]);
 
   useEffect(() => { void loadPage(); }, [loadPage, taskRevision]);
 
@@ -166,7 +167,7 @@ export default function TasksPage() {
     <section className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
       <header className="border-b border-slate-100 p-4 md:p-5">
         <form onSubmit={submitSearch} className="mb-4 flex gap-2"><label className="sr-only" htmlFor="task-search">{copy.search}</label><input id="task-search" value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder={copy.searchPlaceholder} className="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"/><button type="submit" className="min-h-11 rounded-xl bg-slate-900 px-4 text-sm font-bold text-white">{copy.search}</button></form>
-        <div className="flex gap-2 overflow-x-auto pb-1" aria-label={copy.statusFilter}>{filters.map((item) => <button key={item} type="button" onClick={() => changeFilter(item)} aria-pressed={filter === item} className={`min-h-10 shrink-0 rounded-xl px-3 py-2 text-xs font-bold transition ${filter === item ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{item === "ALL" ? t("allActions") : t("taskStatus")[item]}</button>)}</div>
+        <div className="flex flex-wrap items-center gap-2"><div className="flex gap-2 overflow-x-auto pb-1" aria-label={copy.statusFilter}>{filters.map((item) => <button key={item} type="button" onClick={() => changeFilter(item)} aria-pressed={filter === item} className={`min-h-10 shrink-0 rounded-xl px-3 py-2 text-xs font-bold transition ${filter === item ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{item === "ALL" ? t("allActions") : t("taskStatus")[item]}</button>)}</div>{user?.role === "ADMIN" && <select aria-label="Filter tasks by robot" value={robotId} onChange={(event) => { setRobotId(event.target.value); setPageOffset(0); }} className="min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700"><option value="">All robots</option>{fleet.map((robot) => <option key={robot.id} value={robot.id}>{robot.name}</option>)}</select>}</div>
         {message && <p aria-live="polite" className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">{message}</p>}
       </header>
       <div className="hidden overflow-x-auto md:block">
@@ -181,7 +182,7 @@ export default function TasksPage() {
       {pageTotal > 0 && <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-4"><p className="text-sm text-slate-500">{copy.results.replace("{start}", String(pageOffset + 1)).replace("{end}", String(Math.min(pageOffset + PAGE_SIZE, pageTotal))).replace("{total}", String(pageTotal))}</p><div className="flex gap-2"><button type="button" disabled={pageOffset === 0 || pageLoading} onClick={() => setPageOffset(Math.max(0, pageOffset - PAGE_SIZE))} className="min-h-10 rounded-lg border border-slate-200 px-3 text-sm font-bold disabled:opacity-40">{copy.previous}</button><button type="button" disabled={pageOffset + PAGE_SIZE >= pageTotal || pageLoading} onClick={() => setPageOffset(pageOffset + PAGE_SIZE)} className="min-h-10 rounded-lg border border-slate-200 px-3 text-sm font-bold disabled:opacity-40">{copy.next}</button></div></footer>}
     </section>
 
-    {selectedTask && <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/35 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDrawer(); }}><aside ref={drawerRef} role="dialog" aria-modal="true" aria-labelledby="task-details-title" aria-describedby={drawerMessage ? "task-drawer-feedback" : undefined} className="h-full w-full max-w-lg overflow-y-auto bg-white p-5 shadow-2xl sm:p-6">
+    {selectedTask && <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/35 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDrawer(); }}><aside ref={drawerRef} role="dialog" aria-modal="true" aria-labelledby="task-details-title" aria-describedby={drawerMessage ? "task-drawer-feedback" : undefined} className="max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl sm:p-6">
       <header className="flex items-start justify-between gap-4 border-b border-slate-100 pb-5"><div><p className="text-xs font-bold uppercase tracking-[0.15em] text-blue-600">{copy.deliveryDetails}</p><h2 id="task-details-title" className="mt-1 text-2xl font-bold text-slate-950">{selectedTask.id}</h2><p className="mt-1 text-sm text-slate-500">{stationName(selectedTask.pickupStationId)} → {stationName(selectedTask.destinationStationId)}</p></div><button ref={closeButtonRef} type="button" onClick={closeDrawer} aria-label={copy.closeDetails} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-xl text-slate-600">×</button></header>
       {drawerMessage && <p id="task-drawer-feedback" role="status" aria-live="polite" className="mt-4 rounded-xl bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">{drawerMessage}</p>}
       <div className="mt-5 flex flex-wrap items-center gap-2"><StatusBadge status={selectedTask.status} /><span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{copy.owner}: {selectedTask.ownerUsername ?? (selectedTask.ownerId ? copy.account : copy.system)}</span></div>

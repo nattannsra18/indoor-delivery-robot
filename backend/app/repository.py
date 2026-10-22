@@ -147,6 +147,7 @@ class DeliveryRepository:
         self,
         task_status: TaskStatus | None,
         owner_id: str | None,
+        robot_id: str | None,
         query: str | None,
         offset: int,
         limit: int,
@@ -156,6 +157,8 @@ class DeliveryRepository:
             filters.append(DeliveryTaskORM.status == task_status)
         if owner_id is not None:
             filters.append(DeliveryTaskORM.owner_id == owner_id)
+        if robot_id is not None:
+            filters.append(DeliveryTaskORM.robot_id == robot_id)
         normalized = (query or "").strip()
         search_filter = None
         if normalized:

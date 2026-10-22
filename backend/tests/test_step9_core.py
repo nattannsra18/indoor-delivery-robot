@@ -323,10 +323,14 @@ def test_role_task_listing_uses_server_enforced_ownership():
         assert alice_ids == {alice_task.id}
         assert {alice_task.id, bob_task.id, legacy_task.id} <= admin_ids
 
-        alice_page, alice_total = service.list_tasks_page(None, alice.id, alice_task.id, 0, 20)
+        alice_page, alice_total = service.list_tasks_page(
+            None, alice.id, None, alice_task.id, 0, 20
+        )
         assert [item.id for item in alice_page] == [alice_task.id]
         assert alice_total == 1
-        bob_search, bob_total = service.list_tasks_page(None, None, "bob", 0, 1)
+        bob_search, bob_total = service.list_tasks_page(
+            None, None, None, "bob", 0, 1
+        )
         assert [item.id for item in bob_search] == [bob_task.id]
         assert bob_total == 1
 

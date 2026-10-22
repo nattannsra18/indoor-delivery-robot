@@ -30,6 +30,7 @@ const ADMIN_NAVIGATION: NavigationItem[] = [
   { href: "/", label: "Dashboard", icon: "▦" },
   { href: "/delivery", label: "Create Delivery", icon: "＋" },
   { href: "/tasks", label: "All Tasks", icon: "≡" },
+  { href: "/manual", label: "Manual Control", icon: "⌘" },
   { href: "/maps", label: "Map Management", icon: "◇" },
   { href: "/stations", label: "Station Management", icon: "⌖" },
   { href: "/robots", label: "Robot Registry", icon: "◉" },
@@ -39,7 +40,7 @@ const ADMIN_NAVIGATION: NavigationItem[] = [
   { href: "/audit", label: "Audit Log", icon: "▤" }
 ];
 
-const ADMIN_ONLY_ROUTES = ["/maps", "/stations", "/robots", "/diagnostics", "/users", "/audit"];
+const ADMIN_ONLY_ROUTES = ["/maps", "/stations", "/robots", "/diagnostics", "/users", "/audit", "/manual"];
 
 export function navigationForRole(
   role: UserIdentity["role"]

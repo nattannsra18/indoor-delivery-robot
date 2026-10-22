@@ -120,6 +120,7 @@ def list_tasks(
 @router.get("/page", response_model=DeliveryTaskPage)
 def list_tasks_page(
     task_status: TaskStatus | None = Query(default=None, alias="status"),
+    robot_id: str | None = Query(default=None, max_length=40),
     query: str | None = Query(default=None, max_length=100),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
@@ -129,6 +130,7 @@ def list_tasks_page(
     items, total = service.list_tasks_page(
         task_status,
         None if user.role == UserRole.ADMIN else user.id,
+        robot_id if user.role == UserRole.ADMIN else None,
         query,
         offset,
         limit,

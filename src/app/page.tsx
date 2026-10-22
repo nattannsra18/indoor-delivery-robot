@@ -7,7 +7,6 @@ import EmergencyStopControl from "@/components/EmergencyStopControl";
 import FleetOverview from "@/components/FleetOverview";
 import LiveCamera from "@/components/LiveCamera";
 import NavigationMetrics from "@/components/NavigationMetrics";
-import RobotOperationsControl from "@/components/RobotOperationsControl";
 import StatusBadge from "@/components/StatusBadge";
 import UserDashboard from "@/components/UserDashboard";
 import WorkflowControls from "@/components/WorkflowControls";
@@ -37,7 +36,7 @@ export default function DashboardPage() {
   const ui = adminUiText[locale];
   const operations = dashboardOperationsText[locale];
   const now = useCurrentTime();
-  const { occupancyMap, navigationFeedback, diagnostics, robot, fleet, selectedRobotId, selectRobot, activeTask, tasks, stationName, backendOnline, emergencyStop } = useDeliveryApi();
+  const { occupancyMap, navigationFeedback, diagnostics, robot, fleet, selectedRobotId, selectRobot, activeTask, tasks, stationName, backendOnline, emergencyStop, cancelTask } = useDeliveryApi();
   const counts = taskStatusCounts(tasks);
   const sensorStatuses = diagnostics?.statuses.filter((item) => !isNav2Diagnostic(item)) ?? [];
   const sensorDiagnostics: RobotDiagnostics | undefined = diagnostics ? { ...diagnostics, overallLevel: diagnosticOverallLevel(sensorStatuses), statuses: sensorStatuses } : undefined;
@@ -77,12 +76,10 @@ export default function DashboardPage() {
         <SelectedRobotPanel robot={robot} robotConnected={robotConnected} activeTask={activeTask} activeMapId={selectedFleetRobot?.activeMapId} localizationDiagnostic={localizationDiagnostic} nav2Diagnostic={nav2Diagnostic} locale={locale} copy={copy} ui={ui} operations={operations} taskStatusLabel={activeTask ? t("taskStatus")[activeTask.status] : undefined} />
         <CompactDiagnostics diagnostics={sensorDiagnostics} fresh={diagnosticsFresh} locale={locale} operations={operations} />
         <ActiveIssues issues={issues} operations={operations} />
-        <RobotOperationsControl compact defaultExpanded={blockingIssues.length > 0} />
       </aside>
       <aside className="min-w-0 space-y-4" aria-label={ui.controlAndSafety}>
         <LiveCamera key={`${robot.id}:${robotConnected}`} enabled={robotConnected} robotId={robot.id} />
-        <MissionPanel activeTask={activeTask} missionProgress={missionProgress} navigationFeedback={navigationFeedback} stationName={stationName} ui={ui} operations={operations} readyForDelivery={readyForDelivery} />
-        <RobotOperationsControl mode="admin" collapsible />
+        <MissionPanel activeTask={activeTask} missionProgress={missionProgress} navigationFeedback={navigationFeedback} stationName={stationName} ui={ui} operations={operations} readyForDelivery={readyForDelivery} backendOnline={backendOnline} onStop={cancelTask} />
       </aside>
     </section>
 
@@ -109,11 +106,12 @@ function SelectedRobotPanel({ robot, robotConnected, activeTask, activeMapId, lo
     <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="font-bold text-slate-950">{operations.selectedRobot}</h2><p className="mt-1 truncate font-mono text-[10px] text-slate-400" title={robot.id}>{robot.id}</p></div><StatePill state={robotConnected ? "active" : "inactive"} label={connectionLabel} /></div>
     <div className="mt-4 flex items-center gap-3"><span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-blue-950"><span className="h-full w-full bg-center bg-no-repeat" style={{ backgroundImage: "url('/auth/delivery-robot-mark.png')", backgroundSize: "290% auto" }} /></span><div className="min-w-0"><h3 className="truncate font-bold text-slate-950">{robot.name}</h3><p className="mt-1 text-xs text-slate-500">{robotStateLabel(robot.state, locale)}</p></div></div>
     <dl className="mt-4 grid grid-cols-2 gap-2"><Detail label={ui.robotPosition} value={`${robot.x.toFixed(2)}, ${robot.y.toFixed(2)} m`} /><Detail label={operations.battery} value={robot.batterySource === "UNAVAILABLE" ? "—" : robot.batterySource === "SIMULATED" ? `${robot.battery}% (${ui.simulatedCharge})` : `${robot.battery}%`} /><Detail label={operations.currentMap} value={activeMapId ?? ui.fleetUnknown} /><Detail label={copy.mission} value={activeTask?.id ?? ui.noMission} /><Detail label={operations.localization} value={localizationDiagnostic?.level === "OK" ? ui.ready : localizationDiagnostic?.message ?? operations.waiting} /><Detail label={operations.navigation} value={nav2Diagnostic?.message ?? taskStatusLabel ?? ui.missionStandby} /></dl>
+    <dl className="mt-3 grid grid-cols-3 gap-2"><Detail label="ODROID CPU" value={robot.systemMetrics ? `${robot.systemMetrics.cpuPercent.toFixed(0)}%` : "—"} /><Detail label="ODROID RAM" value={robot.systemMetrics ? `${robot.systemMetrics.memoryPercent.toFixed(0)}%` : "—"} /><Detail label="ODROID Temp" value={robot.systemMetrics ? `${robot.systemMetrics.temperatureC.toFixed(1)}°C` : "—"} /></dl>
     <p className="mt-3 text-xs text-slate-500">{ui.lastSeen}: {formatDate(robot.lastSeen, locale)}</p>
   </section>;
 }
 
-function MissionPanel({ activeTask, missionProgress, navigationFeedback, stationName, ui, operations, readyForDelivery }: {
+function MissionPanel({ activeTask, missionProgress, navigationFeedback, stationName, ui, operations, readyForDelivery, backendOnline, onStop }: {
   activeTask: ReturnType<typeof useDeliveryApi>["activeTask"];
   missionProgress: number;
   navigationFeedback: ReturnType<typeof useDeliveryApi>["navigationFeedback"];
@@ -121,12 +119,23 @@ function MissionPanel({ activeTask, missionProgress, navigationFeedback, station
   ui: (typeof adminUiText)[keyof typeof adminUiText];
   operations: (typeof dashboardOperationsText)[keyof typeof dashboardOperationsText];
   readyForDelivery: boolean;
+  backendOnline: boolean;
+  onStop: (taskId: string) => Promise<void>;
 }) {
+  const [stopping, setStopping] = useState(false);
+  const [stopError, setStopError] = useState("");
+  async function stopMission() {
+    if (!activeTask || !window.confirm("Stop and cancel the current mission?")) return;
+    setStopping(true); setStopError("");
+    try { await onStop(activeTask.id); }
+    catch (reason) { setStopError(reason instanceof Error ? reason.message : "Unable to stop the mission."); }
+    finally { setStopping(false); }
+  }
   return <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
     <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-600">{ui.currentMission}</p>
     {activeTask ? <><div className="mt-2 flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="truncate font-bold text-slate-950">{activeTask.id}</h2><p className="mt-1 truncate text-xs text-slate-500" title={`${stationName(activeTask.pickupStationId)} → ${stationName(activeTask.destinationStationId)}`}>{stationName(activeTask.pickupStationId)} → {stationName(activeTask.destinationStationId)}</p></div><StatusBadge status={activeTask.status} /></div><div className="mt-3 flex items-center gap-3"><div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600 transition-[width]" style={{ width: `${missionProgress}%` }} /></div><span className="text-xs font-bold text-slate-500">{Math.round(missionProgress)}%</span></div></> : <div className="mt-2 rounded-xl bg-slate-50 p-4"><h2 className="font-bold text-slate-950">{ui.noMission}</h2><p className="mt-1 text-xs leading-5 text-slate-500">{operations.noMissionHelp}</p><Link href={readyForDelivery ? "/delivery" : "/maps?view=localization"} className="mt-3 inline-flex min-h-10 items-center rounded-xl bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">{readyForDelivery ? operations.createDelivery : operations.setRobotPosition}</Link></div>}
     <div className="mt-3"><NavigationMetrics compact layout="rail" feedback={navigationFeedback} taskId={activeTask?.id} status={activeTask?.status} /></div>
-    {activeTask && <WorkflowControls compact />}
+    {activeTask && <><WorkflowControls compact /><button type="button" disabled={!backendOnline || stopping} onClick={() => void stopMission()} className="mt-3 min-h-10 w-full rounded-xl border border-rose-200 px-3 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50">{stopping ? "Stopping…" : "Stop mission"}</button>{stopError && <p role="alert" className="mt-2 text-xs text-rose-700">{stopError}</p>}</>}
   </section>;
 }
 

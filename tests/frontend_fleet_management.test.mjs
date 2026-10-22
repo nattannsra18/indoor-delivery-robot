@@ -67,6 +67,7 @@ test("dashboard telemetry cannot overwrite a different selected robot", () => {
   assert.match(context, /workflow\.robot_id !== activeRobotId/);
   assert.match(context, /nextDiagnostics\.robotId === activeRobotId/);
   assert.match(context, /update\.robot_id === activeRobotId/);
+  assert.match(context, /systemMetrics: current\.systemMetrics/);
 });
 
 test("active navigation keeps the latest Nav2 plan until a stage change or clear event", () => {

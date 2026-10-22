@@ -577,6 +577,7 @@ class RobotTelemetry(BaseModel):
         max_length=100,
     )
     timestamp: Optional[str] = None
+    system: Optional[dict[str, float]] = None
 
 
 DiagnosticLevel = Literal[

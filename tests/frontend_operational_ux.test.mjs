@@ -14,7 +14,7 @@ test("admin account approval is available only through the protected user route"
   assert.match(api, /\/api\/auth\/accounts\/\$\{userId\}\/approve/);
   assert.match(
     roles,
-    /ADMIN_ONLY_ROUTES = \["\/maps", "\/stations", "\/robots", "\/diagnostics", "\/users", "\/audit"\]/
+    /ADMIN_ONLY_ROUTES = \["\/maps", "\/stations", "\/robots", "\/diagnostics", "\/users", "\/audit", "\/manual"\]/
   );
 });
 
