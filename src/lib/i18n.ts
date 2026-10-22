@@ -315,6 +315,7 @@ export function emergencyStateLabel(state: string, locale: Locale) {
 const navigationLabels: Record<Locale, Record<string, string>> = {
   en: {
     "/delivery": "Create Delivery",
+    "/manual": "Manual Control",
     "/stations": "Station Management",
     "/maps": "Map Management",
     "/users": "Account Requests",
@@ -323,6 +324,7 @@ const navigationLabels: Record<Locale, Record<string, string>> = {
   },
   th: {
     "/delivery": "สร้างงานจัดส่ง",
+    "/manual": "ควบคุมด้วยตนเอง",
     "/stations": "จัดการสถานี",
     "/maps": "จัดการแผนที่",
     "/users": "คำขอสร้างบัญชี",

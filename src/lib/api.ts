@@ -1006,6 +1006,12 @@ export async function driveMappingRobot(linearX: number, angularZ: number, robot
     method: "POST", body: JSON.stringify({ linear_x: linearX, angular_z: angularZ }),
   });
 }
+
+export async function driveRobotManually(linearX: number, angularZ: number, robotId?: string): Promise<void> {
+  await request(`/api/mapping/manual-teleop${robotQuery(robotId)}`, {
+    method: "POST", body: JSON.stringify({ linear_x: linearX, angular_z: angularZ }),
+  });
+}
 export async function getTasks(): Promise<DeliveryTask[]> {
   const tasks = await request<ApiDeliveryTask[]>("/api/tasks");
   return tasks.map(toTask);
@@ -1015,13 +1021,14 @@ export async function getTask(taskId: string): Promise<DeliveryTask> {
   return toTask(await request<ApiDeliveryTask>(`/api/tasks/${encodeURIComponent(taskId)}`));
 }
 
-export async function getTaskPage(options: {status?: TaskStatus; query?: string; offset?: number; limit?: number} = {}): Promise<DeliveryTaskPage> {
+export async function getTaskPage(options: {status?: TaskStatus; query?: string; robotId?: string; offset?: number; limit?: number} = {}): Promise<DeliveryTaskPage> {
   const parameters = new URLSearchParams({
     offset: String(options.offset ?? 0),
     limit: String(options.limit ?? 20),
   });
   if (options.status) parameters.set("status", options.status);
   if (options.query?.trim()) parameters.set("query", options.query.trim());
+  if (options.robotId) parameters.set("robot_id", options.robotId);
   const page = await request<{items: ApiDeliveryTask[]; total: number; offset: number; limit: number}>(`/api/tasks/page?${parameters}`);
   return {...page, items: page.items.map(toTask)};
 }

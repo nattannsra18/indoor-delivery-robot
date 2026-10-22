@@ -167,3 +167,23 @@ async def mapping_teleop(
         "linear_x": payload.linear_x, "angular_z": payload.angular_z,
     })
     return {"accepted": True}
+
+
+@router.post("/manual-teleop", status_code=status.HTTP_202_ACCEPTED)
+async def manual_teleop(
+    payload: MappingTeleopRequest,
+    robot_id: str | None = None,
+    db: Session = Depends(get_db, scope="function"),
+    _: UserORM = Depends(require_admin),
+) -> dict[str, bool]:
+    """Dead-man web teleop is available only while the robot has no work."""
+    robot_id = robot_id or DeliveryService(db).primary_robot().id
+    _require_robot_ready(db, robot_id)
+    if mapping_store.is_active(robot_id):
+        raise HTTPException(status_code=409, detail="Manual driving is unavailable while mapping")
+    db.rollback()
+    await _deliver(robot_id, {
+        "type": "manual_teleop", "robot_id": robot_id,
+        "linear_x": payload.linear_x, "angular_z": payload.angular_z,
+    })
+    return {"accepted": True}

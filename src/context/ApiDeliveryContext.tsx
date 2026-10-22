@@ -378,7 +378,9 @@ export function ApiDeliveryProvider({
       }
       setGlobalQueuedCount(overview.globalQueuedCount);
       setRobotAvailableSeconds(overview.robotAvailableSeconds);
-      setRobot(overview.robot);
+      setRobot((current) => overview.robot.id === current.id
+        ? { ...overview.robot, systemMetrics: current.systemMetrics }
+        : overview.robot);
       setStations(stationData);
       setTasks(taskData);
       setEmergencyStop(stopState);
@@ -562,7 +564,7 @@ export function ApiDeliveryProvider({
           } else if (message.type === "robot_telemetry") {
             const telemetryMessage = message as {
               robot_id?: unknown;
-              data?: { x?: unknown; y?: unknown; yaw?: unknown; last_seen?: unknown };
+              data?: { x?: unknown; y?: unknown; yaw?: unknown; last_seen?: unknown; system?: { cpu_percent?: unknown; memory_percent?: unknown; temperature_c?: unknown } };
             };
             const data = telemetryMessage.data;
             if (data && typeof data.x === "number" && typeof data.y === "number" && typeof data.yaw === "number") {
@@ -575,6 +577,7 @@ export function ApiDeliveryProvider({
                   y: data.y as number,
                   yaw: data.yaw as number,
                   lastSeen: typeof data.last_seen === "string" ? data.last_seen : current.lastSeen,
+                  systemMetrics: typeof data.system?.cpu_percent === "number" && typeof data.system?.memory_percent === "number" && typeof data.system?.temperature_c === "number" ? { cpuPercent: data.system.cpu_percent, memoryPercent: data.system.memory_percent, temperatureC: data.system.temperature_c } : current.systemMetrics,
                 }) : current);
             }
           } else if (message.type === "map_updated") {

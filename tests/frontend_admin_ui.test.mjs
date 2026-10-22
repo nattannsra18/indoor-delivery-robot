@@ -9,6 +9,7 @@ test("shared sidebar uses the supplied robot mark for both roles", () => {
   assert.match(source, /delivery-robot-mark\.png/);
   assert.doesNotMatch(source, />R<\/div>/);
   assert.match(source, /user\?\.role === "ADMIN"/);
+  assert.match(source, /\["\/", "\/delivery", "\/tasks", "\/manual"\]/);
 });
 
 test("desktop sidebar collapses accessibly and remembers the preference", () => {
@@ -58,11 +59,8 @@ test("admin dashboard consolidates robot profile and navigation without duplicat
     source.lastIndexOf("<RecentActivity") > source.indexOf("<FleetOverview"),
     "Recent delivery activity should remain the final dashboard card"
   );
-  assert.ok(
-    source.indexOf("<CompactDiagnostics") < source.indexOf("<ActiveIssues")
-      && source.indexOf("<ActiveIssues") < source.indexOf("<RobotOperationsControl compact"),
-    "Sensor health, active issues and navigation recovery should remain in that order"
-  );
+  assert.ok(source.indexOf("<CompactDiagnostics") < source.indexOf("<ActiveIssues"));
+  assert.doesNotMatch(source, /<RobotOperationsControl/);
   assert.doesNotMatch(source, /ROBOT_HEARTBEAT_FRESH_MS/);
   assert.match(source, /label="Robot Agent" state=\{robotConnected \? "active" : "inactive"\}/);
 });
@@ -76,12 +74,11 @@ test("diagnostics page owns system connections and detailed ROS diagnostics", ()
   assert.match(source, /copy\.integrationHealth/);
 });
 
-test("admin robot controls separate bounded recovery from destructive actions", () => {
+test("admin dashboard keeps recovery and destructive controls off the operations view", () => {
   const dashboard = read("src/app/page.tsx");
   const deliveryMap = read("src/components/DashboardDeliveryMap.tsx");
   const controls = read("src/components/RobotOperationsControl.tsx");
-  assert.match(dashboard, /<RobotOperationsControl/);
-  assert.match(dashboard, /<RobotOperationsControl mode="admin"/);
+  assert.doesNotMatch(dashboard, /<RobotOperationsControl/);
   assert.match(dashboard, /<RobotSelectorCard/);
   assert.match(deliveryMap, /viewportSize="dashboard"/);
   assert.match(controls, /"navigation\.recover"/);
@@ -115,7 +112,7 @@ test("alert center is an accessible operational dialog with Escape support", () 
   assert.match(source, /event\.key !== "Tab"/);
 });
 
-test("task drawer traps focus, locks scrolling and supports notification deep links", () => {
+test("task modal traps focus, locks scrolling and supports notification deep links", () => {
   const source = read("src/app/tasks/page.tsx");
   assert.match(source, /document\.body\.style\.overflow = "hidden"/);
   assert.match(source, /event\.key !== "Tab"/);
@@ -123,6 +120,8 @@ test("task drawer traps focus, locks scrolling and supports notification deep li
   assert.match(source, /URLSearchParams\(window\.location\.search\)/);
   assert.match(source, /getTaskPage/);
   assert.match(source, /task-drawer-feedback/);
+  assert.match(source, /grid place-items-center/);
+  assert.match(source, /robotId/);
 });
 
 test("notification filters consume backend semantics and deep-link to a task", () => {

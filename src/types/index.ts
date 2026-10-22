@@ -212,6 +212,7 @@ export interface Robot {
   yaw: number;
   currentTaskId?: string;
   lastSeen: string;
+  systemMetrics?: { cpuPercent: number; memoryPercent: number; temperatureC: number };
 }
 
 export type FleetUnavailableReason =

@@ -696,6 +696,7 @@ async def robot_websocket(
                             "timestamp": (
                                 telemetry.timestamp
                             ),
+                            "system": telemetry.system,
                         },
                         "server_time": (
                             current_utc_time()
@@ -711,6 +712,7 @@ async def robot_websocket(
                             "y": updated_robot.y,
                             "yaw": updated_robot.yaw,
                             "last_seen": updated_robot.last_seen,
+                            "system": telemetry.system,
                         },
                     }
                 )

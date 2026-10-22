@@ -27,6 +27,7 @@ test("ADMIN navigation exposes operational and system destinations", () => {
     "Dashboard",
     "Create Delivery",
     "All Tasks",
+    "Manual Control",
     "Map Management",
     "Station Management",
     "Robot Registry",

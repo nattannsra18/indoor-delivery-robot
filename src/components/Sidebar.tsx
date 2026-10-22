@@ -21,7 +21,7 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [unread, setUnread] = useState(0);
   const sections = user?.role === "ADMIN" ? [
-    { label: locale === "th" ? "การปฏิบัติงาน" : "OPERATIONS", items: navItems.filter((item) => ["/", "/delivery", "/tasks"].includes(item.href)) },
+    { label: locale === "th" ? "การปฏิบัติงาน" : "OPERATIONS", items: navItems.filter((item) => ["/", "/delivery", "/tasks", "/manual"].includes(item.href)) },
     { label: locale === "th" ? "ฝูงหุ่นยนต์" : "FLEET", items: navItems.filter((item) => ["/maps", "/stations", "/robots"].includes(item.href)) },
     { label: locale === "th" ? "ระบบ" : "SYSTEM", items: navItems.filter((item) => ["/diagnostics", "/users", "/notifications", "/audit"].includes(item.href)) },
   ] : [{ label: locale === "th" ? "การปฏิบัติงาน" : "OPERATIONS", items: navItems }];
@@ -92,6 +92,7 @@ function NavIcon({ href }: { href: string }) {
   if (href === "/") return <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" /></svg>;
   if (href === "/delivery") return <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 5v14M5 12h14" /></svg>;
   if (href === "/tasks") return <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" strokeLinecap="round" /></svg>;
+  if (href === "/manual") return <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v6M9 6h6M12 15v6M9 18h6M3 12h6M6 9v6M15 12h6M18 9v6" strokeLinecap="round" /></svg>;
   if (href === "/stations") return <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 21s6-5.1 6-11a6 6 0 1 0-12 0c0 5.9 6 11 6 11Z"/><circle cx="12" cy="10" r="2"/></svg>;
   if (href === "/maps") return <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m3 6 5-3 8 3 5-3v15l-5 3-8-3-5 3V6Z"/><path d="M8 3v15M16 6v15"/></svg>;
   if (href === "/robots") return <svg className={common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M9 12h.01M15 12h.01M9 16h6M12 7V4M9 4h6" strokeLinecap="round"/></svg>;

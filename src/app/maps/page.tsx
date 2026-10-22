@@ -58,9 +58,11 @@ export default function MapsPage() {
   const [floor, setFloor] = useState("");
   const [areaDescription, setAreaDescription] = useState("");
   const [newMapId, setNewMapId] = useState("");
+  const [inventoryMapId, setInventoryMapId] = useState("");
   const catalogRequestRef = useRef(0);
   const selectedRobotIdRef = useRef(selectedRobotId);
   const readyCount = useMemo(() => catalog?.maps.filter((map) => map.available).length ?? 0, [catalog]);
+  const inventoryMap = useMemo(() => catalog?.maps.find((map) => map.id === inventoryMapId) ?? catalog?.maps.find((map) => map.active) ?? catalog?.maps[0], [catalog, inventoryMapId]);
   const activeMapStations = useMemo(
     () => catalog?.activeMapId
       ? stations.filter((station) => station.mapId === catalog.activeMapId)
@@ -231,7 +233,8 @@ export default function MapsPage() {
       </section>
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <header><h2 className="font-bold text-slate-950">{copy.inventory}</h2><p className="mt-1 text-sm leading-6 text-slate-500">{copy.inventoryHelp}</p></header>
-        {loading ? <div className="mt-5 h-40 animate-pulse rounded-2xl bg-slate-100" /> : !catalog?.maps.length ? <p className="mt-5 rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">{copy.empty}</p> : <ul className="mt-5 space-y-3">{catalog.maps.map((map) => <li key={map.id} className={`rounded-2xl border p-4 ${map.active ? "border-blue-200 bg-blue-50/60" : "border-slate-200"}`}>
+        {loading ? <div className="mt-5 h-40 animate-pulse rounded-2xl bg-slate-100" /> : !catalog?.maps.length || !inventoryMap ? <p className="mt-5 rounded-2xl bg-slate-50 p-5 text-sm text-slate-500">{copy.empty}</p> : <><label className="mt-5 block text-xs font-bold uppercase tracking-wide text-slate-500" htmlFor="map-inventory-select">{copy.inventory}</label><select id="map-inventory-select" value={inventoryMap.id} onChange={(event) => setInventoryMapId(event.target.value)} className="mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800">{catalog.maps.map((map) => <option key={map.id} value={map.id}>{map.name} {map.active ? `(${copy.active})` : ""}</option>)}</select><div className={`mt-3 rounded-2xl border p-4 ${inventoryMap.active ? "border-blue-200 bg-blue-50/60" : "border-slate-200"}`}>
+          {(() => { const map = inventoryMap; return <>
           <div className="flex items-start justify-between gap-3"><div><p className="font-bold text-slate-950">{map.name}</p><p className="mt-1 font-mono text-xs text-slate-500">{map.id}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${map.active ? "bg-blue-600 text-white" : map.available ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>{map.active ? copy.active : map.available ? copy.ready : copy.unavailable}</span></div>
           <dl className="mt-4 grid grid-cols-2 gap-3 text-xs"><div><dt className="text-slate-400">{copy.resolution}</dt><dd className="mt-1 font-semibold text-slate-700">{map.resolution ? `${map.resolution} m/cell` : "—"}</dd></div><div><dt className="text-slate-400">{copy.size}</dt><dd className="mt-1 font-semibold text-slate-700">{fileSize(map.sizeBytes, locale)}</dd></div><div className="col-span-2"><dt className="text-slate-400">{copy.files}</dt><dd className="mt-1 break-all font-mono text-slate-600">{map.yamlFile}{map.imageFile ? ` · ${map.imageFile}` : ""}</dd></div>{map.modifiedAt && <div className="col-span-2"><dt className="text-slate-400">{copy.updated}</dt><dd className="mt-1 text-slate-600">{formatDate(map.modifiedAt, locale)}</dd></div>}</dl>
           {(map.building || map.floor || map.areaDescription) ? <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600"><p className="font-semibold text-slate-800">{[map.building, map.floor].filter(Boolean).join(" · ")}</p>{map.areaDescription && <p className="mt-1">{map.areaDescription}</p>}</div> : <p className="mt-3 text-xs text-slate-400">{actions.noDetails}</p>}
@@ -239,7 +242,7 @@ export default function MapsPage() {
           {!map.active && <button type="button" disabled={!map.available || !catalog.robotOnline || Boolean(switchingMapId)} onClick={() => setSelectedMap(map)} className="mt-4 min-h-10 w-full rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400">{switchingMapId === map.id ? copy.switching : copy.switchMap}</button>}
           <div className="mt-2 grid grid-cols-3 gap-2"><button type="button" disabled={!catalog.robotOnline || operationBusy} onClick={() => openManagement("metadata", map)} className="min-h-10 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 disabled:opacity-50">{actions.editDetails}</button><button type="button" disabled={map.active || !catalog.robotOnline || operationBusy} onClick={() => openManagement("rename", map)} className="min-h-10 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 disabled:opacity-50">{actions.renameMap}</button><button type="button" disabled={map.active || !catalog.robotOnline || operationBusy} onClick={() => openManagement("delete", map)} className="min-h-10 rounded-xl border border-rose-200 px-2 text-xs font-bold text-rose-700 disabled:opacity-50">{actions.deleteMap}</button></div>
           {map.active && <p className="mt-2 text-xs text-slate-400">{actions.activeProtected}</p>}
-        </li>)}</ul>}
+          </>; })()}</div></>}
         {catalog && <p className="mt-4 text-xs text-slate-400">{copy.received}: {formatDate(catalog.receivedAt, locale)}</p>}
         {catalog && !catalog.robotOnline && <p className="mt-3 text-xs text-amber-700">{copy.idleRequired}</p>}
       </section>

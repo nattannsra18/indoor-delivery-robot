@@ -665,11 +665,12 @@ class DeliveryService:
         self,
         task_status: TaskStatus | None,
         owner_id: str | None,
+        robot_id: str | None,
         query: str | None,
         offset: int,
         limit: int,
     ) -> tuple[list[DeliveryTaskORM], int]:
-        return self.repo.list_tasks_page(task_status, owner_id, query, offset, limit)
+        return self.repo.list_tasks_page(task_status, owner_id, robot_id, query, offset, limit)
 
     def get_task(self, task_id: str) -> DeliveryTaskORM:
         return self._task_or_404(task_id)
