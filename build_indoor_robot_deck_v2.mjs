@@ -91,11 +91,6 @@ function lineText(slide, n, heading, detail, x, y, w, accent = C.blue) {
   text(slide, detail, x + 54, y + 34, w - 54, 45, 14, C.muted);
 }
 
-function chip(slide, label, x, y, w, fill = C.pale, color = C.navy) {
-  rect(slide, x, y, w, 38, fill, 19);
-  text(slide, label, x + 10, y + 7, w - 20, 24, 13, color, true, "center");
-}
-
 function arrow(slide, x1, y1, x2, y2, color = C.cyan, width = 4) {
   const reverseX = x2 < x1;
   const reverseY = y2 < y1;
