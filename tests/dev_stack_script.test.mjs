@@ -40,6 +40,15 @@ test("ROS Bridge starts from the simulator robot profile", () => {
   assert.match(source, /turtlebot3_waffle_sim\.yaml/);
 });
 
+test("Gazebo RGB camera uses the simulator identity and compressed ROS topic", () => {
+  const camera = source.match(/run_camera\(\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.match(camera, /SIM-0001\.json/);
+  assert.match(camera, /CAMERA_ROS_COMPRESSED_TOPIC="\/camera\/color\/image_raw\/compressed"/);
+  assert.match(camera, /amr_web_bridge\.camera_relay/);
+  assert.match(source, /configure_window[^\n]+camera/);
+  assert.match(source, /__camera\) run_camera/);
+});
+
 test("stop is scoped to the owned tmux session", () => {
   assert.match(source, /send-keys[^\n]+C-c/);
   assert.match(source, /kill-session -t/);
@@ -83,7 +92,7 @@ test("Gazebo starts server-first and waits before opening its GUI", () => {
 test("Gazebo GUI is an owned service with logs and duplicate-process safeguards", () => {
   assert.match(source, /configure_window[^\n]+gazebo_gui/);
   assert.match(source, /__gazebo_gui\) run_gazebo_gui/);
-  assert.match(source, /for service in fastapi frontend gazebo gazebo_gui bridge/);
+  assert.match(source, /for service in fastapi frontend gazebo gazebo_gui bridge camera/);
   assert.match(source, /\[g\]z sim -g/);
   assert.match(source, /require_command gz/);
   assert.doesNotMatch(source, /\bpkill\b/);
