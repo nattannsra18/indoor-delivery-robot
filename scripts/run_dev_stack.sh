@@ -8,6 +8,7 @@ readonly BACKEND_PYTHON="${BACKEND_DIR}/.venv/bin/python"
 readonly BACKEND_ENV_FILE="${BACKEND_DIR}/.env"
 readonly BACKEND_BIND_HOST="${AMR_BACKEND_BIND_HOST:-0.0.0.0}"
 readonly ROS_WORKSPACE="${AMR_ROS_WORKSPACE:-$(dirname "${PROJECT_ROOT}")/amr-navigation-vision-diagnostics}"
+readonly ROBOT_REPOSITORY="${AMR_ROBOT_REPOSITORY:-$(dirname "${PROJECT_ROOT}")/amr-base-driver}"
 readonly SESSION_NAME="${AMR_DEV_SESSION:-indoor-delivery-dev}"
 
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -113,6 +114,17 @@ run_bridge() {
     -p emergency_stop_zero_rate:=10.0
 }
 
+run_camera() {
+  cd "${ROS_WORKSPACE}"
+  source_ros
+  export ROBOT_CONTROL_URL="ws://127.0.0.1:8000"
+  export ROBOT_CREDENTIAL_FILE="${HOME}/.config/indoor-delivery-robot/SIM-0001.json"
+  export CAMERA_ROS_COMPRESSED_TOPIC="/camera/color/image_raw/compressed"
+  export CAMERA_RELAY_FPS="15"
+  export PYTHONPATH="${ROBOT_REPOSITORY}/robot_agent/amr_web_bridge${PYTHONPATH:+:${PYTHONPATH}}"
+  exec python3 -m amr_web_bridge.camera_relay
+}
+
 ensure_shared_token() {
   local credentials token enrollment_token
   credentials="$("${BACKEND_PYTHON}" - "${BACKEND_ENV_FILE}" <<'PY'
@@ -158,6 +170,8 @@ preflight_start() {
   [[ -x "${BACKEND_PYTHON}" ]] || die "Backend virtual environment not found: ${BACKEND_PYTHON}"
   [[ -f "${PROJECT_ROOT}/package.json" ]] || die "Frontend package.json not found"
   [[ -f "${ROS_WORKSPACE}/install/setup.bash" ]] || die "ROS workspace is not built: ${ROS_WORKSPACE}"
+  [[ -f "${ROBOT_REPOSITORY}/robot_agent/amr_web_bridge/amr_web_bridge/camera_relay.py" ]] \
+    || die "Robot camera relay source not found: ${ROBOT_REPOSITORY}"
   port_is_listening 8000 && die "Port 8000 is in use. Stop the manually started FastAPI first."
   port_is_listening 3000 && die "Port 3000 is in use. Stop the manually started Next.js server first."
   if pgrep -af '[w]eb_bridge_node' >/dev/null; then
@@ -186,7 +200,7 @@ start_stack() {
   fi
   preflight_start
   ensure_shared_token
-  local quoted_script fastapi_window frontend_window gazebo_window gazebo_gui_window bridge_window
+  local quoted_script fastapi_window frontend_window gazebo_window gazebo_gui_window bridge_window camera_window
   printf -v quoted_script '%q' "${SCRIPT_PATH}"
   tmux new-session -d -s "${SESSION_NAME}" -n fastapi
   tmux set-environment -t "${SESSION_NAME}" ROBOT_WS_TOKEN "${ROBOT_WS_TOKEN}"
@@ -212,6 +226,9 @@ start_stack() {
   bridge_window="$(tmux new-window -d -P -F '#{window_id}' -t "${SESSION_NAME}" -n bridge)"
   configure_window "${bridge_window}" bridge
   tmux respawn-pane -k -t "${bridge_window}" "${quoted_script} __bridge"
+  camera_window="$(tmux new-window -d -P -F '#{window_id}' -t "${SESSION_NAME}" -n camera)"
+  configure_window "${camera_window}" camera
+  tmux respawn-pane -k -t "${camera_window}" "${quoted_script} __camera"
   tmux select-window -t "${fastapi_window}"
   printf 'Started development stack in tmux session %s.\n' "${SESSION_NAME}"
   printf 'Attach: %s attach\nStatus: %s status\nStop:   %s stop\n' "${SCRIPT_PATH}" "${SCRIPT_PATH}" "${SCRIPT_PATH}"
@@ -251,11 +268,11 @@ show_logs() {
   local service="${1:-}" window_target
   if [[ -n "${service}" ]]; then
     window_target="$(find_service_window "${service}")" \
-      || die "Unknown service '${service}'. Use fastapi, frontend, gazebo, gazebo_gui, or bridge."
+      || die "Unknown service '${service}'. Use fastapi, frontend, gazebo, gazebo_gui, bridge, or camera."
     tmux capture-pane -p -t "${window_target}" -S -200
     return
   fi
-  for service in fastapi frontend gazebo gazebo_gui bridge; do
+  for service in fastapi frontend gazebo gazebo_gui bridge camera; do
     printf '\n===== %s =====\n' "${service}"
     if window_target="$(find_service_window "${service}")"; then
       tmux capture-pane -p -t "${window_target}" -S -40
@@ -273,11 +290,11 @@ Usage: ./scripts/run_dev_stack.sh [command]
   stop              Gracefully stop this script's services
   restart           Stop and start the complete stack with the saved token
   status            Show service windows and FastAPI readiness
-  attach            Open tmux (Ctrl+b then 0-4 changes windows; Ctrl+b d detaches)
+  attach            Open tmux (Ctrl+b then 0-5 changes windows; Ctrl+b d detaches)
   logs [service]    Show logs for all services or one named service
   help              Show this help
 
-Overrides: AMR_ROS_WORKSPACE and AMR_DEV_SESSION
+Overrides: AMR_ROS_WORKSPACE, AMR_ROBOT_REPOSITORY, and AMR_DEV_SESSION
 EOF
 }
 
@@ -287,6 +304,7 @@ case "${1:-start}" in
   __gazebo) run_gazebo ;;
   __gazebo_gui) run_gazebo_gui ;;
   __bridge) run_bridge ;;
+  __camera) run_camera ;;
   start) start_stack ;;
   stop) stop_stack ;;
   restart) restart_stack ;;
