@@ -109,6 +109,10 @@ class LocalizationStore:
                 recovery_active=message.recovery_active,
                 automatic_scan_active=message.automatic_scan_active,
                 automatic_scan_progress=message.automatic_scan_progress,
+                verification_command_id=message.verification_command_id,
+                verification_sample_count=message.verification_sample_count,
+                verification_elapsed_seconds=message.verification_elapsed_seconds,
+                verification_tf_fresh=message.verification_tf_fresh,
                 detail=message.detail,
                 pending_command_id=pending_command_id,
                 last_command_id=(

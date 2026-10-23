@@ -93,28 +93,14 @@ export default function LocalizationWorkspace() {
     throw new Error(copy.commandFailed);
   };
 
-  const awaitLocalizationReady = async (initial?: LocalizationStatus) => {
-    if (initial?.health === "LOCALIZED" && initial.amclState === "ACTIVE" && initial.tfAvailable) return initial;
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      await wait(500);
-      const next = await getLocalizationStatus(targetRobotId);
-      if (targetRobotIdRef.current !== targetRobotId) return undefined;
-      setStatus(next);
-      if (next.health === "LOCALIZED" && next.amclState === "ACTIVE" && next.tfAvailable) return next;
-    }
-    throw new Error(copy.posePending);
-  };
-
   const setInitialPose = async () => {
     if (!draft) return;
     setBusy(true); setToast(undefined);
     try {
       const pending = await setLocalizationInitialPose({ robotId: targetRobotId, pose: { frameId: "map", ...draft }, positionUncertainty, yawUncertainty: yawUncertaintyDegrees * Math.PI / 180 });
       setStatus(pending);
-      const acknowledged = await awaitCommand(pending.pendingCommandId);
+      await awaitCommand(pending.pendingCommandId);
       setToast({ kind: "success", title: copy.poseSuccess, body: copy.verifying });
-      await awaitLocalizationReady(acknowledged);
-      setToast({ kind: "success", title: copy.poseSuccess, body: copy.ready });
     } catch (reason) {
       setToast({ kind: "error", title: copy.commandFailed, body: reason instanceof Error ? reason.message : copy.commandFailed });
     } finally { setBusy(false); }
@@ -221,8 +207,8 @@ export default function LocalizationWorkspace() {
     onKeyUp: releaseDrive,
   });
 
-  const healthLabel = status?.health === "LOCALIZED" ? copy.localized : status?.health === "DEGRADED" ? copy.degraded : status?.health === "LOST" ? copy.lost : copy.unknown;
-  const healthTone = status?.health === "LOCALIZED" ? "text-emerald-700 bg-emerald-50" : status?.health === "DEGRADED" ? "text-amber-700 bg-amber-50" : status?.health === "LOST" ? "text-rose-700 bg-rose-50" : "text-slate-600 bg-slate-50";
+  const healthLabel = status?.health === "LOCALIZED" ? copy.localized : status?.health === "PROVISIONAL" ? (locale === "th" ? "รอตรวจสอบ" : "Provisional") : status?.health === "DEGRADED" ? copy.degraded : status?.health === "LOST" ? copy.lost : copy.unknown;
+  const healthTone = status?.health === "LOCALIZED" ? "text-emerald-700 bg-emerald-50" : status?.health === "PROVISIONAL" ? "text-blue-700 bg-blue-50" : status?.health === "DEGRADED" ? "text-amber-700 bg-amber-50" : status?.health === "LOST" ? "text-rose-700 bg-rose-50" : "text-slate-600 bg-slate-50";
   const reason = reasonLabel(status?.reason, copy);
   const commandReady = robot.id === targetRobotId && robot.online && robot.state === "IDLE" && !robot.currentTaskId && !status?.pendingCommandId;
 
@@ -250,7 +236,7 @@ export default function LocalizationWorkspace() {
 }
 
 function reasonLabel(reason: LocalizationReason | undefined, copy: (typeof localizationText)[keyof typeof localizationText]) {
-  const labels: Record<LocalizationReason, string> = { READY: copy.ready, ROBOT_OFFLINE: copy.unknown, MAPPING_ACTIVE: copy.mappingActive, AMCL_INACTIVE: copy.amclInactive, NO_POSE: copy.noPoseReason, TF_UNAVAILABLE: copy.tfUnavailable, POSE_STALE: copy.poseStale, HIGH_UNCERTAINTY: copy.highUncertainty };
+  const labels: Record<LocalizationReason, string> = { READY: copy.ready, VERIFYING: copy.verifying, VERIFICATION_REQUIRED: copy.verifying, ROBOT_OFFLINE: copy.unknown, MAPPING_ACTIVE: copy.mappingActive, AMCL_INACTIVE: copy.amclInactive, NO_POSE: copy.noPoseReason, TF_UNAVAILABLE: copy.tfUnavailable, POSE_STALE: copy.poseStale, HIGH_UNCERTAINTY: copy.highUncertainty };
   return reason ? labels[reason] : copy.noPoseReason;
 }
 function normalizeRadians(value: number) { return Math.atan2(Math.sin(value), Math.cos(value)); }
