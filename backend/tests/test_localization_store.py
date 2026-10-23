@@ -1,5 +1,11 @@
 from app.localization_store import LocalizationStore
-from app.models import LocalizationCommandAction
+from app.models import (
+    AmclLifecycleState,
+    LocalizationCommandAction,
+    LocalizationHealth,
+    LocalizationReason,
+    RobotLocalizationStatusMessage,
+)
 
 
 def test_localization_command_id_fits_wire_contract_for_uuid_robot_id():
@@ -35,3 +41,25 @@ def test_mark_offline_tolerates_legacy_oversized_command_id():
     assert offline.last_command_id == legacy_id[:100]
     assert offline.last_command_action == LocalizationCommandAction.GLOBAL_LOCALIZATION
 
+
+def test_provisional_verification_evidence_is_preserved():
+    store = LocalizationStore()
+    status, matched = store.apply(RobotLocalizationStatusMessage(
+        type="localization_status",
+        robot_id="robot01",
+        health=LocalizationHealth.PROVISIONAL,
+        reason=LocalizationReason.VERIFYING,
+        amcl_state=AmclLifecycleState.ACTIVE,
+        tf_available=True,
+        moving=False,
+        verification_command_id="localization-set_initial_pose:test",
+        verification_sample_count=4,
+        verification_elapsed_seconds=2.5,
+        verification_tf_fresh=True,
+    ))
+
+    assert matched is False
+    assert status.health == LocalizationHealth.PROVISIONAL
+    assert status.verification_command_id == "localization-set_initial_pose:test"
+    assert status.verification_sample_count == 4
+    assert status.verification_tf_fresh is True

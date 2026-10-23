@@ -875,6 +875,10 @@ type ApiLocalizationStatus = {
   recovery_active: boolean;
   automatic_scan_active: boolean;
   automatic_scan_progress: number;
+  verification_command_id: string | null;
+  verification_sample_count: number;
+  verification_elapsed_seconds: number;
+  verification_tf_fresh: boolean;
   detail: string | null;
   pending_command_id: string | null;
   last_command_id: string | null;
@@ -900,6 +904,10 @@ function toLocalizationStatus(value: ApiLocalizationStatus): LocalizationStatus 
     recoveryActive: value.recovery_active ?? false,
     automaticScanActive: value.automatic_scan_active ?? false,
     automaticScanProgress: value.automatic_scan_progress ?? 0,
+    verificationCommandId: value.verification_command_id ?? undefined,
+    verificationSampleCount: value.verification_sample_count ?? 0,
+    verificationElapsedSeconds: value.verification_elapsed_seconds ?? 0,
+    verificationTfFresh: value.verification_tf_fresh ?? false,
     detail: value.detail ?? undefined,
     pendingCommandId: value.pending_command_id ?? undefined,
     lastCommandId: value.last_command_id ?? undefined,
