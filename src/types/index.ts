@@ -157,9 +157,9 @@ export interface MappingMapDetails extends RobotMapDetails {
   mapId: string;
 }
 
-export type LocalizationHealth = "UNKNOWN" | "PROVISIONAL" | "LOCALIZED" | "DEGRADED" | "LOST";
+export type LocalizationHealth = "UNKNOWN" | "LOCALIZED" | "DEGRADED" | "LOST";
 export type AmclLifecycleState = "UNKNOWN" | "ACTIVE" | "INACTIVE";
-export type LocalizationReason = "READY" | "VERIFYING" | "VERIFICATION_REQUIRED" | "ROBOT_OFFLINE" | "MAPPING_ACTIVE" | "AMCL_INACTIVE" | "NO_POSE" | "TF_UNAVAILABLE" | "POSE_STALE" | "HIGH_UNCERTAINTY";
+export type LocalizationReason = "READY" | "ROBOT_OFFLINE" | "MAPPING_ACTIVE" | "AMCL_INACTIVE" | "NO_POSE" | "TF_UNAVAILABLE" | "POSE_STALE" | "HIGH_UNCERTAINTY";
 export type LocalizationCommandAction = "SET_INITIAL_POSE" | "GLOBAL_LOCALIZATION";
 
 export interface LocalizationPose {
@@ -185,10 +185,6 @@ export interface LocalizationStatus {
   recoveryActive: boolean;
   automaticScanActive: boolean;
   automaticScanProgress: number;
-  verificationCommandId?: string;
-  verificationSampleCount: number;
-  verificationElapsedSeconds: number;
-  verificationTfFresh: boolean;
   detail?: string;
   pendingCommandId?: string;
   lastCommandId?: string;
