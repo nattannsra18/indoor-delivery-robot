@@ -21,7 +21,6 @@ from ..models import (
     DeliveryTaskCreate,
     DeliveryTaskPage,
     EventSource,
-    LocalizationHealth,
     TaskEvent,
     TaskEventRequest,
     TaskHistoryEntry,
@@ -40,7 +39,6 @@ from ..models import UserRole
 from ..queue_estimate_service import QueueEstimateService
 from ..map_store import map_store
 from ..mapping_store import mapping_store
-from ..localization_store import localization_store
 from ..route_preview import (
     PREVIEW_LOADING_SECONDS,
     PREVIEW_UNLOADING_SECONDS,
@@ -208,11 +206,6 @@ async def preview_task_route(
         pickup_y=pickup.y,
         supervised_mode=payload.supervised_mode,
     )
-    if localization_store.get(robot.id).health == LocalizationHealth.PROVISIONAL:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Localization verification must finish before creating a task",
-        )
     if mapping_store.is_active(robot.id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

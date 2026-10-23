@@ -1050,7 +1050,6 @@ class RobotMappingStatusMessage(BaseModel):
 
 class LocalizationHealth(str, Enum):
     UNKNOWN = "UNKNOWN"
-    PROVISIONAL = "PROVISIONAL"
     LOCALIZED = "LOCALIZED"
     DEGRADED = "DEGRADED"
     LOST = "LOST"
@@ -1064,8 +1063,6 @@ class AmclLifecycleState(str, Enum):
 
 class LocalizationReason(str, Enum):
     READY = "READY"
-    VERIFYING = "VERIFYING"
-    VERIFICATION_REQUIRED = "VERIFICATION_REQUIRED"
     ROBOT_OFFLINE = "ROBOT_OFFLINE"
     MAPPING_ACTIVE = "MAPPING_ACTIVE"
     AMCL_INACTIVE = "AMCL_INACTIVE"
@@ -1107,10 +1104,6 @@ class LocalizationStatus(BaseModel):
     recovery_active: bool = False
     automatic_scan_active: bool = False
     automatic_scan_progress: float = Field(default=0.0, ge=0.0, le=1.0)
-    verification_command_id: Optional[str] = Field(default=None, max_length=100)
-    verification_sample_count: int = Field(default=0, ge=0)
-    verification_elapsed_seconds: float = Field(default=0.0, ge=0.0)
-    verification_tf_fresh: bool = False
     detail: Optional[str] = Field(default=None, max_length=500)
     pending_command_id: Optional[str] = Field(default=None, max_length=100)
     last_command_id: Optional[str] = Field(default=None, max_length=100)
@@ -1160,10 +1153,6 @@ class RobotLocalizationStatusMessage(BaseModel):
     recovery_active: bool = False
     automatic_scan_active: bool = False
     automatic_scan_progress: float = Field(default=0.0, ge=0.0, le=1.0)
-    verification_command_id: Optional[str] = Field(default=None, max_length=100)
-    verification_sample_count: int = Field(default=0, ge=0)
-    verification_elapsed_seconds: float = Field(default=0.0, ge=0.0)
-    verification_tf_fresh: bool = False
     detail: Optional[str] = Field(default=None, max_length=500)
     command_id: Optional[str] = Field(default=None, max_length=100)
     command_action: Optional[LocalizationCommandAction] = None
